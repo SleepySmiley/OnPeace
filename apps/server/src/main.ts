@@ -105,6 +105,7 @@ wss.on('connection', (ws) => {
       attach(conn, res.room.id, res.seat.id);
       raw(conn, { t: 'welcome', token: res.seat.token, game: res.room.id, you: res.seat.id });
       res.room.syncPlayer(res.seat.id);
+      res.room.broadcastLobby(); // ora risulta collegato anche per gli altri
       return;
     }
     if (!conn.room || !conn.player) return raw(conn, { t: 'error', message: 'Prima entra in una partita' });

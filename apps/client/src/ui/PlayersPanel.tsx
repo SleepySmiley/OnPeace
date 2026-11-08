@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { relationKey, type Action, type GameState, type PlayerId } from '@onpeace/engine';
 import { playerName } from '../game/describe';
-import { useSession } from '../game/store';
+import { ctx, useSession } from '../game/store';
 
 const RELATION_LABEL = { war: 'Guerra', peace: 'Pace', alliance: 'Alleanza' } as const;
 const fmt = new Intl.NumberFormat('it-IT');
@@ -15,6 +15,11 @@ interface Props {
 /** Giocatori, relazioni e diplomazia del giocatore di turno. */
 export function PlayersPanel({ game, planner, actions }: Props) {
   const addAction = useSession((s) => s.addAction);
+  const send = useSession((s) => s.send);
+  const online = useSession((s) => s.online);
+  const lobby = online.lobby;
+  const kickAfter = ctx.rules.game.kickAfterInactiveTurns;
+  const isHost = lobby !== null && lobby.hostId === online.me;
   const [amount, setAmount] = useState(200);
   const planned = (pred: (a: Action) => boolean) => actions.some(pred);
   const incoming = planner ? game.proposals.filter((p) => p.to === planner && p.turn < game.turn) : [];
@@ -76,6 +81,21 @@ export function PlayersPanel({ game, planner, actions }: Props) {
                 {fmt.format(Math.round(p.score))} pt
               </span>
               {p.status !== 'active' && <span className="tag">{p.status === 'eliminated' ? 'eliminato' : 'fuori'}</span>}
+              {lobby && p.status === 'active' && (() => {
+                const seat = lobby.players.find((x) => x.id === p.id);
+                if (!seat) return null;
+                return (
+                  <>
+                    <span className={`dot ${seat.connected ? 'on' : 'off'}`} title={seat.connected ? 'Collegato' : 'Non collegato'} />
+                    {seat.inactiveTurns > 0 && <span className="dim tiny-text">inattivo da {seat.inactiveTurns}</span>}
+                    {isHost && p.id !== online.me && seat.inactiveTurns >= kickAfter && (
+                      <button type="button" className="ghost tiny danger" onClick={() => send({ t: 'kick', player: p.id })}>
+                        Espelli
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
               {rel && p.status === 'active' && (
                 <div className="diplo">
                   <span className={`relation ${rel.relation}`}>

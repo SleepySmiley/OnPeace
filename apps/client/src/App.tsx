@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   checkMove,
   checkUnload,
@@ -14,8 +14,11 @@ import { ctx, currentPicker, currentPlanner, nav, useSession, type MoveDraft } f
 import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
 import { MapView, type MapClick } from './map/MapView';
 import type { HitTarget } from './map/scene';
+import { ChatPanel } from './ui/ChatPanel';
 import { CityPanel } from './ui/CityPanel';
+import { Countdown } from './ui/Countdown';
 import { InfoPanel } from './ui/InfoPanel';
+import { LobbyScreen } from './ui/LobbyScreen';
 import { PlanPanel } from './ui/PlanPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
 import { ReportPanel } from './ui/ReportPanel';
@@ -24,7 +27,7 @@ import { StackPanel } from './ui/StackPanel';
 
 const fmt = new Intl.NumberFormat('it-IT');
 const noop = () => {};
-type Tab = 'orders' | 'players' | 'report';
+type Tab = 'orders' | 'players' | 'report' | 'chat';
 
 interface DraftEval {
   marker: DraftMarker;
@@ -68,9 +71,19 @@ function evaluateDraft(
 
 export function App() {
   const s = useSession();
-  const { game, screen, selected, draft } = s;
+  const { game, screen, selected, draft, mode, online } = s;
   const [hover, setHover] = useState<HitTarget | null>(null);
   const [tab, setTab] = useState<Tab>('orders');
+
+  // all'avvio: se c'è una partita online salvata (e il link non ne indica un'altra), si rientra
+  useEffect(() => {
+    useSession.getState().resumeOnline();
+  }, []);
+
+  // a ogni nuovo resoconto si apre la scheda corrispondente
+  useEffect(() => {
+    if (s.reportSeq > 0) setTab('report');
+  }, [s.reportSeq]);
 
   const planner = screen === 'planning' ? currentPlanner(s) : null;
   const plannerPlayer = planner && game ? game.players.find((p) => p.id === planner)! : null;
@@ -98,11 +111,11 @@ export function App() {
             selected,
             ...(preview ? { steps: preview.steps, moved: preview.moved } : {}),
             ...(plannerPlayer ? { plannerColor: plannerPlayer.color } : {}),
-            ...(screen === 'results' ? { events: s.events } : {}),
+            ...(screen === 'results' || mode === 'online' ? { events: s.events } : {}),
             pickable,
           })
         : EMPTY_VIEW,
-    [shown, selected, preview, plannerPlayer, screen, s.events, pickable],
+    [shown, selected, preview, plannerPlayer, screen, mode, s.events, pickable],
   );
 
   const draftEval = useMemo(
@@ -112,17 +125,14 @@ export function App() {
 
   const onHover = useCallback((t: HitTarget | null) => setHover(t), []);
 
-  const onPointer = useCallback(
-    (world: Point, hit: HitTarget | null) => {
-      const st = useSession.getState();
-      if (!st.draft) return;
-      const plannerId = currentPlanner(st);
-      const enemy =
-        hit?.kind === 'stack' && st.game?.stacks.some((x) => x.id === hit.id && x.owner !== plannerId) ? hit.id : null;
-      st.updateDraft({ hover: world, target: st.draft.mode === 'move' ? enemy : null });
-    },
-    [],
-  );
+  const onPointer = useCallback((world: Point, hit: HitTarget | null) => {
+    const st = useSession.getState();
+    if (!st.draft) return;
+    const plannerId = currentPlanner(st);
+    const enemy =
+      hit?.kind === 'stack' && st.game?.stacks.some((x) => x.id === hit.id && x.owner !== plannerId) ? hit.id : null;
+    st.updateDraft({ hover: world, target: st.draft.mode === 'move' ? enemy : null });
+  }, []);
 
   const onCancel = useCallback(() => {
     const st = useSession.getState();
@@ -134,7 +144,7 @@ export function App() {
     ({ hit, world, shift }: MapClick) => {
       const st = useSession.getState();
       if (!st.game) return;
-      if (st.screen === 'selection') {
+      if (st.game.phase === 'selection') {
         const countryId =
           hit?.kind === 'country' ? hit.id : hit?.kind === 'city' ? ctx.cities.get(hit.id)!.country : null;
         if (countryId) st.pickCountry(countryId);
@@ -146,7 +156,9 @@ export function App() {
           return;
         }
         const enemy =
-          st.draft.mode === 'move' && hit?.kind === 'stack' && preview.state.stacks.some((x) => x.id === hit.id && x.owner !== planner)
+          st.draft.mode === 'move' &&
+          hit?.kind === 'stack' &&
+          preview.state.stacks.some((x) => x.id === hit.id && x.owner !== planner)
             ? hit.id
             : null;
         const result = evaluateDraft(st.draft, preview, planner, world, enemy);
@@ -161,22 +173,41 @@ export function App() {
     [preview, planner],
   );
 
-  if (!game || screen === 'setup') {
+  // ---------------------------------------------------------------- schermate iniziali
+  if (screen === 'setup' || (mode === 'online' && (screen === 'lobby' || !game))) {
     return (
       <div className="shell">
         <MapView map={ctx.map} view={EMPTY_VIEW} draft={null} onHover={noop} onClick={noop} />
         <header className="topbar">
           <span className="brand">OnPeace</span>
         </header>
-        <SetupScreen />
+        {screen === 'setup' ? <SetupScreen /> : <LobbyScreen />}
+        {s.notice && (
+          <div className="toast" role="status" onClick={() => s.setNotice(null)}>
+            {s.notice}
+          </div>
+        )}
       </div>
     );
   }
+  if (!game) return null;
 
-  const picker = game.phase === 'selection' ? currentPicker(game) : null;
+  // ---------------------------------------------------------------- partita
+  const picker = game.phase === 'selection' ? currentPicker(s) : null;
+  const pickerPlayer = picker ? game.players.find((p) => p.id === picker) : undefined;
   const economy = planner && shown ? computeEconomy(shown, ctx, planner) : null;
   const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
   const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
+  const iAmDone = mode === 'online' && planner !== null && !online.waiting.includes(planner);
+  const waitingNames = online.waiting.filter((p) => p !== online.me).map((p) => playerName(game, p));
+  const reportForced = mode === 'local' && screen === 'results';
+  const activeTab: Tab = reportForced ? 'report' : tab;
+  const tabs: [Tab, string][] = [
+    ['orders', 'Ordini'],
+    ['players', 'Giocatori'],
+    ['report', 'Resoconto'],
+    ...(mode === 'online' ? ([['chat', 'Chat']] as [Tab, string][]) : []),
+  ];
 
   return (
     <div className="shell">
@@ -201,16 +232,23 @@ export function App() {
             {game.phase !== 'ended' && <span className="dim"> / {game.settings.maxTurns}</span>}
           </span>
         )}
+        {mode === 'online' && game.phase !== 'ended' && <Countdown deadline={online.deadline} />}
         {plannerPlayer && (
           <span className="player-chip" style={{ borderColor: plannerPlayer.color }}>
             <span className="swatch small" style={{ background: plannerPlayer.color }} />
             {plannerPlayer.name}
           </span>
         )}
+        {mode === 'online' && game.phase === 'playing' && (
+          <span className="status waiting" title="Chi non ha ancora finito il turno">
+            {waitingNames.length > 0 ? <>In attesa di {waitingNames.join(', ')}</> : <>Tutti pronti</>}
+          </span>
+        )}
+        {mode === 'online' && !online.connected && <span className="status offline">Riconnessione…</span>}
         <span className="spacer" />
-        {plannerPlayer && economy && (
+        {plannerPlayer && economy && shown && (
           <span className="status money" title="Fondi dopo gli ordini · bilancio del prossimo turno">
-            <b>{fmt.format(Math.floor(plannerPlayer && shown ? shown.players.find((p) => p.id === planner)!.money : 0))}</b>
+            <b>{fmt.format(Math.floor(shown.players.find((p) => p.id === planner)!.money))}</b>
             <span className={economy.net >= 0 ? 'pos' : 'neg'}>
               {' '}
               {economy.net >= 0 ? '+' : ''}
@@ -218,27 +256,39 @@ export function App() {
             </span>
           </span>
         )}
-        {screen === 'planning' && (
-          <button type="button" className="primary" onClick={() => s.endTurn()}>
-            Fine turno{stepsInvalid > 0 ? ` (${stepsInvalid} non validi)` : ''}
+        {screen === 'planning' && planner && (
+          <button type="button" className={iAmDone ? 'ghost' : 'primary'} onClick={() => s.endTurn()}>
+            {iAmDone ? 'Riprendi il turno' : `Fine turno${stepsInvalid > 0 ? ` (${stepsInvalid} non validi)` : ''}`}
           </button>
         )}
         <button
           type="button"
           className="ghost"
           onClick={() => {
-            if (confirm('Abbandonare la partita e tornare alla preparazione?')) s.reset();
+            if (mode === 'online') {
+              if (confirm('Uscire dalla partita? Le tue città diventeranno neutrali.')) s.leaveOnline();
+            } else if (confirm('Abbandonare la partita e tornare all’inizio?')) s.reset();
           }}
         >
-          Nuova partita
+          {mode === 'online' ? 'Esci' : 'Nuova partita'}
         </button>
       </header>
 
-      {screen === 'selection' && picker && (
+      {game.phase === 'selection' && pickerPlayer && (
         <div className="banner">
-          <span className="swatch small" style={{ background: game.players.find((p) => p.id === picker)!.color }} />
-          Tocca a <b>{playerName(game, picker)}</b>: clicca un paese libero. Fondi:{' '}
-          <b className="num">{fmt.format(game.players.find((p) => p.id === picker)!.money)}</b>
+          <span className="swatch small" style={{ background: pickerPlayer.color }} />
+          {mode === 'online' && picker === online.me ? (
+            <>
+              <b>Tocca a te</b>: clicca un paese libero.
+            </>
+          ) : (
+            <>
+              Tocca a <b>{pickerPlayer.name}</b>
+              {mode === 'local' && ': clicca un paese libero'}.
+            </>
+          )}{' '}
+          Fondi: <b className="num">{fmt.format(pickerPlayer.money)}</b>
+          {mode === 'online' && <Countdown deadline={online.deadline} />}
         </div>
       )}
 
@@ -271,47 +321,37 @@ export function App() {
         />
       )}
 
-      {(screen === 'planning' || screen === 'results' || screen === 'handoff') && game.phase !== 'selection' && (
+      {game.phase !== 'selection' && screen !== 'handoff' && (
         <aside className="panel right-panel">
           <div className="tabs" role="tablist">
-            {(
-              [
-                ['orders', 'Ordini'],
-                ['players', 'Giocatori'],
-                ['report', 'Resoconto'],
-              ] as const
-            ).map(([id, label]) => (
+            {tabs.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 role="tab"
-                aria-selected={(screen === 'results' ? 'report' : tab) === id}
-                className={(screen === 'results' ? 'report' : tab) === id ? 'active' : ''}
+                aria-selected={activeTab === id}
+                className={activeTab === id ? 'active' : ''}
                 onClick={() => setTab(id)}
-                disabled={screen === 'results'}
+                disabled={reportForced}
               >
                 {label}
                 {id === 'orders' && actions.length > 0 && <span className="count">{actions.length}</span>}
+                {id === 'chat' && online.unread > 0 && activeTab !== 'chat' && (
+                  <span className="count">{online.unread}</span>
+                )}
               </button>
             ))}
           </div>
           <div className="tab-body">
-            {(screen === 'results' || tab === 'report') && (
-              <ReportPanel game={game} events={s.events} turn={s.eventsTurn} />
-            )}
-            {screen !== 'results' && tab === 'orders' && (
-              <PlanPanel game={game} actions={actions} steps={preview?.steps ?? []} />
-            )}
-            {screen !== 'results' && tab === 'players' && (
-              <PlayersPanel game={game} planner={planner} actions={actions} />
-            )}
+            {activeTab === 'report' && <ReportPanel game={game} events={s.events} turn={s.eventsTurn} />}
+            {activeTab === 'orders' && <PlanPanel game={game} actions={actions} steps={preview?.steps ?? []} />}
+            {activeTab === 'players' && <PlayersPanel game={game} planner={planner} actions={actions} />}
+            {activeTab === 'chat' && <ChatPanel />}
           </div>
-          {screen === 'results' && (
+          {(screen === 'results' || game.phase === 'ended') && (
             <div className="panel-footer">
               {game.phase === 'ended' ? (
-                <b>
-                  Partita finita — vince {(game.winners ?? []).map((w) => playerName(game, w)).join(' e ')}
-                </b>
+                <b>Partita finita — vince {(game.winners ?? []).map((w) => playerName(game, w)).join(' e ')}</b>
               ) : (
                 <button type="button" className="primary wide" onClick={() => s.continueAfterResults()}>
                   Continua

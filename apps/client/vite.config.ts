@@ -6,6 +6,8 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  // PixiJS da solo pesa ~500 kB: un unico pacchetto va bene per un gioco tra amici
+  build: { chunkSizeWarningLimit: 1200 },
   resolve: {
     alias: {
       '@data': fileURLToPath(new URL('../../data', import.meta.url)),

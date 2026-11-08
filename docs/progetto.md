@@ -203,8 +203,8 @@ Tutte provvisorie; i numeri sono in `data/rules/defaults.json`.
 ```
 OnPeace/
   packages/engine/     regole pure in TypeScript: nessun I/O, RNG con seme, testabile
-  packages/protocol/   tipi dei messaggi client↔server + validazione (zod)      [M3]
-  apps/server/         Node, WebSocket (ws), stanze, timer, persistenza SQLite   [M3]
+  packages/protocol/   tipi dei messaggi client↔server + validazione (zod)
+  apps/server/         Node, WebSocket (ws), stanze, timer, salvataggi JSON
   apps/client/         Vite + React (pannelli, lobby) + PixiJS 8 (mappa)
   data/rules/          unità, edifici, parametri predefiniti (JSON); poi strategie e rare
   data/maps/           mappe (JSON)
@@ -234,8 +234,8 @@ OnPeace/
 ### 3.4 Server (`apps/server`)
 - **Autoritativo**: il client invia azioni, il server le valida e le salva subito. Se un giocatore ricarica la pagina, non perde nulla.
 - **Gestione del turno**: timer gestito dal server; "Fine turno" anticipato quando tutti hanno finito; risoluzione con il motore; invio a ciascuno della propria vista più gli eventi visibili.
-- **Persistenza**: SQLite (better-sqlite3), con uno snapshot a ogni turno e le azioni in corso. Se il PC si riavvia, la partita riprende.
-- **Rete**: un solo processo e una sola porta servono sia il client compilato sia il WebSocket. È ciò che serve per il tunnel.
+- **Persistenza**: un file JSON per partita in `games/`, scritto in modo atomico a ogni azione (piani compresi). Se il PC si riavvia, la partita riprende. (SQLite scartato: il modulo nativo non si installa con gli script npm bloccati, e i file JSON bastano.)
+- **Rete**: un solo processo e una sola porta (3210) servono sia il client compilato sia il WebSocket su `/ws`. È ciò che serve per il tunnel.
 - **Accesso**: link `/p/<idPartita>` e token casuale salvato nel browser per rientrare. Chi crea la partita ne è l'host.
 - **Interfaccia di attesa**: mostra in ogni momento chi ha già finito il turno e chi stiamo aspettando. È una delle lamentele principali su atWar.
 
@@ -253,7 +253,7 @@ OnPeace/
 - **Motore condiviso**: il client lo usa per l'anteprima (raggi, costi, percorsi validi), ma decide sempre il server.
 
 ### 3.6 Hosting sul PC di casa
-- Il server gira sul PC dell'host (`node`) e **Cloudflare Tunnel** lo espone su HTTPS senza aprire porte del router.
+- Il server gira sul PC dell'host (`npm start`) e **Cloudflare Tunnel** (`npm run tunnel`) lo espone su HTTPS senza aprire porte del router. Istruzioni nel README.
 - Il tunnel rapido (`cloudflared tunnel --url http://localhost:3000`) è gratuito ma cambia indirizzo a ogni avvio. Un tunnel con nome e un dominio proprio danno invece un indirizzo fisso.
 - La partita esiste solo mentre il PC è acceso; grazie a SQLite riprende dopo un riavvio.
 
@@ -273,7 +273,7 @@ OnPeace/
 | **M0 Fondamenta** ✅ | Monorepo, TypeScript, lint, test; schemi JSON; dati delle unità; **mappa di prova inventata** (12 paesi, 60 città) | La mappa disegnata nel browser |
 | **M1 Motore** ✅ | Economia, acquisti, movimento con validazione geometrica, linee difensive, combattimento, risoluzione del turno con turnblock, diplomazia, vittoria; test | Test verdi e simulazioni |
 | **M2 Sandbox** ✅ | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
-| **M3 Multiplayer** | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
+| **M3 Multiplayer** ✅ | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
 | **M4 Interfaccia completa** | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
 | **M5 Contenuti** | Strategie, edifici, unità rare | Varietà e bilanciamento |
 | **M6 Serata di prova** | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni | Prima partita tra amici |

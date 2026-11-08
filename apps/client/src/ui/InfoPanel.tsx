@@ -20,7 +20,9 @@ export function InfoPanel({ target, state }: { target: HitTarget | null; state: 
     return (
       <aside className="panel info" aria-live="polite">
         <div className="panel-kicker">Pila · {playerName(state, stack.owner)}</div>
-        <p className="info-line">{describeUnits(summarizeUnits(stack.units))}</p>
+        <p className="info-line">
+          {stack.fog ? 'Fuori vista: composizione sconosciuta' : describeUnits(summarizeUnits(stack.units))}
+        </p>
         {stack.units.some((u) => u.cargo.length > 0) && (
           <p className="info-line dim">A bordo: {describeUnits(summarizeUnits(stack.units.flatMap((u) => u.cargo)))}</p>
         )}

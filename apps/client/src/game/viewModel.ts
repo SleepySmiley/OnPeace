@@ -21,6 +21,8 @@ export interface StackMarker {
   moved: boolean;
   domain: DomainIcon;
   cargo: number;
+  /** Fuori vista: si conosce la posizione, non la composizione. */
+  fog: boolean;
 }
 
 export interface PathMarker {
@@ -96,9 +98,10 @@ export function buildView(p: {
       count: s.units.length,
       inCity: s.city,
       selected: p.selected?.kind === 'stack' && p.selected.id === s.id,
-      moved: p.moved ? s.units.every((u) => p.moved!.has(u.id)) : false,
+      moved: p.moved && s.units.length > 0 ? s.units.every((u) => p.moved!.has(u.id)) : false,
       domain,
       cargo: allUnits(s).length - s.units.length,
+      fog: Boolean(s.fog),
     };
   });
 

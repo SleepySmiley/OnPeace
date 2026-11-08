@@ -76,9 +76,8 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
         Pila · {playerName(state, stack.owner)}
         {stack.city && <> · {cityName(stack.city)}</>}
       </div>
-      <h2>
-        {stack.units.length} {stack.units.length === 1 ? 'unità' : 'unità'}
-      </h2>
+      <h2>{stack.fog ? 'Fuori vista' : `${stack.units.length} unità`}</h2>
+      {stack.fog && <p className="hint-text">Se ne conosce la posizione, non la composizione.</p>}
 
       {mine && groups.length > 1 && (
         <div className="button-row select-all">

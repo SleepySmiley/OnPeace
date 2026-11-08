@@ -138,3 +138,6 @@ export function parseClientMsg(raw: string): ClientMsg | { error: string } {
 
 /** Le azioni validate da zod hanno la stessa forma di quelle del motore. */
 export const asActions = (plan: z.infer<typeof PlanS>): Action[] => plan as Action[];
+
+/** Il piano del motore nel formato del messaggio (differiscono solo per i readonly). */
+export const toWirePlan = (actions: readonly Action[]) => actions as unknown as z.infer<typeof PlanS>;

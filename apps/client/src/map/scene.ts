@@ -196,18 +196,18 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     stackLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     stackNodes = view.stacks.map((marker) => {
       const node = new Container();
-      const label = String(marker.count) + (marker.cargo ? `+${marker.cargo}` : '');
+      const label = marker.fog ? '?' : String(marker.count) + (marker.cargo ? `+${marker.cargo}` : '');
       const w = 20 + label.length * 6.6;
       const h = 17;
       const g = new Graphics();
       if (marker.selected) g.roundRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6, 6).stroke({ width: 2, color: '#ffffff' });
       g.roundRect(-w / 2, -h / 2, w, h, 4).fill(marker.color).stroke({ width: 1.5, color: '#0b1118' });
-      domainGlyph(g, marker.domain, -w / 2 + 8, 0);
+      if (!marker.fog) domainGlyph(g, marker.domain, -w / 2 + 8, 0);
       const text = new Text({ text: label, style: countStyle });
       text.anchor.set(0, 0.5);
       text.x = -w / 2 + 14;
       node.addChild(g, text);
-      node.alpha = marker.moved ? 0.55 : 1;
+      node.alpha = marker.fog ? 0.6 : marker.moved ? 0.55 : 1;
       stackLayer.addChild(node);
       return { marker, node, w, h, sx: 0, sy: 0 };
     });
