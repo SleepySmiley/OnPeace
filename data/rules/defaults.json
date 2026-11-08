@@ -60,7 +60,19 @@
     "collateralCapPct": 50,
     "recoveryPctPerTurn": 2
   },
+  "neutrals": {
+    "militiaPerReinforcement": 1,
+    "infantryMinCountryIncome": 500,
+    "infantryUnit": "infantry",
+    "infantryPerCity": 1
+  },
+  "selection": {
+    "incomeFactor": 1,
+    "reinforcementValue": 10
+  },
   "game": {
+    "startingFunds": 2500,
+    "initialCountries": 1,
     "maxTurns": 50,
     "lateJoinUntilTurn": 10,
     "countrySelectSeconds": 30,

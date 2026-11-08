@@ -169,7 +169,22 @@ export const RulesDefaults = z.strictObject({
     collateralCapPct: pct(),
     recoveryPctPerTurn: pct(),
   }),
+  neutrals: z.strictObject({
+    /** Milizie in ogni città neutrale = rinforzi della città × questo fattore. */
+    militiaPerReinforcement: z.number().min(0),
+    /** I paesi con reddito nominale almeno pari a questo hanno anche Fanteria. */
+    infantryMinCountryIncome: int().min(0),
+    infantryUnit: Id,
+    infantryPerCity: int().min(0),
+  }),
+  selection: z.strictObject({
+    /** Valore di un paese = reddito nominale × incomeFactor + rinforzi × reinforcementValue. */
+    incomeFactor: z.number().min(0),
+    reinforcementValue: z.number().min(0),
+  }),
   game: z.strictObject({
+    startingFunds: int().min(0),
+    initialCountries: int().min(1),
     maxTurns: int().min(1),
     lateJoinUntilTurn: int().min(0),
     countrySelectSeconds: int().min(5),
@@ -221,10 +236,11 @@ export function checkRules(rules: Rules): string[] {
       for (const vs of bonus.vs) if (!unitIds.has(vs)) errors.push(`${b.id}: bonus contro unità sconosciuta "${vs}"`);
     }
   }
-  const { reinforcements, turn } = rules.defaults;
+  const { reinforcements, turn, neutrals } = rules.defaults;
   if (!unitIds.has(reinforcements.freeMilitiaUnit)) {
     errors.push(`freeMilitiaUnit "${reinforcements.freeMilitiaUnit}" non esiste`);
   }
+  if (!unitIds.has(neutrals.infantryUnit)) errors.push(`neutrals.infantryUnit "${neutrals.infantryUnit}" non esiste`);
   if (turn.minSeconds > turn.maxSeconds) errors.push('turn.minSeconds > turn.maxSeconds');
   if (turn.defaultSeconds < turn.minSeconds || turn.defaultSeconds > turn.maxSeconds) {
     errors.push('turn.defaultSeconds fuori dall’intervallo min–max');

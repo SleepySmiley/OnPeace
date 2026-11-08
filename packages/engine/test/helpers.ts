@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { Catalog, MapDef, parseRules, type Dice, type Rules } from '../src';
+import { Catalog, MapDef, createContext, parseRules, type Dice, type Rules } from '../src';
 
 export const dataDir = fileURLToPath(new URL('../../../data', import.meta.url));
 
@@ -19,6 +19,8 @@ export function loadRules(): Rules {
 export const loadCatalog = () => new Catalog(loadRules());
 
 export const loadTestMap = () => MapDef.parse(readJson('maps', 'prova.json'));
+
+export const loadContext = () => createContext(loadTestMap(), loadRules());
 
 /** Dadi a copione: restituisce i tiri nell'ordine dato, nessun critico salvo indicazione. */
 export function scriptedDice(rolls: number[], crits: boolean[] = []): Dice & { used: () => number } {
