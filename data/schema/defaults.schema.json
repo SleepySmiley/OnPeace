@@ -216,12 +216,22 @@
         "portMaxSeaDistance": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "citySnapDistance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unloadMaxDistance": {
+          "type": "number",
+          "exclusiveMinimum": 0
         }
       },
       "required": [
         "stackRange",
         "defenceLineMaxDistance",
-        "portMaxSeaDistance"
+        "portMaxSeaDistance",
+        "citySnapDistance",
+        "unloadMaxDistance"
       ],
       "additionalProperties": false
     },

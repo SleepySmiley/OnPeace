@@ -49,7 +49,9 @@
   "movement": {
     "stackRange": "average",
     "defenceLineMaxDistance": 2,
-    "portMaxSeaDistance": 2.5
+    "portMaxSeaDistance": 2.5,
+    "citySnapDistance": 1.5,
+    "unloadMaxDistance": 2
   },
   "diplomacy": {
     "peaceToWarTurns": 1,

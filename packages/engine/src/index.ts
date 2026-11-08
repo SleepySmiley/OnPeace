@@ -11,3 +11,7 @@ export * from './state';
 export * from './context';
 export * from './setup';
 export * from './purchase';
+export * from './actions';
+export * from './navigation';
+export * from './diplomacy';
+export * from './movement';

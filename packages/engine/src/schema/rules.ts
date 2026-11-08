@@ -159,6 +159,10 @@ export const RulesDefaults = z.strictObject({
     defenceLineMaxDistance: z.number().positive(),
     /** Distanza massima (punti raggio) dal mare perché una città sia porto. */
     portMaxSeaDistance: z.number().positive(),
+    /** Un movimento che finisce entro questa distanza (punti raggio) da una città entra nella città. */
+    citySnapDistance: z.number().positive(),
+    /** Distanza massima (punti raggio) a cui un trasporto può sbarcare il carico. */
+    unloadMaxDistance: z.number().positive(),
   }),
   diplomacy: z.strictObject({
     peaceToWarTurns: int().min(0),
