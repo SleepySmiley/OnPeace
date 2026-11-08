@@ -135,8 +135,9 @@ Al turno 1 tutti sono in pace tra loro; i paesi neutrali sono attaccabili da sub
 
   Senza progressione persistente, tutte le unità sono disponibili da subito.
 - **Edifici**: Banca, Centro di reclutamento, Radar, Batteria costiera, Difese antiaeree, Fortificazioni [R2 §2.5].
-- **Strategie**: lo stesso meccanismo di atWar, con modificatori per ruolo d'unità, ma nomi e identità nostri. Si parte dai valori di [R2 §5] e si ribilancia giocando.
-- **Unità rare**: si trovano a caso conquistando le città, con probabilità impostabile. Insieme di unità con nomi nostri, ispirato ai tipi di [R2 §3.9]; da scegliere insieme.
+- **Strategie** (`data/rules/strategies.json`): una per giocatore, nomi militari realistici, valori di partenza da [R2 §5]. Sono 10: Assalto a oltranza, Difesa in profondità, Guerra lampo, Supremazia navale, Supremazia aerea, Operazioni speciali, Mobilitazione di massa, Guerriglia, Potenza industriale, Logistica avanzata. Modificano solo le unità acquistabili e gli edifici, non le rare né il Generale.
+- **Generale** (`data/rules/general.json`): uno per giocatore, compare nella capitale del paese natale al turno 1. È 1/1 con 1 HP: da solo è debolissimo e, se muore, è perso. Dà alla sua pila 3 potenziamenti scelti a inizio partita tra 11, ispirati agli upgrade di atWar [R2 §3.8]; i posti lasciati vuoti si riempiono con Difesa, Fortuna in battaglia e Ricognizione.
+- **Unità rare** (in `units.json`, `"rare": true`): 30 tipi ispirati a [R2 §3.9], con nomi nostri, nucleari comprese. Si trovano conquistando le città (probabilità impostabile), estratte per peso (`rareWeight`): la testata nucleare è la più rara. Le navi compaiono solo nei porti. Non pagano mantenimento e non si comprano.
 
 ### 2.10 Vittoria e uscita [R1 §6]
 - **Condizioni** (impostazione della partita):
@@ -159,8 +160,9 @@ Al turno 1 tutti sono in pace tra loro; i paesi neutrali sono attaccabili da sub
 - condizione di vittoria;
 - massimo alleanze;
 - tutti contro tutti oppure 2–4 squadre;
-- probabilità di unità rare;
+- probabilità di unità rare (nessuna, 2, 5, 10 o 20%);
 - strategie attive o disattivate;
+- Generale sì o no;
 - ingresso tardivo fino al turno N.
 
 ### 2.12 Lacune della ricerca → decisioni provvisorie
@@ -194,6 +196,19 @@ Tutte provvisorie; i numeri sono in `data/rules/defaults.json`.
 | Punteggio | Costo delle unità distrutte × 0,1, +10 per città conquistata, +25 per capitale |
 | Neutrali | Milizie pari ai rinforzi della città, più 1 Fanteria per città nei paesi con reddito ≥ 500 |
 | Scelta dei paesi | Valore = reddito nominale + rinforzi × 10; fondi iniziali 2500 |
+
+### 2.14 Decisioni prese con i contenuti (M5)
+Tutte provvisorie, nei file di `data/rules/`.
+
+| Tema | Decisione |
+|---|---|
+| Dottrina | Strategia e potenziamenti del Generale si scelgono in sala d'attesa o durante la scelta dei paesi; si bloccano al turno 1. Fino ad allora sono segrete, poi la strategia è pubblica e i potenziamenti li vedono solo gli alleati |
+| Formato delle strategie | Modificatori per unità, ruolo, dominio o "tutte": prima `set` (valore fissato), poi `add` (valore sommato), più bonus di difesa contro certe unità. Gli edifici hanno modificatori propri |
+| Bonus di comando | Generale e comandanti rari (Ufficiale di campo, Maresciallo dell'aria, Ammiraglio) danno bonus alle unità del loro gruppo: in attacco quelle che si muovono con loro, in difesa la loro pila. Più copie dello stesso comandante non si sommano |
+| Difesa situazionale | Nuovi campi `cityDefence` e `lineDefence`: difesa extra (o malus) quando si difende in una città propria o in una linea difensiva |
+| Armi a uso singolo | Missili, testata nucleare e Guastatori non subiscono danni durante il proprio attacco e si consumano alla fine; la loro perdita non dà punti al nemico. Senza questa regola, con 1 HP, morirebbero al primo scambio e "vince il difensore" lascerebbe sempre un superstite |
+| Cecchini | Attaccando colpiscono per primi Generale e comandanti (`hunts`) |
+| Nomi | Le rare di atWar dal nome poco adatto sono state sostituite: Guastatori al posto dell'attentatore suicida, Volontari al posto dei bambini soldato; la testata finta è stata tolta |
 
 ---
 
@@ -275,14 +290,13 @@ OnPeace/
 | **M2 Sandbox** ✅ | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
 | **M3 Multiplayer** ✅ | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
 | **M4 Interfaccia completa** ✅ | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
-| **M5 Contenuti** | Strategie, edifici, unità rare | Varietà e bilanciamento |
+| **M5 Contenuti** ✅ | Strategie, Generale, unità rare (gli edifici erano già in M1) | Varietà e bilanciamento |
 | **M6 Serata di prova** | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni | Prima partita tra amici |
 
 ---
 
 ## 5. Da decidere più avanti
 - Tema, nome e mappa definitiva (dopo il prototipo).
-- Nomi e identità di strategie e unità rare.
-- Se includere il Generale, che in atWar è premium e potenziato con la progressione: per esempio con bonus fissi.
+- Bilanciamento di strategie, potenziamenti del Generale e rare, dopo le prime partite.
 - Voto sulle impostazioni durante la partita, spettatori, replay completo dell'intera partita: tutti facili da aggiungere grazie al registro degli eventi.
 - Bot che sostituiscano gli assenti (fuori dalla v1).
