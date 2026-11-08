@@ -76,6 +76,10 @@
   "stealth": {
     "detectionFactor": 0.5
   },
+  "vision": {
+    "cityView": 16,
+    "showFoggedStacks": true
+  },
   "selection": {
     "incomeFactor": 1,
     "reinforcementValue": 10

@@ -191,6 +191,12 @@ export const RulesDefaults = z.strictObject({
     /** Raggio di rilevamento = vista × questo fattore. */
     detectionFactor: z.number().min(0),
   }),
+  vision: z.strictObject({
+    /** Raggio visivo di una città (punti raggio), a cui si sommano gli edifici. */
+    cityView: z.number().min(0),
+    /** Fuori dal raggio visivo si vede la posizione delle pile nemiche (non la composizione). */
+    showFoggedStacks: z.boolean(),
+  }),
   selection: z.strictObject({
     /** Valore di un paese = reddito nominale × incomeFactor + rinforzi × reinforcementValue. */
     incomeFactor: z.number().min(0),

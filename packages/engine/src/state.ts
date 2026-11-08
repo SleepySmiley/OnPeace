@@ -40,6 +40,11 @@ export interface StackState {
   units: UnitState[];
   /** Pila invisibile scoperta (o che ha combattuto): visibile ai nemici. */
   exposed: boolean;
+  /**
+   * Solo nella vista di un giocatore: pila nemica fuori dal raggio visivo.
+   * Se ne conosce la posizione ma non la composizione (units è vuoto).
+   */
+  fog?: boolean;
 }
 
 export interface CityState {

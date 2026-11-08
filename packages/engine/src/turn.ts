@@ -653,7 +653,8 @@ class Resolver {
 
 // ------------------------------------------------------------------ fine e inizio turno
 
-function eliminate(state: GameState, player: PlayerId, events: TurnEvent[]): void {
+/** Toglie un giocatore dalla partita (eliminato, espulso o ritirato): le sue città tornano neutrali. */
+export function eliminate(state: GameState, player: PlayerId, events: TurnEvent[]): void {
   const p = getPlayer(state, player);
   p.status = 'eliminated';
   for (const city of Object.values(state.cities)) if (city.owner === player) city.owner = null;
