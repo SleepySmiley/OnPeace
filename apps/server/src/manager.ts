@@ -2,7 +2,11 @@
 import { randomBytes } from 'node:crypto';
 import type { GameContext, NavGrid, PlayerId } from '@onpeace/engine';
 import type { ClientMsg, LobbySettings, ServerMsg } from '@onpeace/protocol';
+import { consoleLogger, type Logger } from './log';
 import { Room, type RoomSnapshot, type Seat } from './room';
+
+/** Se un salvataggio fallisce (es. file bloccato da OneDrive o dall'antivirus) si riprova dopo questo tempo. */
+const SAVE_RETRY_MS = 1500;
 
 export interface Persistence {
   save(snapshot: RoomSnapshot): void;
@@ -32,6 +36,7 @@ export class RoomManager {
     private readonly transport: Transport,
     private readonly now: () => number = Date.now,
     private readonly saveDelayMs = 400,
+    readonly log: Logger = consoleLogger,
   ) {}
 
   private deps(id: string) {
@@ -40,8 +45,9 @@ export class RoomManager {
       nav: this.nav,
       now: this.now,
       send: (player: PlayerId, msg: ServerMsg) => this.transport.send(id, player, msg),
-      changed: (room: Room) => this.scheduleSave(room),
+      changed: (room: Room) => this.scheduleSave(room, this.saveDelayMs),
       isConnected: (player: PlayerId) => this.transport.isConnected(id, player),
+      log: this.log,
     };
   }
 
@@ -64,6 +70,7 @@ export class RoomManager {
     // la stanza nasce vuota: il primo posto è dell'host
     const seat = room.addSeat(name, color) as Seat;
     room.handle(seat.id, { t: 'settings', settings });
+    this.log.info(`Partita ${id}: creata da ${name}`);
     return { room, seat };
   }
 
@@ -72,6 +79,7 @@ export class RoomManager {
     if (!room) return 'Partita non trovata: controlla il link';
     const seat = room.addSeat(name, color);
     if (typeof seat === 'string') return seat;
+    this.log.info(`Partita ${room.id}: entra ${name}`);
     return { room, seat };
   }
 
@@ -94,21 +102,31 @@ export class RoomManager {
       try {
         room.tick();
       } catch (err) {
-        console.error(`Errore nella partita ${room.id}:`, err);
+        this.log.error(`Partita ${room.id}: errore nel timer`, err);
       }
     }
   }
 
-  private scheduleSave(room: Room): void {
+  private scheduleSave(room: Room, delayMs: number): void {
     const prev = this.pendingSave.get(room.id);
     if (prev) clearTimeout(prev);
     this.pendingSave.set(
       room.id,
       setTimeout(() => {
         this.pendingSave.delete(room.id);
-        this.store.save(room.snapshot());
-      }, this.saveDelayMs),
+        if (!this.saveNow(room)) this.scheduleSave(room, SAVE_RETRY_MS);
+      }, delayMs),
     );
+  }
+
+  private saveNow(room: Room): boolean {
+    try {
+      this.store.save(room.snapshot());
+      return true;
+    } catch (err) {
+      this.log.error(`Partita ${room.id}: salvataggio non riuscito, riprovo`, err);
+      return false;
+    }
   }
 
   /** Salva subito tutto (alla chiusura del server). */
@@ -116,7 +134,7 @@ export class RoomManager {
     for (const [id, t] of this.pendingSave) {
       clearTimeout(t);
       const room = this.rooms.get(id);
-      if (room) this.store.save(room.snapshot());
+      if (room) this.saveNow(room);
     }
     this.pendingSave.clear();
   }

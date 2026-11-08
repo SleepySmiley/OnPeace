@@ -1,9 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as engine from '@onpeace/engine';
 import { NavGrid, createContext, type PlayerId } from '@onpeace/engine';
 import type { ServerMsg } from '@onpeace/protocol';
 import { loadRules, twoIslandMap } from '../../../packages/engine/test/helpers';
+import { memoryLogger } from '../src/log';
 import { RoomManager, type Persistence } from '../src/manager';
 import type { RoomSnapshot } from '../src/room';
+
+// resolveTurn resta quello vero; i test sugli errori del motore lo fanno fallire apposta
+vi.mock('@onpeace/engine', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@onpeace/engine')>();
+  return { ...mod, resolveTurn: vi.fn(mod.resolveTurn) };
+});
+const actual = await vi.importActual<typeof import('@onpeace/engine')>('@onpeace/engine');
+const resolveSpy = vi.mocked(engine.resolveTurn);
+afterEach(() => {
+  resolveSpy.mockImplementation(actual.resolveTurn);
+});
 
 const map = twoIslandMap();
 const ctx = createContext(map, loadRules());
@@ -13,6 +26,7 @@ function setup() {
   let clock = 1_000_000;
   const inbox = new Map<string, ServerMsg[]>();
   const saved = new Map<string, RoomSnapshot>();
+  const logger = memoryLogger();
   const store: Persistence = {
     save: (s) => saved.set(s.id, structuredClone(s)),
     loadAll: () => [...saved.values()],
@@ -25,7 +39,7 @@ function setup() {
     isConnected: () => true,
   };
   const now = () => clock;
-  const manager = new RoomManager(ctx, nav, store, transport, now, 0);
+  const manager = new RoomManager(ctx, nav, store, transport, now, 0, logger.log);
   const last = <T extends ServerMsg['t']>(room: string, player: PlayerId, t: T) =>
     (inbox.get(`${room}:${player}`) ?? []).filter((m): m is Extract<ServerMsg, { t: T }> => m.t === t).at(-1);
   return {
@@ -33,6 +47,7 @@ function setup() {
     saved,
     store,
     transport,
+    logger,
     last,
     advance: (ms: number) => (clock += ms),
     now,
@@ -172,5 +187,119 @@ describe('stanza di gioco', () => {
     const found = again.byToken(host.token)!;
     expect(found.room.state!.turn).toBe(1);
     expect(found.room.snapshot().plans[host.id]).toHaveLength(1);
+  });
+
+  it('pausa: solo l’host ferma il tempo, alla ripresa restano almeno 15 s', () => {
+    const t = playing();
+    const { room, host, guest } = t;
+    expect(room.handle(guest.id, { t: 'pause', paused: true })).toMatch(/Solo chi ha creato/);
+    t.advance(110_000);
+    expect(room.handle(host.id, { t: 'pause', paused: true })).toBeNull();
+    expect(t.last(room.id, guest.id, 'status')!.paused).toEqual({ reason: 'host', remainingMs: 10_000 });
+    t.advance(600_000);
+    t.manager.tick();
+    expect(room.state!.turn).toBe(1);
+    // si può comunque finire il turno: il nuovo turno resta in pausa con il tempo pieno
+    room.handle(host.id, { t: 'ready', done: true });
+    room.handle(guest.id, { t: 'ready', done: true });
+    expect(room.state!.turn).toBe(2);
+    expect(t.last(room.id, host.id, 'status')!.paused).toEqual({ reason: 'host', remainingMs: 120_000 });
+    expect(room.handle(host.id, { t: 'pause', paused: false })).toBeNull();
+    const status = t.last(room.id, guest.id, 'status')!;
+    expect(status.paused).toBeNull();
+    expect(status.deadline).toBe(t.now() + 120_000);
+  });
+
+  it('pausa: alla ripresa con poco tempo rimasto ne restano 15 s', () => {
+    const t = playing();
+    const { room, host } = t;
+    t.advance(119_000);
+    room.handle(host.id, { t: 'pause', paused: true });
+    room.handle(host.id, { t: 'pause', paused: false });
+    expect(t.last(room.id, host.id, 'status')!.deadline).toBe(t.now() + 15_000);
+  });
+
+  it('se il motore fallisce per gli ordini di un giocatore, si annullano solo i suoi', () => {
+    const t = playing();
+    const { room, host, guest } = t;
+    resolveSpy.mockImplementation((state, c, n, plans) => {
+      if ((plans[guest.id]?.length ?? 0) > 0) throw new Error('motore rotto');
+      return actual.resolveTurn(state, c, n, plans);
+    });
+    room.handle(host.id, {
+      t: 'plan',
+      actions: [{ kind: 'buy', order: { city: 'a1', units: [{ type: 'infantry', count: 1 }], buildings: [] } }],
+    });
+    room.handle(guest.id, {
+      t: 'plan',
+      actions: [{ kind: 'buy', order: { city: 'b1', units: [{ type: 'infantry', count: 1 }], buildings: [] } }],
+    });
+    room.handle(host.id, { t: 'ready', done: true });
+    expect(() => room.handle(guest.id, { t: 'ready', done: true })).not.toThrow();
+    expect(room.state!.turn).toBe(2);
+    const purchases = t.last(room.id, host.id, 'game')!.events.filter((e) => e.kind === 'purchase');
+    expect(purchases.map((e) => e.player)).toEqual([host.id]);
+    expect(t.last(room.id, guest.id, 'error')!.message).toMatch(/ordini del turno 1 sono stati annullati/);
+    expect(t.last(room.id, host.id, 'error')).toBeUndefined();
+    // quanto serve a riprodurre l'errore è stato salvato
+    expect(t.logger.dumps).toHaveLength(1);
+    expect(t.logger.dumps[0]!.data).toMatchObject({ plans: { [guest.id]: expect.any(Array) } });
+    expect(t.logger.lines.some((l) => l.includes('motore rotto'))).toBe(true);
+  });
+
+  it('se il turno non si risolve nemmeno senza ordini, la partita si ferma e riparte dopo la correzione', () => {
+    const t = playing();
+    const { room, host, guest } = t;
+    resolveSpy.mockImplementation(() => {
+      throw new Error('motore rotto');
+    });
+    t.advance(121_000);
+    expect(() => t.manager.tick()).not.toThrow();
+    expect(room.state!.turn).toBe(1);
+    expect(t.last(room.id, guest.id, 'status')!.paused?.reason).toBe('error');
+    expect(t.last(room.id, guest.id, 'error')!.message).toMatch(/partita ferma/);
+    t.advance(600_000);
+    t.manager.tick(); // ferma: non riprova da sola a ogni secondo
+    expect(resolveSpy).toHaveBeenCalledTimes(2); // con gli ordini e senza (non c'erano ordini)
+    // dopo la correzione: quando tutti finiscono il turno si risolve e il tempo riparte
+    resolveSpy.mockImplementation(actual.resolveTurn);
+    room.handle(host.id, { t: 'ready', done: true });
+    room.handle(guest.id, { t: 'ready', done: true });
+    expect(room.state!.turn).toBe(2);
+    expect(t.last(room.id, host.id, 'status')!.paused).toBeNull();
+  });
+
+  it('chi esce per ultimo senza aver finito non blocca il turno', () => {
+    const t = playing();
+    const { room, host, guest } = t;
+    room.handle(guest.id, { t: 'ready', done: true });
+    expect(room.snapshot().eventsTurn).toBe(0);
+    room.handle(host.id, { t: 'leave' });
+    expect(room.snapshot().eventsTurn).toBe(1); // il turno 1 è stato risolto subito
+  });
+
+  it('un salvataggio fallito (file bloccato) viene ritentato', async () => {
+    const t = setup();
+    let fail = 1;
+    const saved: string[] = [];
+    const store: Persistence = {
+      save: (s) => {
+        if (fail-- > 0) throw Object.assign(new Error('EPERM: file bloccato'), { code: 'EPERM' });
+        saved.push(s.id);
+      },
+      loadAll: () => [],
+    };
+    vi.useFakeTimers();
+    try {
+      const manager = new RoomManager(ctx, nav, store, t.transport, t.now, 0, t.logger.log);
+      const { room } = manager.create('Anna', '#e05a4f', {});
+      await vi.advanceTimersByTimeAsync(10);
+      expect(saved).toEqual([]);
+      expect(t.logger.lines.some((l) => l.includes('salvataggio non riuscito'))).toBe(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(saved).toEqual([room.id]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

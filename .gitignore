@@ -9,6 +9,8 @@ coverage/
 .env.*
 # partite salvate dal server
 games/
+# registro del server, errori da riprodurre e segnalazioni
+logs/
 # database delle partite (server)
 *.db
 *.db-journal
