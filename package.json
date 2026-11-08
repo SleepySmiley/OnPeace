@@ -1,0 +1,40 @@
+{
+  "name": "onpeace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @onpeace/client",
+    "build": "npm run build -w @onpeace/client",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tools",
+    "map:generate": "tsx tools/generate-map.ts",
+    "data:check": "tsx tools/check-data.ts",
+    "data:schema": "tsx tools/write-schemas.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/d3-contour": "^3.0.6",
+    "@types/d3-delaunay": "^6.0.4",
+    "@types/node": "^24.19.2",
+    "d3-contour": "^4.0.3",
+    "d3-delaunay": "^6.0.6",
+    "eslint": "^10.14.0",
+    "globals": "^16.5.0",
+    "polygon-clipping": "^0.15.7",
+    "prettier": "^3.9.10",
+    "simplex-noise": "^4.0.3",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}

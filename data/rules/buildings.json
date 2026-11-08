@@ -1,0 +1,71 @@
+{
+  "$schema": "../schema/buildings.schema.json",
+  "buildings": [
+    {
+      "id": "radar",
+      "name": "Radar",
+      "description": "Vede molto lontano e aiuta a scoprire le unità invisibili.",
+      "defence": 1,
+      "crit": 0,
+      "hp": 20,
+      "view": 150,
+      "cost": 300
+    },
+    {
+      "id": "coastal_battery",
+      "name": "Batteria costiera",
+      "description": "Difende la città dalle navi da guerra.",
+      "defence": 1,
+      "crit": 5,
+      "hp": 20,
+      "view": 16,
+      "cost": 380,
+      "portOnly": true,
+      "defenceBonus": [{ "vs": ["destroyer"], "value": 20 }]
+    },
+    {
+      "id": "bank",
+      "name": "Banca",
+      "description": "Riduce il mantenimento delle unità prodotte in questa città.",
+      "defence": 1,
+      "crit": 0,
+      "hp": 20,
+      "view": 0,
+      "cost": 700,
+      "effects": { "upkeepReduction": 1 }
+    },
+    {
+      "id": "recruitment_center",
+      "name": "Centro di reclutamento",
+      "description": "Più rinforzi a ogni ciclo di reclutamento.",
+      "defence": 1,
+      "crit": 0,
+      "hp": 20,
+      "view": 0,
+      "cost": 1000,
+      "effects": { "extraReinforcements": 3 }
+    },
+    {
+      "id": "aa_defences",
+      "name": "Difese antiaeree",
+      "description": "Protegge la città dagli attacchi aerei (non dagli elicotteri).",
+      "defence": 1,
+      "crit": 5,
+      "hp": 20,
+      "view": 16,
+      "cost": 1000,
+      "defenceBonus": [{ "vs": ["recon", "stealth_jet", "bomber", "air_transport"], "value": 20 }]
+    },
+    {
+      "id": "fortifications",
+      "name": "Fortificazioni",
+      "description": "Ogni unità nella città difende meglio.",
+      "defence": 2,
+      "crit": 0,
+      "hp": 20,
+      "view": 0,
+      "cost": 1400,
+      "effects": { "cityDefenceBonus": 1 }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.log
+.playwright-cli/
+*.tsbuildinfo
+.env
+.env.*
+# database delle partite (server)
+*.db
+*.db-journal
