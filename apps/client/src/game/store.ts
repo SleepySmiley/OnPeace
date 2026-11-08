@@ -112,6 +112,8 @@ interface Session {
   send(msg: ClientMsg): void;
   leaveOnline(): void;
   markChatRead(): void;
+  /** "Segnala un problema": manda al server il testo e il contesto della partita. */
+  reportProblem(text: string): void;
   // comuni
   pickCountry(countryId: string): void;
   /** Strategia e Generale di chi sceglie ora (online: io; in locale: chi sta scegliendo il paese). */
@@ -186,6 +188,39 @@ const phaseScreen: Record<RoomPhase, Screen> = {
 
 let net: Net | null = null;
 
+/** Quanto serve a capire una segnalazione: schermata, turno, ordini, ultimo avviso, browser. */
+function clientContext(s: Session): string {
+  const me = s.online.me;
+  return JSON.stringify({
+    mode: s.mode,
+    screen: s.screen,
+    game: s.online.game,
+    me,
+    turn: s.game?.turn ?? null,
+    phase: s.game?.phase ?? null,
+    orders: me ? (s.plans[me]?.length ?? 0) : null,
+    selected: s.selected,
+    draft: s.draft ? { mode: s.draft.mode, units: s.draft.units } : null,
+    notice: s.notice,
+    connected: s.online.connected,
+    viewport: `${innerWidth}x${innerHeight}`,
+    browser: navigator.userAgent,
+  });
+}
+
+const sentErrors = new Set<string>();
+const MAX_ERROR_REPORTS = 10;
+
+/** Manda al server un errore dell'interfaccia (solo online, senza doppioni, al massimo 10 per sessione). */
+export function reportClientError(err: unknown, extra = ''): void {
+  const error = err instanceof Error ? err : new Error(String(err));
+  const key = `${error.message}\n${error.stack?.split('\n')[1] ?? ''}`;
+  if (!net || sentErrors.has(key) || sentErrors.size >= MAX_ERROR_REPORTS) return;
+  sentErrors.add(key);
+  const detail = `${error.stack ?? error.message}\n${extra}\n${clientContext(useSession.getState())}`;
+  net.send({ t: 'report', kind: 'error', text: error.message.slice(0, 2000) || 'Errore senza messaggio', detail: detail.slice(0, 8000) });
+}
+
 export const useSession = create<Session>((set, get) => {
   const patchOnline = (patch: Partial<OnlineState>) => set({ online: { ...get().online, ...patch } });
 
@@ -240,6 +275,9 @@ export const useSession = create<Session>((set, get) => {
         });
         return;
       }
+      case 'notice':
+        set({ notice: msg.message });
+        return;
       case 'error':
         set({ notice: msg.message });
         if (/Sessione scaduta|Partita non trovata/.test(msg.message) && !s.online.me) {
@@ -348,6 +386,10 @@ export const useSession = create<Session>((set, get) => {
 
     markChatRead() {
       if (get().online.unread > 0) patchOnline({ unread: 0 });
+    },
+
+    reportProblem(text) {
+      net?.send({ t: 'report', kind: 'feedback', text, detail: clientContext(get()).slice(0, 8000) });
     },
 
     // ---------------------------------------------------------------- comuni

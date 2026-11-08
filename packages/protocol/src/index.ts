@@ -76,6 +76,17 @@ export const ClientMsgS = z.discriminatedUnion('t', [
   z.object({ t: z.literal('leave') }),
   /** Solo l'host: ferma o fa ripartire il tempo del turno (o della scelta dei paesi). */
   z.object({ t: z.literal('pause'), paused: z.boolean() }),
+  /**
+   * Segnalazione per chi sviluppa: scritta dal giocatore ("feedback") o mandata dal browser quando
+   * l'interfaccia va in errore ("error"). Il server la scrive in logs/segnalazioni.jsonl.
+   */
+  z.object({
+    t: z.literal('report'),
+    kind: z.enum(['feedback', 'error']),
+    text: z.string().trim().min(1).max(2000),
+    /** Pila dell'errore e contesto del browser (schermata, turno, ultimo avviso…). */
+    detail: z.string().max(8000).optional(),
+  }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsgS>;
 
@@ -145,6 +156,8 @@ export type ServerMsg =
     }
   | { t: 'chat'; lines: ChatLine[] }
   | { t: 'error'; message: string }
+  /** Avviso non di errore (es. "segnalazione ricevuta"). */
+  | { t: 'notice'; message: string }
   | { t: 'kicked'; reason: string };
 
 export function parseClientMsg(raw: string): ClientMsg | { error: string } {

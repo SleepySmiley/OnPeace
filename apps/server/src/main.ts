@@ -43,7 +43,10 @@ interface Conn {
   room: string | null;
   player: PlayerId | null;
   alive: boolean;
+  /** Segnalazioni ricevute da questa connessione (con un tetto, contro gli errori a raffica). */
+  reports: number;
 }
+const MAX_REPORTS_PER_CONN = 30;
 const conns = new Set<Conn>();
 const key = (room: string, player: PlayerId) => `${room}:${player}`;
 const byPlayer = new Map<string, Set<Conn>>();
@@ -87,6 +90,12 @@ const manager = new RoomManager(
 const loaded = manager.loadSaved();
 
 function handleMessage(conn: Conn, msg: ClientMsg): void {
+  if (msg.t === 'report') {
+    if (++conn.reports > MAX_REPORTS_PER_CONN) return;
+    manager.report(conn.room, conn.player, msg);
+    if (msg.kind === 'feedback') raw(conn, { t: 'notice', message: 'Grazie! Segnalazione registrata.' });
+    return;
+  }
   if (msg.t === 'hello') {
     const found = msg.token ? manager.byToken(msg.token) : null;
     if (!found) return msg.token ? raw(conn, { t: 'error', message: 'Sessione scaduta: rientra dal link' }) : undefined;
@@ -122,7 +131,7 @@ const server = createServer(staticHandler(join(repoRoot, 'apps', 'client', 'dist
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 256 * 1024 });
 
 wss.on('connection', (ws) => {
-  const conn: Conn = { ws, room: null, player: null, alive: true };
+  const conn: Conn = { ws, room: null, player: null, alive: true, reports: 0 };
   conns.add(conn);
   ws.on('pong', () => (conn.alive = true));
   raw(conn, { t: 'server', publicUrl });

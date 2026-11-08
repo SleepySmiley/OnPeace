@@ -278,6 +278,20 @@ describe('stanza di gioco', () => {
     expect(room.snapshot().eventsTurn).toBe(1); // il turno 1 è stato risolto subito
   });
 
+  it('segnalazioni: nel registro con partita, nome e turno; per i feedback anche lo stato della partita', () => {
+    const t = playing();
+    const { room, guest } = t;
+    t.manager.report(room.id, guest.id, { t: 'report', kind: 'feedback', text: 'la battaglia non c’è' });
+    t.manager.report(room.id, guest.id, { t: 'report', kind: 'error', text: 'TypeError: x', detail: 'pila' });
+    t.manager.report(null, null, { t: 'report', kind: 'error', text: 'prima di entrare' });
+    expect(t.logger.reports).toMatchObject([
+      { kind: 'feedback', game: room.id, name: 'Bruno', turn: 1, text: 'la battaglia non c’è', snapshot: expect.any(String) },
+      { kind: 'error', name: 'Bruno', detail: 'pila', snapshot: null },
+      { kind: 'error', game: null, name: null },
+    ]);
+    expect(t.logger.dumps.map((d) => d.name)).toEqual([`segnalazione-${room.id}-turno1`]);
+  });
+
   it('un salvataggio fallito (file bloccato) viene ritentato', async () => {
     const t = setup();
     let fail = 1;

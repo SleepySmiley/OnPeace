@@ -22,10 +22,12 @@ import { Countdown } from './ui/Countdown';
 import { DoctrinePanel } from './ui/DoctrinePanel';
 import { FinancePanel } from './ui/FinancePanel';
 import { GameOverPanel } from './ui/GameOverPanel';
+import { GuideModal, guideSeen } from './ui/GuideModal';
 import { InfoPanel } from './ui/InfoPanel';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { PlanPanel } from './ui/PlanPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
+import { ReportModal } from './ui/ReportModal';
 import { ReportPanel } from './ui/ReportPanel';
 import { SetupScreen } from './ui/SetupScreen';
 import { StackPanel } from './ui/StackPanel';
@@ -81,6 +83,37 @@ export function App() {
   const [hover, setHover] = useState<HitTarget | null>(null);
   const [tab, setTab] = useState<Tab>('orders');
   const [doctrineOpen, setDoctrineOpen] = useState(true);
+  const [overlay, setOverlay] = useState<'guide' | 'report' | null>(null);
+  const [freshGuide, setFreshGuide] = useState(() => !guideSeen());
+  const closeOverlay = useCallback(() => setOverlay(null), []);
+
+  // Guida (evidenziata finché non la si apre) e, online, Segnala
+  const helpButtons = (
+    <>
+      <button
+        type="button"
+        className={freshGuide ? 'tiny guide-fresh' : 'ghost tiny'}
+        title="Come si gioca"
+        onClick={() => {
+          setFreshGuide(false);
+          setOverlay('guide');
+        }}
+      >
+        Guida
+      </button>
+      {mode === 'online' && (
+        <button type="button" className="ghost tiny" title="Segnala un problema" onClick={() => setOverlay('report')}>
+          Segnala
+        </button>
+      )}
+    </>
+  );
+  const overlays = (
+    <>
+      {overlay === 'guide' && <GuideModal onClose={closeOverlay} />}
+      {overlay === 'report' && <ReportModal onClose={closeOverlay} />}
+    </>
+  );
 
   // all'avvio: se c'è una partita online salvata (e il link non ne indica un'altra), si rientra
   useEffect(() => {
@@ -208,8 +241,10 @@ export function App() {
     return (
       <div className="shell">
         <MapView map={ctx.map} view={EMPTY_VIEW} draft={null} onHover={noop} onClick={noop} />
-        <header className="topbar">
+        <header className="topbar above">
           <span className="brand">OnPeace</span>
+          <span className="spacer" />
+          {helpButtons}
         </header>
         {screen === 'setup' ? <SetupScreen /> : <LobbyScreen />}
         {s.notice && (
@@ -217,6 +252,7 @@ export function App() {
             {s.notice}
           </div>
         )}
+        {overlays}
       </div>
     );
   }
@@ -314,6 +350,7 @@ export function App() {
             {iAmDone ? 'Riprendi il turno' : `Fine turno${stepsInvalid > 0 ? ` (${stepsInvalid} non validi)` : ''}`}
           </button>
         )}
+        {helpButtons}
         <button
           type="button"
           className="ghost"
@@ -487,6 +524,8 @@ export function App() {
           </div>
         </div>
       )}
+
+      {overlays}
     </div>
   );
 }

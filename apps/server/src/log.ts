@@ -10,6 +10,8 @@ export interface Logger {
   error(message: string, err?: unknown): void;
   /** Salva un file JSON con tutto ciò che serve a riprodurre un errore; restituisce il percorso. */
   dump(name: string, data: unknown): string | null;
+  /** Aggiunge una segnalazione dei giocatori (una riga JSON) a segnalazioni.jsonl. */
+  report(entry: Record<string, unknown>): void;
 }
 
 // ora locale (chi legge il registro è chi ha ospitato la serata); sv-SE dà "2026-11-08 21:30:00"
@@ -49,6 +51,14 @@ export function fileLogger(dir: string): Logger {
         return null;
       }
     },
+    report(entry) {
+      try {
+        mkdirSync(dir, { recursive: true });
+        appendFileSync(join(dir, 'segnalazioni.jsonl'), `${JSON.stringify({ at: stamp(), ...entry })}\n`);
+      } catch {
+        // come sopra: il registro non deve mai fermare il server
+      }
+    },
   };
 }
 
@@ -57,12 +67,14 @@ export const consoleLogger: Logger = {
   info: (m) => console.log(`${stamp()}  ${m}`),
   error: (m, err) => console.error(`${stamp()}  ERRORE  ${m}${err === undefined ? '' : `\n${describe(err)}`}`),
   dump: () => null,
+  report: (entry) => console.log(`${stamp()}  SEGNALAZIONE  ${JSON.stringify(entry)}`),
 };
 
 /** Registro in memoria, per i test. */
 export function memoryLogger() {
   const lines: string[] = [];
   const dumps: { name: string; data: unknown }[] = [];
+  const reports: Record<string, unknown>[] = [];
   const log: Logger = {
     info: (m) => void lines.push(m),
     error: (m, err) => void lines.push(`ERRORE ${m}${err === undefined ? '' : `: ${describe(err)}`}`),
@@ -70,8 +82,9 @@ export function memoryLogger() {
       dumps.push({ name, data: structuredClone(data) });
       return name;
     },
+    report: (entry) => void reports.push(entry),
   };
-  return { log, lines, dumps };
+  return { log, lines, dumps, reports };
 }
 
 export { describe as describeError };

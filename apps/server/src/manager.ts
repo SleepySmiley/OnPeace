@@ -97,6 +97,28 @@ export class RoomManager {
     return room.handle(player, msg);
   }
 
+  /** Segnalazione di un giocatore: va nel registro, con lo stato della partita se l'ha scritta lui. */
+  report(roomId: string | null, player: PlayerId | null, msg: Extract<ClientMsg, { t: 'report' }>): void {
+    const room = roomId ? this.rooms.get(roomId) : undefined;
+    const name = room?.seats.find((x) => x.id === player)?.name ?? null;
+    const turn = room?.state?.turn ?? null;
+    const snapshot =
+      msg.kind === 'feedback' && room ? this.log.dump(`segnalazione-${room.id}-turno${turn ?? 0}`, room.snapshot()) : null;
+    this.log.report({
+      kind: msg.kind,
+      game: roomId,
+      player,
+      name,
+      phase: room?.phase ?? null,
+      turn,
+      text: msg.text,
+      detail: msg.detail ?? null,
+      snapshot,
+    });
+    const who = name ?? 'un giocatore non ancora in partita';
+    this.log.info(`Segnalazione (${msg.kind}) da ${who}${roomId ? ` nella partita ${roomId}` : ''}: ${msg.text.slice(0, 160)}`);
+  }
+
   tick(): void {
     for (const room of this.rooms.values()) {
       try {
