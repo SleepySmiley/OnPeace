@@ -14,5 +14,7 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: { allow: [repoRoot] },
+    // in sviluppo il WebSocket va al server di gioco (npm run dev avvia entrambi)
+    proxy: { '/ws': { target: 'ws://localhost:3210', ws: true } },
   },
 });

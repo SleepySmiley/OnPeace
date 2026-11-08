@@ -7,6 +7,8 @@ coverage/
 *.tsbuildinfo
 .env
 .env.*
+# partite salvate dal server
+games/
 # database delle partite (server)
 *.db
 *.db-journal

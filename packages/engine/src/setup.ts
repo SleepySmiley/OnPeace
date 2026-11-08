@@ -152,6 +152,31 @@ export function selectCountry(state: GameState, ctx: GameContext, playerId: Play
   }
 }
 
+/**
+ * Chi sceglie il prossimo paese: a rotazione, il primo che ne ha meno degli altri.
+ * `skipped` = giocatori che hanno rinunciato (es. nessun paese alla loro portata).
+ * null = scelta finita.
+ */
+export function nextPicker(
+  state: GameState,
+  ctx: GameContext,
+  skipped: ReadonlySet<PlayerId> = new Set(),
+): PlayerId | null {
+  const owned = (id: PlayerId) => ownedCountries(state, ctx, id).length;
+  const pending = state.players.filter((p) => !skipped.has(p.id) && owned(p.id) < state.settings.initialCountries);
+  if (pending.length === 0) return null;
+  const min = Math.min(...pending.map((p) => owned(p.id)));
+  return pending.find((p) => owned(p.id) === min)!.id;
+}
+
+/** Paesi ancora liberi che il giocatore può permettersi. */
+export function affordableCountries(state: GameState, ctx: GameContext, player: PlayerId): string[] {
+  const money = getPlayer(state, player).money;
+  return ctx.map.countries
+    .filter((c) => countryOwner(state, ctx, c.id) === null && countryValue(ctx, c.id) <= money)
+    .map((c) => c.id);
+}
+
 /** Fine della scelta: comincia il turno 1. */
 export function finishSelection(state: GameState): void {
   assertRule(state.phase === 'selection', 'La partita è già iniziata');

@@ -7,8 +7,11 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @onpeace/client",
+    "dev": "concurrently -k -n server,client -c yellow,cyan \"npm run dev -w @onpeace/server\" \"npm run dev -w @onpeace/client\"",
+    "dev:client": "npm run dev -w @onpeace/client",
+    "dev:server": "npm run dev -w @onpeace/server",
     "build": "npm run build -w @onpeace/client",
+    "start": "npm run start -w @onpeace/server",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
@@ -25,6 +28,7 @@
     "@types/d3-contour": "^3.0.6",
     "@types/d3-delaunay": "^6.0.4",
     "@types/node": "^24.19.2",
+    "concurrently": "^10.0.7",
     "d3-contour": "^4.0.3",
     "d3-delaunay": "^6.0.6",
     "eslint": "^10.14.0",
