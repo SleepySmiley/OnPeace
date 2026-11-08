@@ -4,3 +4,5 @@ export * from './schema/rules';
 export * from './schema/map';
 export * from './map-check';
 export * from './economy';
+export * from './catalog';
+export * from './combat';
