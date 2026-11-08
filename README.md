@@ -13,8 +13,10 @@ Progetto, regole e piano di sviluppo: [docs/progetto.md](docs/progetto.md). Rice
 npm install            # dipendenze
 npm run dev            # server di gioco (porta 3210) + client in sviluppo su http://localhost:5173
 npm run build          # compila il client
-npm start              # server di produzione: gioco completo su http://localhost:3210
-npm run tunnel         # espone il server su Internet con Cloudflare Tunnel (vedi sotto)
+npm run serata         # serata tra amici: compila, avvia server e tunnel, apre il browser (vedi sotto)
+npm run prova          # prova generale: giocatori simulati fanno una partita intera su un server di prova
+npm start              # solo il server di produzione: gioco completo su http://localhost:3210
+npm run tunnel         # solo il tunnel Cloudflare verso il server già acceso
 npm test               # test (motore, server, validità dei dati)
 npm run lint           # ESLint
 npm run typecheck      # controllo dei tipi su tutto il progetto
@@ -28,21 +30,32 @@ npm run map:generate -- [seme] [nome]   # genera una mappa inventata in data/map
 Il server gira sul PC di chi ospita; gli amici entrano dal browser con il link d'invito.
 Cloudflare Tunnel rende il server raggiungibile da Internet senza aprire porte sul router.
 
-Una volta sola:
-
-1. Installa `cloudflared`: `winget install --id Cloudflare.cloudflared` (Windows) oppure scaricalo da developers.cloudflare.com.
-2. Compila il client: `npm run build`.
+Una volta sola: installa `cloudflared` con `winget install --id Cloudflare.cloudflared` (Windows), oppure scaricalo da developers.cloudflare.com.
 
 Per ogni serata:
 
-1. Avvia il server: `npm start` (lascia la finestra aperta).
-2. In un'altra finestra: `npm run tunnel`. Dopo qualche secondo compare un indirizzo `https://…trycloudflare.com`.
-3. Apri quell'indirizzo, crea la partita e manda agli amici il link d'invito che vedi nella sala d'attesa.
+1. `npm run serata` e lascia la finestra aperta. Il comando compila il client se serve, avvia server e tunnel e apre il gioco nel browser.
+2. Quando compare «OnPeace è pronto», crea la partita. Il link d'invito della sala d'attesa usa già l'indirizzo pubblico, anche se tu giochi da `localhost`.
+3. Manda il link agli amici. Per chiudere tutto: `Ctrl+C` (le partite restano salvate).
 
-Note:
-- L'indirizzo `trycloudflare.com` cambia a ogni avvio del tunnel. Per un indirizzo fisso serve un tunnel con nome e un dominio su Cloudflare.
-- Le partite sono salvate in `games/` a ogni azione: se il PC si riavvia, rilanci `npm start` e la partita riprende da dove era (il timer del turno riparte da almeno un minuto).
+Opzioni: `npm run serata -- --locale` (senza tunnel, solo questo PC), `--build` (ricompila comunque), `--no-open` (non apre il browser).
+
+Durante la serata:
+- Se il server cade, `npm run serata` lo riavvia: la partita riprende dai salvataggi in `games/` e i browser si ricollegano da soli.
+- Se il motore va in errore risolvendo un turno, si perdono al massimo gli ordini di quel turno di un giocatore, e lui viene avvisato.
+- L'host può fermare il tempo con **Pausa**. Ognuno ha la **Guida** («Come si gioca») e il pulsante **Segnala** in alto.
 - Chi chiude il browser rientra riaprendo il link: il browser ricorda il suo posto.
+- L'indirizzo `trycloudflare.com` cambia a ogni avvio del tunnel. Per un indirizzo fisso serve un tunnel con nome e un dominio su Cloudflare.
+
+Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova, passando per dottrine, battaglie, trasporti, cadute e rientri; il comando esce con errore se qualcosa va storto. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6 --turni 25`.
+
+Dopo la serata, per le correzioni:
+
+| File | Contenuto |
+|---|---|
+| `logs/server-AAAA-MM-GG.log` | Registro: partite, giocatori, turni con i tempi di risoluzione, errori |
+| `logs/segnalazioni.jsonl` | Segnalazioni dei giocatori (pulsante Segnala) ed errori dei browser, con il contesto |
+| `logs/errori/` | Stato della partita da cui riprodurre ogni errore del motore e ogni segnalazione |
 
 ## Struttura
 
@@ -50,12 +63,12 @@ Note:
 |---|---|
 | `packages/engine` | Regole del gioco in TypeScript puro: schemi dei dati, geometria, combattimento, turno, nebbia di guerra |
 | `packages/protocol` | Messaggi tra browser e server (validati con zod) |
-| `apps/server` | Server Node: stanze, timer, salvataggi, WebSocket su `/ws` |
+| `apps/server` | Server Node: stanze, timer, salvataggi, registro, WebSocket su `/ws` |
 | `apps/client` | Interfaccia: React per i pannelli, PixiJS per la mappa |
 | `data/rules` | Unità, edifici e parametri delle regole (ogni numero del gioco sta qui) |
 | `data/maps` | Mappe in JSON: paesi (forme), città, zone invalicabili, scorciatoie |
 | `data/schema` | JSON Schema generati: danno autocompletamento e controllo in VS Code |
-| `tools` | Generatore di mappe, verifica dati, generazione schemi |
+| `tools` | Generatore di mappe, verifica dati, generazione schemi, avvio della serata, prova generale |
 
 ## Modificare regole e mappe
 
