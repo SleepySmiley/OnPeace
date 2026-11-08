@@ -22,6 +22,8 @@ const PORT = Number(process.env.PORT ?? 3210);
 const DATA_DIR = process.env.DATA_DIR ?? join(repoRoot, 'games');
 const LOG_DIR = process.env.LOG_DIR ?? join(repoRoot, 'logs');
 const log = fileLogger(LOG_DIR);
+/** Indirizzo pubblico (tunnel): da PUBLIC_URL o comunicato da `npm run serata` quando il tunnel è pronto. */
+let publicUrl: string | null = process.env.PUBLIC_URL || null;
 const readJson = (...p: string[]) => JSON.parse(readFileSync(join(repoRoot, 'data', ...p), 'utf8'));
 
 const rules = parseRules({
@@ -123,6 +125,7 @@ wss.on('connection', (ws) => {
   const conn: Conn = { ws, room: null, player: null, alive: true };
   conns.add(conn);
   ws.on('pong', () => (conn.alive = true));
+  raw(conn, { t: 'server', publicUrl });
 
   ws.on('message', (data) => {
     const msg = parseClientMsg(String(data));
@@ -160,8 +163,29 @@ const heartbeat = setInterval(() => {
 
 const ticker = setInterval(() => manager.tick(), 1000);
 
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code !== 'EADDRINUSE') throw err;
+  log.error(`La porta ${PORT} è già occupata: c'è già un server OnPeace aperto? Chiudilo e riprova.`);
+  process.exit(2); // 2 = da non riavviare (vedi tools/serata.ts)
+});
 server.listen(PORT, () => {
   log.info(`OnPeace: http://localhost:${PORT}  (partite ricaricate: ${loaded}, salvataggi in ${DATA_DIR})`);
+});
+
+// messaggi da `npm run serata`: indirizzo del tunnel e chiusura ordinata
+process.on('message', (m: { t?: string; publicUrl?: string | null }) => {
+  if (m?.t === 'publicUrl') {
+    publicUrl = m.publicUrl ?? null;
+    log.info(`Indirizzo pubblico: ${publicUrl ?? 'nessuno'}`);
+    for (const c of conns) raw(c, { t: 'server', publicUrl });
+  } else if (m?.t === 'shutdown') {
+    shutdown();
+  }
+});
+// se `npm run serata` muore all'improvviso il server non resta acceso da solo
+process.on('disconnect', () => {
+  log.info('npm run serata si è chiuso: chiudo anche il server');
+  shutdown();
 });
 
 function shutdown(code = 0) {

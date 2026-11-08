@@ -12,8 +12,9 @@ export interface Logger {
   dump(name: string, data: unknown): string | null;
 }
 
-const stamp = (d = new Date()) => d.toISOString().replace('T', ' ').slice(0, 19);
-const day = (d = new Date()) => d.toISOString().slice(0, 10);
+// ora locale (chi legge il registro è chi ha ospitato la serata); sv-SE dà "2026-11-08 21:30:00"
+const stamp = (d = new Date()) => d.toLocaleString('sv-SE');
+const day = (d = new Date()) => stamp(d).slice(0, 10);
 const describe = (err: unknown) => (err instanceof Error ? (err.stack ?? err.message) : String(err));
 
 /** Registro su file in `dir` (e sulla console). */

@@ -34,6 +34,8 @@ import {
   type RoomPhase,
   type ServerMsg,
 } from '@onpeace/protocol';
+
+export type PauseInfo = NonNullable<Extract<ServerMsg, { t: 'status' }>['paused']>;
 import { rules, testMap } from '../data';
 import { Net, gameFromUrl, loadSession, saveSession, setGameInUrl } from './net';
 
@@ -65,6 +67,10 @@ export interface OnlineState {
   lobby: LobbyInfo | null;
   /** Scadenza del turno o della scelta, già convertita sull'orologio locale. */
   deadline: number | null;
+  /** Tempo fermo (dall'host o per un errore del server). */
+  paused: PauseInfo | null;
+  /** Indirizzo pubblico del server (tunnel), per il link d'invito. */
+  publicUrl: string | null;
   waiting: PlayerId[];
   picker: PlayerId | null;
   connected: boolean;
@@ -145,6 +151,8 @@ const emptyOnline: OnlineState = {
   me: null,
   lobby: null,
   deadline: null,
+  paused: null,
+  publicUrl: null,
   waiting: [],
   picker: null,
   connected: false,
@@ -184,6 +192,9 @@ export const useSession = create<Session>((set, get) => {
   function handleServer(msg: ServerMsg) {
     const s = get();
     switch (msg.t) {
+      case 'server':
+        patchOnline({ publicUrl: msg.publicUrl });
+        return;
       case 'welcome':
         saveSession({ game: msg.game, token: msg.token });
         setGameInUrl(msg.game);
@@ -214,6 +225,7 @@ export const useSession = create<Session>((set, get) => {
       case 'status':
         patchOnline({
           deadline: msg.deadline === null ? null : msg.deadline - msg.now + Date.now(),
+          paused: msg.paused ?? null,
           waiting: msg.waiting,
           picker: msg.picker,
         });

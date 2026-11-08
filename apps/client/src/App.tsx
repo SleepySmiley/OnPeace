@@ -235,6 +235,7 @@ export function App() {
   const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
   const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
   const iAmDone = mode === 'online' && planner !== null && !online.waiting.includes(planner);
+  const isHost = mode === 'online' && online.lobby?.hostId === online.me;
   const waitingNames = online.waiting.filter((p) => p !== online.me).map((p) => playerName(game, p));
   const reportForced = mode === 'local' && screen === 'results';
   const activeTab: Tab = reportForced ? 'report' : tab;
@@ -269,7 +270,17 @@ export function App() {
             {game.phase !== 'ended' && <span className="dim"> / {game.settings.maxTurns}</span>}
           </span>
         )}
-        {mode === 'online' && game.phase !== 'ended' && <Countdown deadline={online.deadline} />}
+        {mode === 'online' && game.phase !== 'ended' && <Countdown deadline={online.deadline} paused={online.paused} />}
+        {isHost && game.phase !== 'ended' && (
+          <button
+            type="button"
+            className="ghost tiny"
+            title={online.paused ? 'Fa ripartire il tempo' : 'Ferma il tempo per tutti (gli ordini si possono ancora dare)'}
+            onClick={() => s.send({ t: 'pause', paused: !online.paused })}
+          >
+            {online.paused?.reason === 'error' ? 'Riprova' : online.paused ? 'Riprendi' : 'Pausa'}
+          </button>
+        )}
         {plannerPlayer && (
           <span className="player-chip" style={{ borderColor: plannerPlayer.color }}>
             <span className="swatch small" style={{ background: plannerPlayer.color }} />
@@ -330,7 +341,22 @@ export function App() {
             </>
           )}{' '}
           Fondi: <b className="num">{fmt.format(pickerPlayer.money)}</b>
-          {mode === 'online' && <Countdown deadline={online.deadline} />}
+          {mode === 'online' && <Countdown deadline={online.deadline} paused={online.paused} />}
+        </div>
+      )}
+
+      {mode === 'online' && online.paused && game.phase === 'playing' && (
+        <div className="banner paused" role="status">
+          {online.paused.reason === 'host' ? (
+            <>
+              <b>Tempo fermato dall'host.</b> Si possono ancora dare ordini e finire il turno.
+            </>
+          ) : (
+            <>
+              <b>Il server non riesce a risolvere il turno.</b> L'errore è registrato: l'host può riprovare o
+              riavviare il server.
+            </>
+          )}
         </div>
       )}
 

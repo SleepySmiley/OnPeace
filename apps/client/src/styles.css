@@ -841,6 +841,29 @@ select option {
   color: #ffd2cc;
 }
 
+.countdown.paused {
+  background: rgba(226, 176, 74, 0.16);
+  color: var(--accent);
+}
+
+.banner.paused {
+  border-color: rgba(226, 176, 74, 0.45);
+}
+
+.hint-text.warn {
+  margin-top: 8px;
+  color: #ffb3aa;
+}
+
+.hint-text code {
+  font-family: var(--font-num);
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
 .status.waiting {
   max-width: 340px;
   overflow: hidden;

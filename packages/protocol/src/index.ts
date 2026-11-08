@@ -113,6 +113,11 @@ export interface ChatLine {
 }
 
 export type ServerMsg =
+  /**
+   * Appena collegati (e quando cambia): l'indirizzo pubblico del server (il tunnel), da usare
+   * nel link d'invito anche se l'host gioca da localhost. Null se il server è raggiungibile solo in locale.
+   */
+  | { t: 'server'; publicUrl: string | null }
   | { t: 'welcome'; token: string; game: string; you: PlayerId }
   | { t: 'lobby'; lobby: LobbyInfo }
   | {
