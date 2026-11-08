@@ -210,6 +210,16 @@ Tutte provvisorie, nei file di `data/rules/`.
 | Cecchini | Attaccando colpiscono per primi Generale e comandanti (`hunts`) |
 | Nomi | Le rare di atWar dal nome poco adatto sono state sostituite: Guastatori al posto dell'attentatore suicida, Volontari al posto dei bambini soldato; la testata finta è stata tolta |
 
+### 2.15 Decisioni prese per la serata (M6)
+Tutte provvisorie.
+
+| Tema | Decisione |
+|---|---|
+| Pausa | Solo l'host ferma e fa ripartire il tempo (turno o scelta dei paesi). In pausa si possono ancora dare ordini e finire il turno; il turno dopo resta in pausa. Alla ripresa restano almeno 15 s |
+| Errore del motore | Se la risoluzione di un turno fallisce, il server salva stato e ordini per riprodurla e riprova togliendo gli ordini di un giocatore alla volta (lui viene avvisato), poi senza ordini. Se fallisce anche così, la partita si ferma con la pausa "errore" e l'host può riprovare |
+| Uscita dell'ultimo | Se esce o viene espulso l'ultimo giocatore che non aveva finito, il turno si risolve subito |
+| Segnalazioni | Pulsante "Segnala" per chi è in partita; gli errori dell'interfaccia partono da soli (al massimo 10 per sessione). Finiscono in `logs/segnalazioni.jsonl`, con lo stato della partita per i feedback scritti |
+
 ---
 
 ## 3. Architettura tecnica
@@ -253,6 +263,9 @@ OnPeace/
 - **Rete**: un solo processo e una sola porta (3210) servono sia il client compilato sia il WebSocket su `/ws`. È ciò che serve per il tunnel.
 - **Accesso**: link `/p/<idPartita>` e token casuale salvato nel browser per rientrare. Chi crea la partita ne è l'host.
 - **Interfaccia di attesa**: mostra in ogni momento chi ha già finito il turno e chi stiamo aspettando. È una delle lamentele principali su atWar.
+- **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; un salvataggio bloccato (OneDrive, antivirus) viene ritentato. Se il processo cade lo stesso, salva tutto prima di uscire.
+- **Registro** in `logs/`: un file al giorno con partite, turni (con i tempi) ed errori; `errori/` con lo stato da cui riprodurre ogni errore; `segnalazioni.jsonl` con le segnalazioni dei giocatori.
+- **Compressione** del WebSocket: a fine partita la vista di un giocatore pesa circa 130 kB, compressa circa 20 kB.
 
 ### 3.5 Client (`apps/client`)
 - **Mappa con PixiJS 8**, a strati:
@@ -268,16 +281,23 @@ OnPeace/
 - **Motore condiviso**: il client lo usa per l'anteprima (raggi, costi, percorsi validi), ma decide sempre il server.
 
 ### 3.6 Hosting sul PC di casa
-- Il server gira sul PC dell'host (`npm start`) e **Cloudflare Tunnel** (`npm run tunnel`) lo espone su HTTPS senza aprire porte del router. Istruzioni nel README.
-- Il tunnel rapido (`cloudflared tunnel --url http://localhost:3000`) è gratuito ma cambia indirizzo a ogni avvio. Un tunnel con nome e un dominio proprio danno invece un indirizzo fisso.
-- La partita esiste solo mentre il PC è acceso; grazie a SQLite riprende dopo un riavvio.
+- `npm run serata` (`tools/serata.ts`) fa tutto con un comando:
+  - compila il client se è più vecchio del codice o dei dati;
+  - avvia il server e **Cloudflare Tunnel**, che lo espone su HTTPS senza aprire porte del router;
+  - passa al server l'indirizzo pubblico, che finisce nel link d'invito;
+  - riavvia il server se cade e riapre il tunnel se si chiude.
+  Istruzioni nel README.
+- Il tunnel rapido è gratuito ma cambia indirizzo a ogni avvio. Un tunnel con nome e un dominio proprio danno invece un indirizzo fisso.
+- La partita esiste solo mentre il PC è acceso; grazie ai salvataggi JSON in `games/` riprende dopo un riavvio.
 
 ### 3.7 Test
 - **Vitest sul motore**:
   - test "dorati" con tiri forzati, per esempio l'esempio ufficiale "1 Carro contro Fanteria + Milizia" [R2 §4.3];
   - simulazioni Monte Carlo per confrontare le medie con i dati della ricerca, per esempio il danno medio del Carro ≈ 4,90 [R2 §4.4];
   - test di risoluzione del turno con seme fisso.
-- **Playwright** per i flussi principali: creare la partita, entrare dal link, giocare un turno.
+- **Test del server** (Vitest): sala d'attesa, turni, timer, pausa, rientro, ripiego quando il motore va in errore, salvataggi ritentati.
+- **Prova generale** (`npm run prova`): da 2 a 8 giocatori simulati giocano una partita intera via WebSocket contro un server vero, usando solo la propria vista. Su 8 giocatori e 50 turni: circa 4.800 ordini, 640 battaglie, 20 cadute e rientri, risoluzione media 11 ms.
+- **Playwright** per i flussi principali nel browser (creare la partita, entrare dal link, giocare un turno): per ora controlli a mano con `playwright-cli`, test automatici da fare.
 
 ---
 
@@ -291,7 +311,7 @@ OnPeace/
 | **M3 Multiplayer** ✅ | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
 | **M4 Interfaccia completa** ✅ | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
 | **M5 Contenuti** ✅ | Strategie, Generale, unità rare (gli edifici erano già in M1) | Varietà e bilanciamento |
-| **M6 Serata di prova** | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni | Prima partita tra amici |
+| **M6 Serata di prova** 🟡 | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni. Pronti: `npm run serata`, guida in gioco, pausa, segnalazioni, prova generale. Mancano la serata e le correzioni dopo | Prima partita tra amici |
 
 ---
 

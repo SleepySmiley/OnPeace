@@ -74,10 +74,26 @@ export const ClientMsgS = z.discriminatedUnion('t', [
   z.object({ t: z.literal('chat'), text: z.string().trim().min(1).max(300) }),
   z.object({ t: z.literal('kick'), player: Id }),
   z.object({ t: z.literal('leave') }),
+  /** Solo l'host: ferma o fa ripartire il tempo del turno (o della scelta dei paesi). */
+  z.object({ t: z.literal('pause'), paused: z.boolean() }),
+  /**
+   * Segnalazione per chi sviluppa: scritta dal giocatore ("feedback") o mandata dal browser quando
+   * l'interfaccia va in errore ("error"). Il server la scrive in logs/segnalazioni.jsonl.
+   */
+  z.object({
+    t: z.literal('report'),
+    kind: z.enum(['feedback', 'error']),
+    text: z.string().trim().min(1).max(2000),
+    /** Pila dell'errore e contesto del browser (schermata, turno, ultimo avviso…). */
+    detail: z.string().max(8000).optional(),
+  }),
 ]);
 export type ClientMsg = z.infer<typeof ClientMsgS>;
 
 export type RoomPhase = 'lobby' | 'selection' | 'playing' | 'ended';
+
+/** Perché il tempo è fermo: l'ha fermato l'host, o il server non riesce a risolvere il turno. */
+export type PauseReason = 'host' | 'error';
 
 export interface LobbyPlayer {
   id: PlayerId;
@@ -108,6 +124,11 @@ export interface ChatLine {
 }
 
 export type ServerMsg =
+  /**
+   * Appena collegati (e quando cambia): l'indirizzo pubblico del server (il tunnel), da usare
+   * nel link d'invito anche se l'host gioca da localhost. Null se il server è raggiungibile solo in locale.
+   */
+  | { t: 'server'; publicUrl: string | null }
   | { t: 'welcome'; token: string; game: string; you: PlayerId }
   | { t: 'lobby'; lobby: LobbyInfo }
   | {
@@ -122,8 +143,10 @@ export type ServerMsg =
     }
   | {
       t: 'status';
-      /** Scadenza del turno o della scelta in corso (ms epoch), o null. */
+      /** Scadenza del turno o della scelta in corso (ms epoch), o null (anche quando il tempo è fermo). */
       deadline: number | null;
+      /** Tempo fermo: perché, e quanto ne resterà alla ripresa (ms). */
+      paused: { reason: PauseReason; remainingMs: number } | null;
       /** Chi non ha ancora finito il turno. */
       waiting: PlayerId[];
       /** Durante la scelta: chi deve scegliere ora. */
@@ -133,6 +156,8 @@ export type ServerMsg =
     }
   | { t: 'chat'; lines: ChatLine[] }
   | { t: 'error'; message: string }
+  /** Avviso non di errore (es. "segnalazione ricevuta"). */
+  | { t: 'notice'; message: string }
   | { t: 'kicked'; reason: string };
 
 export function parseClientMsg(raw: string): ClientMsg | { error: string } {

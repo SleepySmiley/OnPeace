@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { inviteLink } from '../game/net';
+import { inviteIsLocalOnly, inviteLink } from '../game/net';
 import { PLAYER_COLORS, ctx, useSession } from '../game/store';
 import { ChatPanel } from './ChatPanel';
 import { DoctrinePanel } from './DoctrinePanel';
@@ -39,7 +39,8 @@ export function LobbyScreen() {
 
   const isHost = lobby.hostId === online.me;
   const me = lobby.players.find((p) => p.id === online.me);
-  const link = inviteLink(lobby.id);
+  const link = inviteLink(lobby.id, online.publicUrl);
+  const localOnly = inviteIsLocalOnly(online.publicUrl);
   const settings = lobby.settings;
   const used = new Set(lobby.players.map((p) => p.color));
   const strategiesOn = settings.strategies ?? ctx.rules.game.strategies;
@@ -68,6 +69,12 @@ export function LobbyScreen() {
             {copied ? 'Copiato' : 'Copia link'}
           </button>
         </div>
+        {localOnly && (
+          <p className="hint-text warn">
+            Questo link funziona solo su questo PC. Per invitare gli amici avvia il gioco con{' '}
+            <code>npm run serata</code>: il link userà l'indirizzo pubblico del tunnel.
+          </p>
+        )}
 
         <div className="lobby-grid">
           <section>

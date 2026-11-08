@@ -33,9 +33,11 @@ import {
   type ClientMsg,
   type LobbyInfo,
   type LobbySettings,
+  type PauseReason,
   type RoomPhase,
   type ServerMsg,
 } from '@onpeace/protocol';
+import { describeError, type Logger } from './log';
 
 export interface Seat {
   id: PlayerId;
@@ -61,6 +63,8 @@ export interface RoomSnapshot {
   done: PlayerId[];
   skipped: PlayerId[];
   deadline: number | null;
+  /** Tempo fermo (assente nei salvataggi vecchi): perché, e quanto ne resterà alla ripresa. */
+  paused?: { reason: PauseReason; remainingMs: number } | null;
   events: TurnEvent[];
   eventsTurn: number;
   chat: ChatLine[];
@@ -76,10 +80,13 @@ export interface RoomDeps {
   /** Lo stato della stanza è cambiato: va salvato. */
   changed: (room: Room) => void;
   isConnected: (player: PlayerId) => boolean;
+  log: Logger;
 }
 
 export const MAX_PLAYERS = 8;
 const CHAT_KEEP = 200;
+/** Alla ripresa dopo una pausa restano almeno questi millisecondi. */
+const RESUME_MIN_MS = 15_000;
 
 export const newToken = () => randomBytes(18).toString('base64url');
 
@@ -103,6 +110,7 @@ export class Room {
       done: [],
       skipped: [],
       deadline: null,
+      paused: null,
       events: [],
       eventsTurn: 0,
       chat: [],
@@ -185,6 +193,8 @@ export class Room {
           return this.kick(player, msg.player);
         case 'leave':
           return this.leave(player);
+        case 'pause':
+          return this.setPaused(player, msg.paused);
         default:
           return 'Messaggio non previsto qui';
       }
@@ -242,7 +252,8 @@ export class Room {
     });
     this.s.phase = 'selection';
     this.s.skipped = [];
-    this.s.deadline = this.deps.now() + ctx.rules.game.countrySelectSeconds * 1000;
+    this.setTimer(ctx.rules.game.countrySelectSeconds * 1000);
+    this.deps.log.info(`Partita ${this.id}: comincia con ${this.s.seats.map((x) => x.name).join(', ')}`);
     this.touch();
     this.broadcastAll();
     return null;
@@ -262,13 +273,13 @@ export class Room {
   }
 
   private afterPick(): void {
-    const { ctx, now } = this.deps;
+    const { ctx } = this.deps;
     if (this.picker() === null) {
       finishSelection(this.s.state!, ctx);
       this.s.phase = 'playing';
-      this.s.deadline = now() + this.turnSeconds() * 1000;
+      this.setTimer(this.turnSeconds() * 1000);
     } else {
-      this.s.deadline = now() + ctx.rules.game.countrySelectSeconds * 1000;
+      this.setTimer(ctx.rules.game.countrySelectSeconds * 1000);
     }
     this.touch();
     this.broadcastAll();
@@ -298,9 +309,18 @@ export class Room {
     else set.delete(player);
     this.s.done = [...set];
     this.touch();
-    if (this.activePlayers().every((p) => set.has(p))) this.resolve();
-    else this.broadcastStatus();
+    if (!this.resolveIfAllDone()) this.broadcastStatus();
     return null;
+  }
+
+  /** Se tutti quelli ancora in gioco hanno finito, il turno si risolve subito. */
+  private resolveIfAllDone(): boolean {
+    const active = this.activePlayers();
+    if (this.s.phase !== 'playing' || active.length === 0) return false;
+    const done = new Set(this.s.done);
+    if (!active.every((p) => done.has(p))) return false;
+    this.resolve();
+    return true;
   }
 
   private kick(by: PlayerId, target: PlayerId): string | null {
@@ -316,12 +336,15 @@ export class Room {
       this.removeFromGame(target);
     }
     this.deps.send(target, { t: 'kicked', reason: 'Sei stato espulso dalla partita' });
+    this.deps.log.info(`Partita ${this.id}: espulso ${seat.name}`);
     this.touch();
     this.broadcastAll();
+    this.resolveIfAllDone();
     return null;
   }
 
   private leave(player: PlayerId): string | null {
+    const name = this.s.seats.find((x) => x.id === player)?.name ?? player;
     if (this.s.phase === 'lobby') {
       this.s.seats = this.s.seats.filter((x) => x.id !== player);
       if (this.s.hostId === player) this.s.hostId = this.s.seats[0]?.id ?? '';
@@ -331,8 +354,10 @@ export class Room {
         this.s.hostId = this.s.state!.players.find((p) => p.status === 'active')?.id ?? this.s.hostId;
       }
     }
+    this.deps.log.info(`Partita ${this.id}: esce ${name}`);
     this.touch();
     this.broadcastAll();
+    this.resolveIfAllDone();
     return null;
   }
 
@@ -350,10 +375,38 @@ export class Room {
 
   // ---------------------------------------------------------------- tempo
 
+  /** Fa partire il tempo della fase in corso; se il tempo è fermo, lo mette da parte per la ripresa. */
+  private setTimer(ms: number): void {
+    if (this.s.paused) {
+      this.s.paused.remainingMs = ms;
+      this.s.deadline = null;
+    } else {
+      this.s.deadline = this.deps.now() + ms;
+    }
+  }
+
+  private setPaused(player: PlayerId, paused: boolean): string | null {
+    if (player !== this.s.hostId) return 'Solo chi ha creato la partita può fermare il tempo';
+    if (this.s.phase !== 'selection' && this.s.phase !== 'playing') return 'Non c’è un tempo da fermare';
+    const { now } = this.deps;
+    if (paused === Boolean(this.s.paused)) return null;
+    if (paused) {
+      this.s.paused = { reason: 'host', remainingMs: Math.max(0, (this.s.deadline ?? now()) - now()) };
+      this.s.deadline = null;
+    } else {
+      this.s.deadline = now() + Math.max(this.s.paused!.remainingMs, RESUME_MIN_MS);
+      this.s.paused = null;
+    }
+    this.deps.log.info(`Partita ${this.id}: tempo ${paused ? 'fermato' : 'ripartito'}`);
+    this.touch();
+    this.broadcastStatus();
+    return null;
+  }
+
   /** Da chiamare ogni secondo: scadenze della scelta e dei turni. */
   tick(): void {
     const { now, ctx } = this.deps;
-    if (this.s.deadline === null || now() < this.s.deadline) return;
+    if (this.s.paused || this.s.deadline === null || now() < this.s.deadline) return;
     if (this.s.phase === 'selection' && this.s.state) {
       const who = this.picker();
       if (!who) return;
@@ -373,6 +426,24 @@ export class Room {
   private resolve(): void {
     const state = this.s.state;
     if (!state || this.s.phase !== 'playing') return;
+    const { log } = this.deps;
+    const started = performance.now();
+    const outcome = this.tryResolve(state);
+    if (!outcome) {
+      // non si risolve nemmeno senza ordini: la partita resta ferma finché non si corregge il motore
+      this.s.paused = { reason: 'error', remainingMs: this.turnSeconds() * 1000 };
+      this.s.deadline = null;
+      this.touch();
+      for (const x of this.s.seats) {
+        this.deps.send(x.id, {
+          t: 'error',
+          message: 'Il server non riesce a risolvere il turno: partita ferma. L’errore è stato registrato.',
+        });
+      }
+      this.broadcastStatus();
+      return;
+    }
+    const { result, dropped } = outcome;
     const done = new Set(this.s.done);
     for (const id of this.activePlayers()) {
       const seat = this.s.seats.find((x) => x.id === id);
@@ -380,20 +451,66 @@ export class Room {
       const idle = (this.s.plans[id]?.length ?? 0) === 0 && !done.has(id);
       seat.inactiveTurns = idle ? seat.inactiveTurns + 1 : 0;
     }
-    const result = resolveTurn(state, this.deps.ctx, this.deps.nav, this.s.plans);
+    for (const p of dropped) {
+      this.deps.send(p, {
+        t: 'error',
+        message: `Errore del server: i tuoi ordini del turno ${state.turn} sono stati annullati. Il problema è stato registrato.`,
+      });
+    }
     this.s.events = result.events;
     this.s.eventsTurn = state.turn;
     this.s.state = result.state;
     this.s.plans = {};
     this.s.done = [];
+    if (this.s.paused?.reason === 'error') this.s.paused = null;
     if (result.state.phase === 'ended') {
       this.s.phase = 'ended';
       this.s.deadline = null;
+      this.s.paused = null;
+      log.info(`Partita ${this.id}: finita al turno ${state.turn}`);
     } else {
-      this.s.deadline = this.deps.now() + this.turnSeconds() * 1000;
+      this.setTimer(this.turnSeconds() * 1000);
     }
+    log.info(`Partita ${this.id}: turno ${state.turn} risolto in ${Math.round(performance.now() - started)} ms`);
     this.touch();
     this.broadcastAll();
+  }
+
+  /**
+   * Risolve il turno. Se il motore va in errore, salva tutto per riprodurlo e riprova togliendo
+   * gli ordini di un giocatore alla volta, poi senza ordini: un errore del motore costa al massimo
+   * gli ordini di un turno, non la serata.
+   */
+  private tryResolve(state: GameState): { result: ReturnType<typeof resolveTurn>; dropped: PlayerId[] } | null {
+    const { ctx, nav, log } = this.deps;
+    const run = (plans: Record<PlayerId, Action[]>) => resolveTurn(state, ctx, nav, plans);
+    try {
+      return { result: run(this.s.plans), dropped: [] };
+    } catch (err) {
+      log.error(`Partita ${this.id}: la risoluzione del turno ${state.turn} è fallita`, err);
+      const file = log.dump(`${this.id}-turno${state.turn}`, { error: describeError(err), state, plans: this.s.plans });
+      if (file) log.info(`Dati per riprodurre l'errore: ${file}`);
+    }
+    const withOrders = Object.keys(this.s.plans).filter((p) => (this.s.plans[p]?.length ?? 0) > 0);
+    for (const p of withOrders) {
+      const rest = { ...this.s.plans };
+      delete rest[p];
+      try {
+        const result = run(rest);
+        log.info(`Partita ${this.id}: turno ${state.turn} risolto senza gli ordini di ${p}`);
+        return { result, dropped: [p] };
+      } catch {
+        // non erano i suoi ordini: si prova con il prossimo
+      }
+    }
+    try {
+      const result = run({});
+      log.info(`Partita ${this.id}: turno ${state.turn} risolto senza ordini`);
+      return { result, dropped: withOrders };
+    } catch (err) {
+      log.error(`Partita ${this.id}: il turno ${state.turn} non si risolve neanche senza ordini`, err);
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------- invii
@@ -432,6 +549,7 @@ export class Room {
     return {
       t: 'status',
       deadline: this.s.deadline,
+      paused: this.s.paused ?? null,
       waiting: this.s.phase === 'playing' ? this.activePlayers().filter((p) => !done.has(p)) : [],
       picker: this.picker(),
       now: this.deps.now(),

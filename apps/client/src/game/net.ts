@@ -38,12 +38,22 @@ export function setGameInUrl(game: string | null): void {
   history.replaceState(null, '', url);
 }
 
-export function inviteLink(game: string): string {
-  const url = new URL(location.href);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Link d'invito: con l'indirizzo pubblico del server (tunnel) se c'è, così funziona anche
+ * quando l'host gioca da localhost; altrimenti l'indirizzo della pagina.
+ */
+export function inviteLink(game: string, publicUrl: string | null): string {
+  const url = publicUrl ? new URL('/', publicUrl) : new URL(location.href);
   url.search = '';
+  url.hash = '';
   url.searchParams.set('g', game);
   return url.toString();
 }
+
+/** Il link d'invito funzionerebbe solo su questo PC. */
+export const inviteIsLocalOnly = (publicUrl: string | null) => !publicUrl && LOCAL_HOSTS.has(location.hostname);
 
 export class Net {
   private ws: WebSocket | null = null;
