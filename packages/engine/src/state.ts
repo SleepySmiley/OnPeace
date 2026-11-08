@@ -103,6 +103,21 @@ export interface GameState {
   /** Contatore per generare id univoci di unità e pile. */
   nextId: number;
   winners: PlayerId[] | null;
+  /** Statistiche all'inizio di ogni turno (e a fine partita), per i grafici. */
+  history?: TurnStats[];
+}
+
+export interface PlayerStats {
+  cities: number;
+  units: number;
+  money: number;
+  income: number;
+  score: number;
+}
+
+export interface TurnStats {
+  turn: number;
+  players: Record<PlayerId, PlayerStats>;
 }
 
 export const relationKey = (a: PlayerId, b: PlayerId) => (a < b ? `${a}|${b}` : `${b}|${a}`);

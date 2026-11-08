@@ -899,3 +899,314 @@ select option {
 .handoff .panel-kicker {
   justify-content: center;
 }
+
+/* ---------------------------------------------------------------- grafici (skill dataviz) */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
+.report-link {
+  font: inherit;
+  line-height: 1.4;
+}
+
+.chart {
+  position: relative;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.segmented button {
+  border-radius: 0;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.segmented button.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.chart-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.chart-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.chart-plot {
+  position: relative;
+}
+
+.chart-plot svg {
+  display: block;
+  overflow: visible;
+}
+
+.chart .grid {
+  stroke: rgba(150, 175, 195, 0.12);
+  stroke-width: 1;
+}
+
+.chart .axis {
+  fill: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--font-num);
+}
+
+.chart .end-label {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+.chart .crosshair {
+  stroke: rgba(227, 232, 236, 0.45);
+  stroke-width: 1;
+}
+
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 130px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--panel-solid);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-size: 12.5px;
+}
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chart-table {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.chart-table summary {
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.chart-table table,
+.ranking {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+
+.chart-table th,
+.chart-table td,
+.ranking th,
+.ranking td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--row);
+  text-align: left;
+}
+
+.chart-table td.num,
+.ranking .r {
+  text-align: right;
+}
+
+.chart-table table {
+  display: block;
+  max-height: 180px;
+  overflow: auto;
+}
+
+/* ---------------------------------------------------------------- fine partita */
+.modal.gameover {
+  width: min(720px, calc(100% - 32px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+}
+
+.ranking th {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.ranking tr.winner td {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.floating-results {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 30;
+}
+
+/* ---------------------------------------------------------------- replay */
+.modal.replay {
+  width: min(720px, calc(100% - 32px));
+}
+
+.replay-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.replay-side h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.replay-side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.replay-side li {
+  display: grid;
+  grid-template-columns: 1fr 90px 22px;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.2s, opacity 0.3s;
+}
+
+.replay-side li.front {
+  background: rgba(226, 176, 74, 0.14);
+}
+
+.replay-side li.dead {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+.hp-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.hp-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ok);
+  transition: width 0.35s ease;
+}
+
+.replay-log {
+  min-height: 24px;
+  margin: 14px 0 10px;
+  font-size: 14px;
+}
+
+.dead-text {
+  color: var(--danger);
+}
+
+.replay-controls {
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------- finanze */
+.finance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.finance-list > li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--row);
+}
+
+.finance-list > li.row,
+.finance-list summary,
+.finance-cities li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.finance-list summary {
+  cursor: pointer;
+}
+
+.finance-list summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.finance-cities {
+  list-style: none;
+  margin: 6px 0 2px;
+  padding: 0 0 0 12px;
+  color: var(--text-dim);
+}
+
+.tag.warn {
+  background: rgba(255, 107, 94, 0.14);
+  color: #ffb3aa;
+}
+
+button.money {
+  font: inherit;
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+
+button.money:hover {
+  background: rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+}

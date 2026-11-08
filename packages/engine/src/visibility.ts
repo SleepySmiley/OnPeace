@@ -80,6 +80,14 @@ export function viewFor(state: GameState, ctx: GameContext, player: PlayerId): G
     if (!inSight(ctx.cities.get(city.id)!.pos, sources)) city.buildings = [];
   }
   view.proposals = view.proposals.filter((p) => p.from === player || p.to === player);
+  // storico: durante la partita degli avversari si vedono solo città e punti; a fine partita tutto
+  if (view.history && state.phase !== 'ended') {
+    for (const t of view.history) {
+      for (const [id, st] of Object.entries(t.players)) {
+        if (!viewers.has(id)) t.players[id] = { ...st, units: 0, money: 0, income: 0 };
+      }
+    }
+  }
   return view;
 }
 

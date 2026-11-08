@@ -41,7 +41,8 @@ export const PLAYER_COLORS = COLORS;
 
 export type Mode = 'local' | 'online';
 export type Screen = 'setup' | 'lobby' | 'selection' | 'handoff' | 'planning' | 'results';
-export type Selected = { kind: 'city'; id: string } | { kind: 'stack'; id: string } | null;
+export type Selected = { kind: 'city'; id: string } | { kind: 'stack'; id: string } | { kind: 'finance' } | null;
+export type BattleEvent = Extract<TurnEvent, { kind: 'battle' }>;
 
 export interface MoveDraft {
   mode: 'move' | 'unload';
@@ -84,6 +85,13 @@ interface Session {
   draft: MoveDraft | null;
   notice: string | null;
   online: OnlineState;
+  /** Battaglia mostrata nel replay. */
+  replay: BattleEvent | null;
+  /** Richiesta di centrare la mappa su un punto (seq cambia a ogni richiesta). */
+  focus: { pos: Point; seq: number } | null;
+
+  openReplay(battle: BattleEvent | null): void;
+  focusOn(pos: Point): void;
 
   // partita locale
   newGame(players: { name: string; color: string }[], settings?: Partial<GameSettings>): void;
@@ -153,6 +161,8 @@ const initial = {
   draft: null,
   notice: null,
   online: emptyOnline,
+  replay: null,
+  focus: null,
 };
 
 const phaseScreen: Record<RoomPhase, Screen> = {
@@ -184,8 +194,8 @@ export const useSession = create<Session>((set, get) => {
         const me = s.online.me;
         const sameTurn = prev && prev.turn === msg.view.turn && prev.phase === msg.view.phase;
         const newReport = msg.eventsTurn !== s.eventsTurn;
-        const stillThere =
-          s.selected?.kind !== 'stack' || msg.view.stacks.some((x) => x.id === s.selected!.id) ? s.selected : null;
+        const sel = s.selected;
+        const stillThere = sel?.kind !== 'stack' || msg.view.stacks.some((x) => x.id === sel.id) ? sel : null;
         set({
           game: msg.view,
           plans: sameTurn || !me ? s.plans : { [me]: msg.plan },
@@ -415,6 +425,14 @@ export const useSession = create<Session>((set, get) => {
 
     setNotice(text) {
       set({ notice: text });
+    },
+
+    openReplay(battle) {
+      set({ replay: battle });
+    },
+
+    focusOn(pos) {
+      set({ focus: { pos, seq: (get().focus?.seq ?? 0) + 1 } });
     },
 
     reset() {

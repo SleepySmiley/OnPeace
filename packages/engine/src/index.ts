@@ -19,3 +19,4 @@ export * from './lines';
 export * from './turn';
 export * from './planner';
 export * from './visibility';
+export * from './stats';

@@ -302,7 +302,8 @@ export class Room {
 
   private removeFromGame(player: PlayerId): void {
     const state = this.s.state;
-    if (!state || getPlayer(state, player).status !== 'active') return;
+    // a partita finita uscire non cambia più nulla
+    if (!state || this.s.phase === 'ended' || getPlayer(state, player).status !== 'active') return;
     const events: TurnEvent[] = [];
     eliminate(state, player, events);
     getPlayer(state, player).status = 'left';

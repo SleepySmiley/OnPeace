@@ -64,6 +64,8 @@ export interface Exchange {
   defenceRoll: number;
   defenceCrit: boolean;
   killed: string[];
+  /** HP dopo lo scambio delle unità colpite (per il replay). */
+  hits: { uid: string; hp: number }[];
 }
 
 export interface BattleResult {
@@ -123,7 +125,7 @@ function byDesc<T>(items: T[], key: (t: T) => number): T[] {
 }
 
 /** Toglie `damage` HP a partire dal primo dell'elenco; il resto passa al successivo. */
-function applyDamage(ordered: Fighter[], damage: number): string[] {
+function applyDamage(ordered: Fighter[], damage: number, hits: { uid: string; hp: number }[]): string[] {
   const killed: string[] = [];
   let left = damage;
   for (const f of ordered) {
@@ -131,6 +133,7 @@ function applyDamage(ordered: Fighter[], damage: number): string[] {
     const taken = Math.min(f.hp, left);
     f.hp -= taken;
     left -= taken;
+    hits.push({ uid: f.uid, hp: f.hp });
     if (f.hp <= 0) killed.push(f.uid);
   }
   return killed;
@@ -181,8 +184,9 @@ export function resolveBattle(
     if (defenceCrit) defenceRoll += defenceMax;
 
     // colpi simultanei
-    const killedTargets = applyDamage(targetsOrder, attackRoll);
-    const killedHitters = applyDamage(hittersOrder, defenceRoll);
+    const hits: { uid: string; hp: number }[] = [];
+    const killedTargets = applyDamage(targetsOrder, attackRoll, hits);
+    const killedHitters = applyDamage(hittersOrder, defenceRoll, hits);
     const killed = [...killedTargets, ...killedHitters];
 
     A = A.filter((f) => f.hp > 0);
@@ -195,6 +199,7 @@ export function resolveBattle(
       if (survivor) {
         D = [{ ...survivor, hp: 1 }];
         killed.splice(killed.indexOf(survivor.uid), 1);
+        hits.push({ uid: survivor.uid, hp: 1 });
       }
     }
 
@@ -207,6 +212,7 @@ export function resolveBattle(
       defenceRoll,
       defenceCrit,
       killed,
+      hits,
     });
   }
 

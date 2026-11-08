@@ -14,9 +14,12 @@ import { ctx, currentPicker, currentPlanner, nav, useSession, type MoveDraft } f
 import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
 import { MapView, type MapClick } from './map/MapView';
 import type { HitTarget } from './map/scene';
+import { BattleReplay } from './ui/BattleReplay';
 import { ChatPanel } from './ui/ChatPanel';
 import { CityPanel } from './ui/CityPanel';
 import { Countdown } from './ui/Countdown';
+import { FinancePanel } from './ui/FinancePanel';
+import { GameOverPanel } from './ui/GameOverPanel';
 import { InfoPanel } from './ui/InfoPanel';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { PlanPanel } from './ui/PlanPanel';
@@ -24,6 +27,7 @@ import { PlayersPanel } from './ui/PlayersPanel';
 import { ReportPanel } from './ui/ReportPanel';
 import { SetupScreen } from './ui/SetupScreen';
 import { StackPanel } from './ui/StackPanel';
+import { StatsChart } from './ui/StatsChart';
 
 const fmt = new Intl.NumberFormat('it-IT');
 const noop = () => {};
@@ -80,10 +84,33 @@ export function App() {
     useSession.getState().resumeOnline();
   }, []);
 
-  // a ogni nuovo resoconto si apre la scheda corrispondente
+  // a ogni nuovo resoconto si apre la scheda corrispondente; una partita nuova riparte dagli ordini
   useEffect(() => {
     if (s.reportSeq > 0) setTab('report');
   }, [s.reportSeq]);
+  useEffect(() => {
+    setTab('orders');
+  }, [game?.id]);
+
+  // titolo della scheda: avvisa se tocca a te o se è iniziato un turno mentre eri altrove
+  const [unseenTurn, setUnseenTurn] = useState(false);
+  useEffect(() => {
+    if (game && !document.hasFocus()) setUnseenTurn(true);
+  }, [game?.turn, game?.phase]);
+  useEffect(() => {
+    const seen = () => setUnseenTurn(false);
+    window.addEventListener('focus', seen);
+    return () => window.removeEventListener('focus', seen);
+  }, []);
+  useEffect(() => {
+    const base = !game
+      ? 'OnPeace'
+      : game.phase === 'selection'
+        ? 'Scelta dei paesi · OnPeace'
+        : `Turno ${game.turn} · OnPeace`;
+    const myPick = mode === 'online' && game?.phase === 'selection' && online.picker === online.me;
+    document.title = (myPick ? '● Tocca a te · ' : unseenTurn ? '● Nuovo turno · ' : '') + base;
+  }, [game, mode, online.picker, online.me, unseenTurn]);
 
   const planner = screen === 'planning' ? currentPlanner(s) : null;
   const plannerPlayer = planner && game ? game.players.find((p) => p.id === planner)! : null;
@@ -215,6 +242,7 @@ export function App() {
         map={ctx.map}
         view={view}
         draft={draftEval?.marker ?? null}
+        focus={s.focus}
         onHover={onHover}
         onClick={onClick}
         onPointer={onPointer}
@@ -247,14 +275,19 @@ export function App() {
         {mode === 'online' && !online.connected && <span className="status offline">Riconnessione…</span>}
         <span className="spacer" />
         {plannerPlayer && economy && shown && (
-          <span className="status money" title="Fondi dopo gli ordini · bilancio del prossimo turno">
+          <button
+            type="button"
+            className="status money link"
+            title="Fondi dopo gli ordini · bilancio del prossimo turno (clic: finanze)"
+            onClick={() => s.select(selected?.kind === 'finance' ? null : { kind: 'finance' })}
+          >
             <b>{fmt.format(Math.floor(shown.players.find((p) => p.id === planner)!.money))}</b>
             <span className={economy.net >= 0 ? 'pos' : 'neg'}>
               {' '}
               {economy.net >= 0 ? '+' : ''}
               {fmt.format(economy.net)}
             </span>
-          </span>
+          </button>
         )}
         {screen === 'planning' && planner && (
           <button type="button" className={iAmDone ? 'ghost' : 'primary'} onClick={() => s.endTurn()}>
@@ -310,6 +343,7 @@ export function App() {
       {shown && !draft && selected?.kind === 'city' && (
         <CityPanel key={`${selected.id}:${actions.length}`} cityId={selected.id} state={shown} planner={planner} />
       )}
+      {shown && !draft && planner && selected?.kind === 'finance' && <FinancePanel state={shown} player={planner} />}
       {shown && !draft && selected?.kind === 'stack' && (
         <StackPanel
           key={`${selected.id}:${actions.length}`}
@@ -345,24 +379,32 @@ export function App() {
           <div className="tab-body">
             {activeTab === 'report' && <ReportPanel game={game} events={s.events} turn={s.eventsTurn} />}
             {activeTab === 'orders' && <PlanPanel game={game} actions={actions} steps={preview?.steps ?? []} />}
-            {activeTab === 'players' && <PlayersPanel game={game} planner={planner} actions={actions} />}
+            {activeTab === 'players' && (
+              <>
+                <PlayersPanel game={game} planner={planner} actions={actions} />
+                <h3 className="section-title">Andamento</h3>
+                <StatsChart game={game} metrics={['cities', 'score']} width={310} height={170} />
+              </>
+            )}
             {activeTab === 'chat' && <ChatPanel />}
           </div>
-          {(screen === 'results' || game.phase === 'ended') && (
+          {screen === 'results' && game.phase !== 'ended' && (
             <div className="panel-footer">
-              {game.phase === 'ended' ? (
-                <b>Partita finita — vince {(game.winners ?? []).map((w) => playerName(game, w)).join(' e ')}</b>
-              ) : (
-                <button type="button" className="primary wide" onClick={() => s.continueAfterResults()}>
-                  Continua
-                </button>
-              )}
+              <button type="button" className="primary wide" onClick={() => s.continueAfterResults()}>
+                Continua
+              </button>
             </div>
           )}
         </aside>
       )}
 
       {shown && !draft && <InfoPanel target={hover} state={shown} />}
+
+      {s.replay && <BattleReplay game={game} battle={s.replay} onClose={() => s.openReplay(null)} />}
+
+      {game.phase === 'ended' && !s.replay && (
+        <GameOverPanel game={game} onNew={() => (mode === 'online' ? s.leaveOnline() : s.reset())} />
+      )}
 
       {screen === 'handoff' && handoffPlayer && (
         <div className="modal-backdrop">

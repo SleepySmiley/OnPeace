@@ -19,6 +19,8 @@ interface Props {
   map: MapDef;
   view: MapViewModel;
   draft: DraftMarker | null;
+  /** Centra la mappa sul punto (a ogni nuovo seq). */
+  focus?: { pos: Point; seq: number } | null;
   onHover: (target: HitTarget | null) => void;
   onClick: (click: MapClick) => void;
   /** Posizione del cursore in coordinate mappa (per l'anteprima dei percorsi). */
@@ -28,9 +30,10 @@ interface Props {
 }
 
 /** Mappa interattiva: rotella per lo zoom, trascinamento per spostarsi, clic per scegliere. */
-export function MapView({ map, view, draft, onHover, onClick, onPointer, onCancel }: Props) {
+export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, onCancel }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene | null>(null);
+  const centerRef = useRef<((p: Point) => void) | null>(null);
   const handlers = useRef({ onHover, onClick, onPointer, onCancel });
   const latest = useRef({ view, draft });
 
@@ -47,6 +50,10 @@ export function MapView({ map, view, draft, onHover, onClick, onPointer, onCance
     latest.current.draft = draft;
     sceneRef.current?.setDraft(draft);
   }, [draft]);
+
+  useEffect(() => {
+    if (focus) centerRef.current?.(focus.pos);
+  }, [focus]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -80,6 +87,14 @@ export function MapView({ map, view, draft, onHover, onClick, onPointer, onCance
       scene.setView(latest.current.view);
       scene.setDraft(latest.current.draft);
       scene.update(camera);
+
+      centerRef.current = (p: Point) => {
+        // almeno un po' di zoom, poi il punto al centro della parte libera dello schermo
+        if (camera.scale < fit * 1.6) camera.scale = fit * 1.6;
+        camera.x = app.screen.width / 2 - p[0] * camera.scale;
+        camera.y = TOPBAR_HEIGHT + (app.screen.height - TOPBAR_HEIGHT) / 2 - p[1] * camera.scale;
+        scene.update(camera);
+      };
 
       let drag: { x: number; y: number; moved: boolean } | null = null;
       let lastHover: string | null = null;
@@ -176,6 +191,7 @@ export function MapView({ map, view, draft, onHover, onClick, onPointer, onCance
         app.renderer.off('resize', onResize);
         window.removeEventListener('keydown', onKey);
         sceneRef.current = null;
+        centerRef.current = null;
         app.destroy(true, { children: true });
       };
     })();

@@ -37,6 +37,7 @@ import {
 import type { NavGrid } from './navigation';
 import { applyPurchase, purchaseCost, validatePurchase } from './purchase';
 import { createRng, seedFromString, type Rng } from './rng';
+import { recordStats } from './stats';
 import type { CityDef } from './schema/map';
 import type { Domain } from './schema/rules';
 import { createUnit } from './setup';
@@ -72,8 +73,9 @@ export type TurnEvent =
       city: string | null;
       attacker: PlayerId;
       defender: PlayerId | null;
-      attackers: { uid: string; type: string }[];
-      defenders: { uid: string; type: string }[];
+      /** Unità all'inizio della battaglia (con gli HP iniziali). */
+      attackers: { uid: string; type: string; hp: number }[];
+      defenders: { uid: string; type: string; hp: number }[];
       winner: 'attacker' | 'defender';
       mutual: boolean;
       exchanges: Exchange[];
@@ -119,9 +121,11 @@ export function resolveTurn(
   const state = structuredClone(input);
   const rng = createRng(turnSeed(state));
   const events: TurnEvent[] = [];
+  recordStats(state, ctx); // fotografia del turno appena giocato, prima della risoluzione
   new Resolver(state, ctx, nav, rng, rngDice(rng), events).run(actions);
   endTurn(state, ctx, events);
   if (state.phase === 'playing') startTurn(state, ctx, events);
+  else recordStats(state, ctx); // fotografia finale
   return { state, events };
 }
 
@@ -464,6 +468,8 @@ class Resolver {
     if (defUnits.length === 0 && buildings.length === 0) return null;
 
     const fort = buildings.reduce((s, b) => s + (catalog.building(b.type).effects.cityDefenceBonus ?? 0), 0);
+    const startA = attackers.map((u) => ({ uid: u.id, type: u.type, hp: u.hp }));
+    const startD = [...defUnits, ...buildings].map((u) => ({ uid: u.id, type: u.type, hp: u.hp }));
     const result = resolveBattle(
       attackers.map((u) => makeFighter(catalog, u.id, u.type, u.hp)),
       [...defUnits, ...buildings].map((u) => makeFighter(catalog, u.id, u.type, u.hp)),
@@ -513,8 +519,8 @@ class Resolver {
       city: cityId,
       attacker: player,
       defender: defenderOwner,
-      attackers: attackers.map((u) => ({ uid: u.id, type: u.type })),
-      defenders: [...defUnits, ...buildings].map((u) => ({ uid: u.id, type: u.type })),
+      attackers: startA,
+      defenders: startD,
       winner: result.winner,
       mutual,
       exchanges: result.exchanges,
