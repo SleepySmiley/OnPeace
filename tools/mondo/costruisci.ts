@@ -304,6 +304,32 @@ function projectShape(frame: Frame, shape: GeoMultiPolygon): MPoly {
   return tidy(clipped);
 }
 
+/** Distanza dal punto più vicino dell'elenco. */
+const clearance = (p: Pt, avoid: readonly Pt[]) => avoid.reduce((m, a) => Math.min(m, distance(p, a)), Infinity);
+
+/** Punto interno lontano dai bordi e dai punti da evitare (le città), per il nome del paese. */
+function labelSpot(shape: MPoly, avoid: readonly Pt[]): Pt {
+  const main = largestPolygon(shape as MultiPolygon) as Pt[][];
+  const target = [main] as MultiPolygon;
+  const [minX, minY, maxX, maxY] = bounds(target);
+  const near = avoid.filter((a) => a[0] >= minX - 50 && a[0] <= maxX + 50 && a[1] >= minY - 50 && a[1] <= maxY + 50);
+  let best: Pt = interiorPoint(shape);
+  let bestScore = -Infinity;
+  const steps = 28;
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const p: Pt = [minX + ((maxX - minX) * i) / steps, minY + ((maxY - minY) * j) / steps];
+      if (!pointInMultiPolygon(p, target)) continue;
+      const score = Math.min(distanceToBoundary(p, target), clearance(p, near) * 0.9);
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+  }
+  return [round1(best[0]), round1(best[1])];
+}
+
 /** Punto interno lontano dai bordi, per l'etichetta o una città di ripiego. */
 function interiorPoint(shape: MPoly): Pt {
   const main = largestPolygon(shape as MultiPolygon) as Pt[][];
@@ -518,13 +544,16 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
   }
 
   // 7. paesi e città nel formato del gioco
+  // nome del paese: dove lo mette Natural Earth, se non copre una città; altrimenti lontano dalle città
+  const cityPoints = chosen.map((c) => c.pos);
   const countryDefs: CountryDef[] = countries.map((c) => {
     let label: Pt | null = null;
     if (c.geo.label && c.geo.codes.size > 0) {
       const l = frame.toMap(frame.preparePoint(c.geo.label));
-      if (pointInMultiPolygon(l, c.shape as MultiPolygon) && !inNoGo(l)) label = [round1(l[0]), round1(l[1])];
+      const free = clearance(l, cityPoints) >= RANGE_SCALE * 1.5;
+      if (free && pointInMultiPolygon(l, c.shape as MultiPolygon) && !inNoGo(l)) label = [round1(l[0]), round1(l[1])];
     }
-    return { id: c.id, name: c.name, capital: '', label: label ?? interiorPoint(c.shape), shape: c.shape };
+    return { id: c.id, name: c.name, capital: '', label: label ?? labelSpot(c.shape, cityPoints), shape: c.shape };
   });
   draft.countries = countryDefs;
 
