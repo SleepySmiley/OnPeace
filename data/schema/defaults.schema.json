@@ -309,6 +309,42 @@
       ],
       "additionalProperties": false
     },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "unitCostFactor": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cityCaptured": {
+          "type": "number",
+          "minimum": 0
+        },
+        "capitalCaptured": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "unitCostFactor",
+        "cityCaptured",
+        "capitalCaptured"
+      ],
+      "additionalProperties": false
+    },
+    "stealth": {
+      "type": "object",
+      "properties": {
+        "detectionFactor": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "detectionFactor"
+      ],
+      "additionalProperties": false
+    },
     "selection": {
       "type": "object",
       "properties": {
@@ -392,6 +428,8 @@
     "diplomacy",
     "population",
     "neutrals",
+    "scoring",
+    "stealth",
     "selection",
     "game"
   ],

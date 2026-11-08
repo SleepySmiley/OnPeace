@@ -230,11 +230,23 @@ export function relocate(
   const ids = new Set(units.map((u) => u.id));
   source.units = source.units.filter((u) => !ids.has(u.id));
   if (source.units.length === 0) state.stacks = state.stacks.filter((s) => s !== source);
+  return placeUnits(state, player, units, end, endCity, source.exposed);
+}
+
+/** Aggiunge unità alla pila propria nel punto (o città), o ne crea una nuova. */
+export function placeUnits(
+  state: GameState,
+  player: PlayerId,
+  units: readonly UnitState[],
+  end: Point,
+  endCity: string | null,
+  exposed = false,
+): StackState {
   let dest = state.stacks.find(
     (s) => s.owner === player && (endCity ? s.city === endCity : !s.city && distance(s.pos, end) <= SAME_POINT),
   );
   if (!dest) {
-    dest = { id: newId(state, 's'), owner: player, pos: end, city: endCity, units: [], exposed: source.exposed };
+    dest = { id: newId(state, 's'), owner: player, pos: end, city: endCity, units: [], exposed };
     state.stacks.push(dest);
   }
   dest.units.push(...units);

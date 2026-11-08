@@ -68,6 +68,14 @@
     "infantryUnit": "infantry",
     "infantryPerCity": 1
   },
+  "scoring": {
+    "unitCostFactor": 0.1,
+    "cityCaptured": 10,
+    "capitalCaptured": 25
+  },
+  "stealth": {
+    "detectionFactor": 0.5
+  },
   "selection": {
     "incomeFactor": 1,
     "reinforcementValue": 10

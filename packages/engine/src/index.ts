@@ -15,3 +15,5 @@ export * from './actions';
 export * from './navigation';
 export * from './diplomacy';
 export * from './movement';
+export * from './lines';
+export * from './turn';

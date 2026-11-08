@@ -181,6 +181,16 @@ export const RulesDefaults = z.strictObject({
     infantryUnit: Id,
     infantryPerCity: int().min(0),
   }),
+  scoring: z.strictObject({
+    /** Punti per unità nemica distrutta = costo × questo fattore. */
+    unitCostFactor: z.number().min(0),
+    cityCaptured: z.number().min(0),
+    capitalCaptured: z.number().min(0),
+  }),
+  stealth: z.strictObject({
+    /** Raggio di rilevamento = vista × questo fattore. */
+    detectionFactor: z.number().min(0),
+  }),
   selection: z.strictObject({
     /** Valore di un paese = reddito nominale × incomeFactor + rinforzi × reinforcementValue. */
     incomeFactor: z.number().min(0),

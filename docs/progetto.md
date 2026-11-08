@@ -177,6 +177,24 @@ Dove atWar non è documentato decidiamo noi. Tutti i valori qui sotto sono param
 | Danno collaterale | Popolazione persa per battaglia = somma dei collaterali degli attaccanti, in punti %, con un tetto del 50%; recupero del 2% a turno |
 | Nebbia di guerra | Vedi §2.7 |
 
+### 2.13 Decisioni prese costruendo il motore (M1)
+Tutte provvisorie; i numeri sono in `data/rules/defaults.json`.
+
+| Tema | Decisione |
+|---|---|
+| Ordini di movimento | Le unità si scelgono per tipo e quantità, come i cursori di atWar. La pila si indica per id, città o posizione, così si muovono anche le unità appena comprate |
+| Edifici | Sono unità immobili da 20 HP che difendono la città; incassa per primo chi ha la difesa più alta contro l'attaccante, quindi la Batteria costiera protegge dalle navi. Se la città cade, sono distrutti |
+| Attacco reciproco | Una sola battaglia, in cui chi attacca e chi difende si scambiano a ogni colpo |
+| Fuga dall'intercettazione | La pila che scappa esegue subito il suo movimento; l'attaccante la insegue se ha raggio, altrimenti fa un movimento normale |
+| Rottura dell'alleanza | Pace dal turno dopo, guerra dopo 2 turni |
+| Proposte diplomatiche | Si possono accettare o rifiutare nel turno successivo, poi scadono |
+| Eliminazione | Le città tornano neutrali, le truppe nelle città diventano presidi neutrali, le altre si sciolgono |
+| Muri | Bloccano terra e mare, non gli aerei; partire o arrivare su un estremo del muro non conta come attraversamento |
+| Invisibilità | Per ora si perde solo combattendo e si recupera rientrando in una città propria. Il rilevamento col raggio visivo arriva con la nebbia di guerra (M3) |
+| Punteggio | Costo delle unità distrutte × 0,1, +10 per città conquistata, +25 per capitale |
+| Neutrali | Milizie pari ai rinforzi della città, più 1 Fanteria per città nei paesi con reddito ≥ 500 |
+| Scelta dei paesi | Valore = reddito nominale + rinforzi × 10; fondi iniziali 2500 |
+
 ---
 
 ## 3. Architettura tecnica
@@ -253,7 +271,7 @@ OnPeace/
 | Tappa | Contenuto | Risultato visibile |
 |---|---|---|
 | **M0 Fondamenta** ✅ | Monorepo, TypeScript, lint, test; schemi JSON; dati delle unità; **mappa di prova inventata** (12 paesi, 60 città) | La mappa disegnata nel browser |
-| **M1 Motore** | Economia, acquisti, movimento con validazione geometrica, linee difensive, combattimento, risoluzione del turno con turnblock, diplomazia, vittoria; test | Test verdi e simulazioni |
+| **M1 Motore** ✅ | Economia, acquisti, movimento con validazione geometrica, linee difensive, combattimento, risoluzione del turno con turnblock, diplomazia, vittoria; test | Test verdi e simulazioni |
 | **M2 Sandbox** | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
 | **M3 Multiplayer** | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
 | **M4 Interfaccia completa** | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
