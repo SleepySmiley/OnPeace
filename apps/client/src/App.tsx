@@ -1,128 +1,343 @@
 import { useCallback, useMemo, useState } from 'react';
-import { reinforcementsForPopulation } from '@onpeace/engine';
-import { rules, testMap } from './data';
-import { MapView } from './map/MapView';
-import type { HoverTarget } from './map/scene';
+import {
+  checkMove,
+  checkUnload,
+  computeEconomy,
+  simulatePlan,
+  type Action,
+  type PlanPreview,
+  type PlayerId,
+  type Point,
+} from '@onpeace/engine';
+import { describeUnits, playerName } from './game/describe';
+import { ctx, currentPicker, currentPlanner, nav, useSession, type MoveDraft } from './game/store';
+import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
+import { MapView, type MapClick } from './map/MapView';
+import type { HitTarget } from './map/scene';
+import { CityPanel } from './ui/CityPanel';
+import { InfoPanel } from './ui/InfoPanel';
+import { PlanPanel } from './ui/PlanPanel';
+import { PlayersPanel } from './ui/PlayersPanel';
+import { ReportPanel } from './ui/ReportPanel';
+import { SetupScreen } from './ui/SetupScreen';
+import { StackPanel } from './ui/StackPanel';
 
 const fmt = new Intl.NumberFormat('it-IT');
+const noop = () => {};
+type Tab = 'orders' | 'players' | 'report';
+
+interface DraftEval {
+  marker: DraftMarker;
+  action: Action | null;
+  errors: string[];
+}
+
+/** Costruisce l'ordine dal percorso in preparazione e lo verifica sull'anteprima. */
+function evaluateDraft(
+  draft: MoveDraft,
+  preview: PlanPreview,
+  planner: PlayerId,
+  point: Point | null,
+  target: string | null,
+): DraftEval {
+  const marker: DraftMarker = { points: [], ok: false, attack: false, center: draft.sourcePos, range: draft.range };
+  if (!point) return { marker, action: null, errors: [] };
+  if (draft.mode === 'unload') {
+    const action: Action = { kind: 'unload', from: draft.from, units: draft.units, to: point };
+    const check = checkUnload(preview.state, ctx, nav, planner, action);
+    marker.points = [draft.sourcePos, check.ok ? check.plan.end : point];
+    marker.ok = check.ok;
+    marker.attack = check.ok && check.plan.arrival === 'attack_city';
+    return { marker, action: check.ok ? action : null, errors: check.ok ? [] : check.errors };
+  }
+  const targetStack = target ? preview.state.stacks.find((s) => s.id === target) : undefined;
+  const end = targetStack ? targetStack.pos : point;
+  const action: Action = {
+    kind: 'move',
+    from: draft.from,
+    units: draft.units,
+    path: [...draft.waypoints, end],
+    ...(targetStack ? { target: targetStack.id } : {}),
+  };
+  const check = checkMove(preview.state, ctx, nav, planner, action, preview.moved);
+  marker.points = [draft.sourcePos, ...draft.waypoints, check.ok ? check.plan.end : end];
+  marker.ok = check.ok;
+  marker.attack = check.ok && (check.plan.arrival === 'attack_city' || check.plan.arrival === 'attack_stack');
+  return { marker, action: check.ok ? action : null, errors: check.ok ? [] : check.errors };
+}
 
 export function App() {
-  const [hover, setHover] = useState<HoverTarget | null>(null);
-  const onHover = useCallback((t: HoverTarget | null) => setHover(t), []);
-  const { defaults } = rules;
+  const s = useSession();
+  const { game, screen, selected, draft } = s;
+  const [hover, setHover] = useState<HitTarget | null>(null);
+  const [tab, setTab] = useState<Tab>('orders');
 
-  const stats = useMemo(() => {
-    const capitals = new Set(testMap.countries.map((c) => c.capital));
-    const byCountry = new Map(
-      testMap.countries.map((country) => {
-        const cities = testMap.cities.filter((c) => c.country === country.id);
-        const income = cities.reduce((s, c) => s + c.income, 0);
-        const reinforcements = cities.reduce(
-          (s, c) => s + reinforcementsForPopulation(c.population, defaults),
-          0,
-        );
-        return [country.id, { cities, income, reinforcements, ports: cities.filter((c) => c.port).length }];
-      }),
+  const planner = screen === 'planning' ? currentPlanner(s) : null;
+  const plannerPlayer = planner && game ? game.players.find((p) => p.id === planner)! : null;
+  const actions = useMemo(() => (planner ? (s.plans[planner] ?? []) : []), [planner, s.plans]);
+
+  const preview = useMemo(
+    () => (game && planner && game.phase === 'playing' ? simulatePlan(game, ctx, nav, planner, actions) : null),
+    [game, planner, actions],
+  );
+  const shown = preview?.state ?? game;
+
+  const pickable = useMemo(
+    () =>
+      game?.phase === 'selection'
+        ? new Set(ctx.map.countries.filter((c) => game.cities[c.capital]?.owner == null).map((c) => c.id))
+        : null,
+    [game],
+  );
+
+  const view = useMemo(
+    () =>
+      shown
+        ? buildView({
+            state: shown,
+            selected,
+            ...(preview ? { steps: preview.steps, moved: preview.moved } : {}),
+            ...(plannerPlayer ? { plannerColor: plannerPlayer.color } : {}),
+            ...(screen === 'results' ? { events: s.events } : {}),
+            pickable,
+          })
+        : EMPTY_VIEW,
+    [shown, selected, preview, plannerPlayer, screen, s.events, pickable],
+  );
+
+  const draftEval = useMemo(
+    () => (draft && preview && planner ? evaluateDraft(draft, preview, planner, draft.hover, draft.target) : null),
+    [draft, preview, planner],
+  );
+
+  const onHover = useCallback((t: HitTarget | null) => setHover(t), []);
+
+  const onPointer = useCallback(
+    (world: Point, hit: HitTarget | null) => {
+      const st = useSession.getState();
+      if (!st.draft) return;
+      const plannerId = currentPlanner(st);
+      const enemy =
+        hit?.kind === 'stack' && st.game?.stacks.some((x) => x.id === hit.id && x.owner !== plannerId) ? hit.id : null;
+      st.updateDraft({ hover: world, target: st.draft.mode === 'move' ? enemy : null });
+    },
+    [],
+  );
+
+  const onCancel = useCallback(() => {
+    const st = useSession.getState();
+    if (st.draft) st.cancelDraft();
+    else st.select(null);
+  }, []);
+
+  const onClick = useCallback(
+    ({ hit, world, shift }: MapClick) => {
+      const st = useSession.getState();
+      if (!st.game) return;
+      if (st.screen === 'selection') {
+        const countryId =
+          hit?.kind === 'country' ? hit.id : hit?.kind === 'city' ? ctx.cities.get(hit.id)!.country : null;
+        if (countryId) st.pickCountry(countryId);
+        return;
+      }
+      if (st.screen === 'planning' && st.draft && preview && planner) {
+        if (shift && st.draft.mode === 'move') {
+          st.updateDraft({ waypoints: [...st.draft.waypoints, world] });
+          return;
+        }
+        const enemy =
+          st.draft.mode === 'move' && hit?.kind === 'stack' && preview.state.stacks.some((x) => x.id === hit.id && x.owner !== planner)
+            ? hit.id
+            : null;
+        const result = evaluateDraft(st.draft, preview, planner, world, enemy);
+        if (result.action) st.addAction(result.action);
+        else st.setNotice(result.errors[0] ?? 'Destinazione non valida');
+        return;
+      }
+      if (hit?.kind === 'stack') st.select({ kind: 'stack', id: hit.id });
+      else if (hit?.kind === 'city') st.select({ kind: 'city', id: hit.id });
+      else st.select(null);
+    },
+    [preview, planner],
+  );
+
+  if (!game || screen === 'setup') {
+    return (
+      <div className="shell">
+        <MapView map={ctx.map} view={EMPTY_VIEW} draft={null} onHover={noop} onClick={noop} />
+        <header className="topbar">
+          <span className="brand">OnPeace</span>
+        </header>
+        <SetupScreen />
+      </div>
     );
-    return { capitals, byCountry, ports: testMap.cities.filter((c) => c.port).length };
-  }, [defaults]);
+  }
 
-  const city = hover?.kind === 'city' ? testMap.cities.find((c) => c.id === hover.id) : undefined;
-  const countryId = city?.country ?? (hover?.kind === 'country' ? hover.id : undefined);
-  const country = countryId ? testMap.countries.find((c) => c.id === countryId) : undefined;
-  const countryStats = country ? stats.byCountry.get(country.id) : undefined;
-  const capital = country ? testMap.cities.find((c) => c.id === country.capital) : undefined;
-  const bonus = countryStats ? Math.round((countryStats.income * defaults.economy.fullCountryBonusPct) / 100) : 0;
+  const picker = game.phase === 'selection' ? currentPicker(game) : null;
+  const economy = planner && shown ? computeEconomy(shown, ctx, planner) : null;
+  const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
+  const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
 
   return (
     <div className="shell">
-      <MapView map={testMap} onHover={onHover} />
+      <MapView
+        map={ctx.map}
+        view={view}
+        draft={draftEval?.marker ?? null}
+        onHover={onHover}
+        onClick={onClick}
+        onPointer={onPointer}
+        onCancel={onCancel}
+      />
 
       <header className="topbar">
         <span className="brand">OnPeace</span>
         <span className="divider" />
-        <span className="map-name">{testMap.name}</span>
-        <span className="status">
-          <b>{testMap.countries.length}</b> paesi · <b>{testMap.cities.length}</b> città · <b>{stats.ports}</b> porti
-        </span>
-        <span className="hint">Rotella: zoom · Trascina: sposta · 0: inquadra tutto</span>
+        {game.phase === 'selection' ? (
+          <span className="status">Scelta dei paesi</span>
+        ) : (
+          <span className="status">
+            Turno <b>{game.turn}</b>
+            {game.phase !== 'ended' && <span className="dim"> / {game.settings.maxTurns}</span>}
+          </span>
+        )}
+        {plannerPlayer && (
+          <span className="player-chip" style={{ borderColor: plannerPlayer.color }}>
+            <span className="swatch small" style={{ background: plannerPlayer.color }} />
+            {plannerPlayer.name}
+          </span>
+        )}
+        <span className="spacer" />
+        {plannerPlayer && economy && (
+          <span className="status money" title="Fondi dopo gli ordini · bilancio del prossimo turno">
+            <b>{fmt.format(Math.floor(plannerPlayer && shown ? shown.players.find((p) => p.id === planner)!.money : 0))}</b>
+            <span className={economy.net >= 0 ? 'pos' : 'neg'}>
+              {' '}
+              {economy.net >= 0 ? '+' : ''}
+              {fmt.format(economy.net)}
+            </span>
+          </span>
+        )}
+        {screen === 'planning' && (
+          <button type="button" className="primary" onClick={() => s.endTurn()}>
+            Fine turno{stepsInvalid > 0 ? ` (${stepsInvalid} non validi)` : ''}
+          </button>
+        )}
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            if (confirm('Abbandonare la partita e tornare alla preparazione?')) s.reset();
+          }}
+        >
+          Nuova partita
+        </button>
       </header>
 
-      <aside className={`panel info ${country ? '' : 'empty'}`} aria-live="polite">
-        {!country && <p className="placeholder">Passa sopra un paese o una città</p>}
-        {country && countryStats && (
-          <>
-            <div className="panel-kicker">Paese</div>
-            <h2>{country.name}</h2>
-            <dl className="facts">
-              <dt>Capitale</dt>
-              <dd>{capital?.name ?? '—'}</dd>
-              <dt>Città</dt>
-              <dd className="num">{countryStats.cities.length}</dd>
-              <dt>Reddito nominale</dt>
-              <dd className="num">
-                {fmt.format(countryStats.income)}{' '}
-                <span className="dim" title="Bonus se possiedi tutto il paese">
-                  +{fmt.format(bonus)}
-                </span>
-              </dd>
-              <dt>Rinforzi per ciclo</dt>
-              <dd className="num">{countryStats.reinforcements}</dd>
-              <dt>Porti</dt>
-              <dd className="num">{countryStats.ports}</dd>
-            </dl>
-          </>
-        )}
-        {city && (
-          <div className="city-block">
-            <div className="panel-kicker">
-              {stats.capitals.has(city.id) ? 'Capitale' : 'Città'}
-              {city.port && <span className="tag">porto</span>}
-            </div>
-            <h3>{city.name}</h3>
-            <dl className="facts">
-              <dt>Popolazione</dt>
-              <dd className="num">{city.population.toLocaleString('it-IT')} M</dd>
-              <dt>Reddito nominale</dt>
-              <dd className="num">{fmt.format(city.income)}</dd>
-              <dt>Rinforzi</dt>
-              <dd className="num">{reinforcementsForPopulation(city.population, defaults)}</dd>
-            </dl>
-          </div>
-        )}
-      </aside>
+      {screen === 'selection' && picker && (
+        <div className="banner">
+          <span className="swatch small" style={{ background: game.players.find((p) => p.id === picker)!.color }} />
+          Tocca a <b>{playerName(game, picker)}</b>: clicca un paese libero. Fondi:{' '}
+          <b className="num">{fmt.format(game.players.find((p) => p.id === picker)!.money)}</b>
+        </div>
+      )}
 
-      <aside className="panel legend">
-        <div className="legend-row">
-          <svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden>
-            <polygon
-              points="0,-7.5 2,-2.8 7.1,-2.3 3.2,1.1 4.4,6.1 0,3.4 -4.4,6.1 -3.2,1.1 -7.1,-2.3 -2,-2.8"
-              fill="var(--capital)"
-              stroke="#10161c"
-            />
-          </svg>
-          Capitale
+      {screen === 'planning' && draftEval && (
+        <div className="banner draft">
+          {draft?.mode === 'unload' ? 'Sbarco di ' : 'Muovi '}
+          <b>{describeUnits(draft!.units)}</b> · clicca la destinazione
+          {draft?.mode === 'move' && ' · Maiusc+clic: punto intermedio'} · Esc: annulla
+          {draftEval.errors[0] && <span className="error-text block">{draftEval.errors[0]}</span>}
         </div>
-        <div className="legend-row">
-          <svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden>
-            <circle r="3.6" fill="#efe8d6" stroke="#10161c" />
-          </svg>
-          Città
+      )}
+
+      {s.notice && (
+        <div className="toast" role="status" onClick={() => s.setNotice(null)}>
+          {s.notice}
         </div>
-        <div className="legend-row">
-          <svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden>
-            <circle r="7" fill="none" stroke="var(--port)" strokeWidth="1.6" />
-            <circle r="3.6" fill="#efe8d6" stroke="#10161c" />
-          </svg>
-          Porto
+      )}
+
+      {shown && !draft && selected?.kind === 'city' && (
+        <CityPanel key={`${selected.id}:${actions.length}`} cityId={selected.id} state={shown} planner={planner} />
+      )}
+      {shown && !draft && selected?.kind === 'stack' && (
+        <StackPanel
+          key={`${selected.id}:${actions.length}`}
+          stackId={selected.id}
+          state={shown}
+          realState={game}
+          planner={planner}
+          moved={preview?.moved ?? new Set()}
+        />
+      )}
+
+      {(screen === 'planning' || screen === 'results' || screen === 'handoff') && game.phase !== 'selection' && (
+        <aside className="panel right-panel">
+          <div className="tabs" role="tablist">
+            {(
+              [
+                ['orders', 'Ordini'],
+                ['players', 'Giocatori'],
+                ['report', 'Resoconto'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={(screen === 'results' ? 'report' : tab) === id}
+                className={(screen === 'results' ? 'report' : tab) === id ? 'active' : ''}
+                onClick={() => setTab(id)}
+                disabled={screen === 'results'}
+              >
+                {label}
+                {id === 'orders' && actions.length > 0 && <span className="count">{actions.length}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="tab-body">
+            {(screen === 'results' || tab === 'report') && (
+              <ReportPanel game={game} events={s.events} turn={s.eventsTurn} />
+            )}
+            {screen !== 'results' && tab === 'orders' && (
+              <PlanPanel game={game} actions={actions} steps={preview?.steps ?? []} />
+            )}
+            {screen !== 'results' && tab === 'players' && (
+              <PlayersPanel game={game} planner={planner} actions={actions} />
+            )}
+          </div>
+          {screen === 'results' && (
+            <div className="panel-footer">
+              {game.phase === 'ended' ? (
+                <b>
+                  Partita finita — vince {(game.winners ?? []).map((w) => playerName(game, w)).join(' e ')}
+                </b>
+              ) : (
+                <button type="button" className="primary wide" onClick={() => s.continueAfterResults()}>
+                  Continua
+                </button>
+              )}
+            </div>
+          )}
+        </aside>
+      )}
+
+      {shown && !draft && <InfoPanel target={hover} state={shown} />}
+
+      {screen === 'handoff' && handoffPlayer && (
+        <div className="modal-backdrop">
+          <div className="modal handoff">
+            <div className="panel-kicker">Turno {game.turn}</div>
+            <h1>
+              Tocca a <span style={{ color: handoffPlayer.color }}>{handoffPlayer.name}</span>
+            </h1>
+            <p className="lead">Gli altri non guardino: gli ordini restano segreti fino alla fine del turno.</p>
+            <button type="button" className="primary" autoFocus onClick={() => s.beginPlanning()}>
+              Inizia il turno
+            </button>
+          </div>
         </div>
-        <div className="legend-row">
-          <svg width="18" height="18" viewBox="-9 -9 18 18" aria-hidden>
-            <path d="M-7 4 L-2 -3 L3 4 M0 4 L4 -1 L8 4" fill="none" stroke="#d8cdb4" strokeWidth="1.4" />
-          </svg>
-          Montagne invalicabili
-        </div>
-      </aside>
+      )}
     </div>
   );
 }

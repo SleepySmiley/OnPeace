@@ -39,7 +39,7 @@ const fileName = process.argv[3] ?? 'prova';
 
 const W = 2400;
 const H = 1500;
-const RANGE_SCALE = 10; // unità mappa per punto raggio
+const RANGE_SCALE = 16; // unità mappa per punto raggio (un Carro, raggio 7, fa ~112 unità)
 const CELL = 4; // risoluzione della griglia di rumore
 const LAND_FRACTION = 0.44;
 const VORONOI_SPACING = 46;
