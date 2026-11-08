@@ -6,7 +6,9 @@ import { randomBytes } from 'node:crypto';
 import {
   RuleError,
   affordableCountries,
+  checkDoctrine,
   createGame,
+  defaultSettings,
   eliminate,
   eventsFor,
   finishSelection,
@@ -14,8 +16,10 @@ import {
   nextPicker,
   resolveTurn,
   selectCountry,
+  setDoctrine,
   viewFor,
   type Action,
+  type Doctrine,
   type GameContext,
   type GameState,
   type NavGrid,
@@ -39,7 +43,11 @@ export interface Seat {
   name: string;
   color: string;
   inactiveTurns: number;
+  /** Strategia e Generale scelti in sala d'attesa (assente nei salvataggi vecchi). */
+  doctrine?: Doctrine;
 }
+
+const NO_DOCTRINE: Doctrine = { strategy: null, general: [] };
 
 export interface RoomSnapshot {
   version: 1;
@@ -161,6 +169,8 @@ export class Room {
           return this.start(player);
         case 'pick':
           return this.pick(player, msg.country);
+        case 'doctrine':
+          return this.setDoctrine(seat, { strategy: msg.strategy, general: msg.general });
         case 'plan':
           return this.setPlan(player, asActions(msg.actions));
         case 'ready':
@@ -193,6 +203,27 @@ export class Room {
     return null;
   }
 
+  /** In sala d'attesa la dottrina resta nel posto; durante la scelta dei paesi va nello stato. */
+  private setDoctrine(seat: Seat, doctrine: Doctrine): string | null {
+    const { ctx } = this.deps;
+    if (this.s.phase === 'lobby') {
+      const errors = checkDoctrine(ctx, { ...defaultSettings(ctx), ...this.s.settings }, doctrine);
+      if (errors.length > 0) return errors.join('; ');
+      seat.doctrine = doctrine;
+      this.touch();
+      this.deps.send(seat.id, { t: 'lobby', lobby: this.lobbyInfo(seat.id) });
+      return null;
+    }
+    if (this.s.phase !== 'selection' || !this.s.state) return 'Strategia e Generale si scelgono prima del turno 1';
+    setDoctrine(this.s.state, ctx, seat.id, doctrine);
+    seat.doctrine = doctrine;
+    this.touch();
+    this.deps.send(seat.id, { t: 'lobby', lobby: this.lobbyInfo(seat.id) });
+    const game = this.gameMsg(seat.id);
+    if (game) this.deps.send(seat.id, game);
+    return null;
+  }
+
   private start(player: PlayerId): string | null {
     if (player !== this.s.hostId) return 'Solo chi ha creato la partita può cominciare';
     if (this.s.phase !== 'lobby') return 'La partita è già cominciata';
@@ -201,7 +232,12 @@ export class Room {
     this.s.state = createGame(ctx, {
       id: this.id,
       seed: randomBytes(4).readUInt32LE(0),
-      players: this.s.seats.map((x) => ({ id: x.id, name: x.name, color: x.color })),
+      players: this.s.seats.map((x) => ({
+        id: x.id,
+        name: x.name,
+        color: x.color,
+        ...(x.doctrine ? { doctrine: x.doctrine } : {}),
+      })),
       settings: this.s.settings,
     });
     this.s.phase = 'selection';
@@ -228,7 +264,7 @@ export class Room {
   private afterPick(): void {
     const { ctx, now } = this.deps;
     if (this.picker() === null) {
-      finishSelection(this.s.state!);
+      finishSelection(this.s.state!, ctx);
       this.s.phase = 'playing';
       this.s.deadline = now() + this.turnSeconds() * 1000;
     } else {
@@ -367,7 +403,13 @@ export class Room {
     this.deps.changed(this);
   }
 
-  lobbyInfo(): LobbyInfo {
+  /** Le informazioni della sala d'attesa come le vede il giocatore (con la sua dottrina). */
+  lobbyInfo(player?: PlayerId): LobbyInfo {
+    const seat = this.s.seats.find((x) => x.id === player);
+    const statePlayer = this.s.state?.players.find((p) => p.id === player);
+    const doctrine: Doctrine = statePlayer
+      ? { strategy: statePlayer.strategy, general: statePlayer.generalUpgrades ?? [] }
+      : (seat?.doctrine ?? NO_DOCTRINE);
     return {
       id: this.id,
       hostId: this.s.hostId,
@@ -381,6 +423,7 @@ export class Room {
         inactiveTurns: x.inactiveTurns,
       })),
       settings: this.s.state?.settings ?? this.s.settings,
+      doctrine,
     };
   }
 
@@ -408,8 +451,7 @@ export class Room {
   }
 
   broadcastLobby(): void {
-    const lobby = this.lobbyInfo();
-    for (const x of this.s.seats) this.deps.send(x.id, { t: 'lobby', lobby });
+    for (const x of this.s.seats) this.deps.send(x.id, { t: 'lobby', lobby: this.lobbyInfo(x.id) });
   }
 
   broadcastStatus(): void {
@@ -428,7 +470,7 @@ export class Room {
 
   /** Tutto ciò che serve a un giocatore che si (ri)collega. */
   syncPlayer(player: PlayerId): void {
-    this.deps.send(player, { t: 'lobby', lobby: this.lobbyInfo() });
+    this.deps.send(player, { t: 'lobby', lobby: this.lobbyInfo(player) });
     const game = this.gameMsg(player);
     if (game) this.deps.send(player, game);
     this.deps.send(player, this.statusMsg());

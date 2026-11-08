@@ -92,6 +92,8 @@
     "countrySelectSeconds": 30,
     "disconnectGraceMinutes": 10,
     "kickAfterInactiveTurns": 3,
-    "rareUnitChancePct": 5
+    "rareUnitChancePct": 5,
+    "strategies": true,
+    "general": true
   }
 }

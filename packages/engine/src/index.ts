@@ -5,6 +5,7 @@ export * from './schema/map';
 export * from './map-check';
 export * from './economy';
 export * from './catalog';
+export * from './forces';
 export * from './combat';
 export * from './errors';
 export * from './state';

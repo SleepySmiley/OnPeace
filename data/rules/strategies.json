@@ -1,0 +1,156 @@
+{
+  "$schema": "../schema/strategies.schema.json",
+  "strategies": [
+    {
+      "id": "assalto",
+      "name": "Assalto a oltranza",
+      "description": "Carri, bombardieri e cacciatorpediniere più forti ed economici. La fanteria costa di più e difende peggio.",
+      "modifiers": [
+        {
+          "target": { "units": ["tanks"] },
+          "set": { "crit": 7, "move": 8, "cost": 90 },
+          "defenceBonus": [
+            { "vs": ["infantry"], "value": 1 },
+            { "vs": ["militia"], "value": -1 }
+          ]
+        },
+        { "target": { "units": ["bomber"] }, "set": { "attack": 9, "defence": 3, "move": 16, "cost": 170 } },
+        { "target": { "units": ["destroyer"] }, "set": { "move": 11, "cost": 190 } },
+        {
+          "target": { "units": ["infantry"] },
+          "set": { "defence": 5, "crit": 3, "move": 7, "cost": 90 },
+          "add": { "cityDefence": -1, "lineDefence": -1 }
+        }
+      ]
+    },
+    {
+      "id": "difesa",
+      "name": "Difesa in profondità",
+      "description": "Fanteria e milizie più solide ed economiche, con protezione contro i carri. L'attacco è più debole.",
+      "modifiers": [
+        {
+          "target": { "units": ["infantry"] },
+          "set": { "defence": 7, "move": 5, "cost": 60 },
+          "defenceBonus": [{ "vs": ["tanks"], "value": 1 }]
+        },
+        { "target": { "units": ["militia"] }, "set": { "defence": 5, "move": 3, "cost": 20 } },
+        { "target": { "units": ["tanks"] }, "set": { "attack": 7 } },
+        { "target": { "units": ["destroyer"] }, "set": { "attack": 8, "move": 9 } },
+        { "target": { "units": ["bomber"] }, "set": { "attack": 5, "move": 13 } }
+      ]
+    },
+    {
+      "id": "guerra_lampo",
+      "name": "Guerra lampo",
+      "description": "Tutte le unità si muovono di 4 in più e vedono di 2 in più, ma difendono di 1 in meno.",
+      "modifiers": [
+        { "target": { "all": true }, "add": { "move": 4, "view": 2, "defence": -1 } },
+        { "target": { "units": ["militia"] }, "set": { "move": 5, "cost": 40 } },
+        { "target": { "units": ["infantry"] }, "add": { "cityDefence": -1 } }
+      ]
+    },
+    {
+      "id": "supremazia_navale",
+      "name": "Supremazia navale",
+      "description": "Navi più potenti, veloci ed economiche; trasporti più capienti. Carri più deboli e lenti.",
+      "modifiers": [
+        {
+          "target": { "units": ["destroyer"] },
+          "set": { "attack": 11, "defence": 9, "crit": 7, "hp": 8, "move": 13, "cost": 170 }
+        },
+        { "target": { "units": ["submarine"] }, "set": { "attack": 9, "defence": 7, "crit": 7, "move": 13, "cost": 150 } },
+        { "target": { "units": ["transport"] }, "set": { "defence": 3, "hp": 9, "move": 13, "capacity": 15, "cost": 200 } },
+        { "target": { "units": ["raiders"] }, "set": { "cost": 130 } },
+        { "target": { "units": ["tanks"] }, "set": { "attack": 7, "defence": 3, "crit": 3, "move": 6 } }
+      ]
+    },
+    {
+      "id": "supremazia_aerea",
+      "name": "Supremazia aerea",
+      "description": "Bombardieri, caccia e trasporti aerei avanzati. Fanteria e carri più deboli.",
+      "modifiers": [
+        { "target": { "units": ["bomber"] }, "set": { "attack": 8, "defence": 5, "crit": 7, "move": 17, "cost": 130 } },
+        { "target": { "units": ["stealth_jet"] }, "set": { "attack": 9, "move": 17, "cost": 230 } },
+        {
+          "target": { "units": ["air_transport"] },
+          "set": { "attack": 2, "defence": 3, "hp": 9, "move": 15, "capacity": 5, "cost": 400 }
+        },
+        { "target": { "units": ["recon"] }, "set": { "view": 70, "cost": 370 } },
+        { "target": { "units": ["infantry"] }, "set": { "attack": 3 } },
+        { "target": { "units": ["tanks"] }, "set": { "attack": 7, "defence": 3, "move": 6, "cost": 130 } }
+      ]
+    },
+    {
+      "id": "operazioni_speciali",
+      "name": "Operazioni speciali",
+      "description": "Incursori, sottomarini e caccia stealth avanzati. Carri e cacciatorpediniere più lenti e deboli.",
+      "modifiers": [
+        { "target": { "units": ["raiders"] }, "set": { "attack": 8, "move": 7, "cost": 120 } },
+        {
+          "target": { "units": ["submarine"] },
+          "set": { "attack": 9, "defence": 6, "crit": 7, "move": 12, "capacity": 3, "cost": 160 }
+        },
+        { "target": { "units": ["stealth_jet"] }, "set": { "attack": 9, "crit": 7, "move": 17, "cost": 200 } },
+        { "target": { "units": ["tanks"] }, "set": { "attack": 7, "defence": 3, "move": 6 } },
+        { "target": { "units": ["destroyer"] }, "set": { "attack": 8, "defence": 6, "move": 9 } },
+        { "target": { "units": ["infantry"] }, "set": { "cost": 60 } }
+      ]
+    },
+    {
+      "id": "mobilitazione",
+      "name": "Mobilitazione di massa",
+      "description": "Tutte le unità costano 30 in meno ma attaccano di 1 in meno. Milizie quasi gratis e più solide in difesa.",
+      "modifiers": [
+        { "target": { "all": true }, "add": { "cost": -30, "attack": -1 } },
+        { "target": { "units": ["militia"] }, "set": { "cost": 10 }, "add": { "cityDefence": 1, "lineDefence": 1 } }
+      ]
+    },
+    {
+      "id": "guerriglia",
+      "name": "Guerriglia",
+      "description": "Milizie forti e incursori economici. Carri e fanteria più deboli, trasporti più cari.",
+      "modifiers": [
+        { "target": { "units": ["militia"] }, "set": { "attack": 4, "defence": 5, "move": 4 } },
+        { "target": { "units": ["raiders"] }, "set": { "cost": 80 } },
+        { "target": { "units": ["infantry"] }, "set": { "attack": 2, "defence": 4 } },
+        { "target": { "units": ["tanks"] }, "set": { "attack": 6, "defence": 2 } },
+        { "target": { "units": ["transport"] }, "set": { "cost": 400 } },
+        { "target": { "units": ["air_transport"] }, "set": { "cost": 800 } }
+      ]
+    },
+    {
+      "id": "potenza_industriale",
+      "name": "Potenza industriale",
+      "description": "Mezzi ed edifici più economici, edifici più efficaci. Mezzi meno resistenti, fanteria e milizie più care.",
+      "modifiers": [
+        { "target": { "domains": ["naval", "air"] }, "add": { "defence": -1, "cost": -20 } },
+        { "target": { "units": ["tanks", "antiair"] }, "add": { "defence": -1, "cost": -20 } },
+        { "target": { "units": ["bomber"] }, "add": { "cost": -10 } },
+        { "target": { "units": ["militia", "infantry"] }, "add": { "cost": 10 } }
+      ],
+      "buildingModifiers": [
+        { "buildings": "all", "add": { "crit": 2 } },
+        { "buildings": ["bank", "recruitment_center", "aa_defences", "fortifications"], "add": { "cost": -300 } },
+        { "buildings": ["radar", "coastal_battery"], "add": { "cost": -150 } }
+      ]
+    },
+    {
+      "id": "logistica",
+      "name": "Logistica avanzata",
+      "description": "Trasporti più capienti, veloci e protetti, con cacciatorpediniere e bombardieri da scorta. Tutte le unità vedono di 2 in più.",
+      "modifiers": [
+        { "target": { "all": true }, "add": { "view": 2 } },
+        {
+          "target": { "units": ["transport"] },
+          "set": { "attack": 1, "defence": 3, "hp": 9, "move": 13, "capacity": 12, "cost": 200 }
+        },
+        {
+          "target": { "units": ["air_transport"] },
+          "set": { "attack": 1, "defence": 3, "hp": 9, "move": 16, "capacity": 5, "cost": 400 }
+        },
+        { "target": { "units": ["destroyer"] }, "set": { "attack": 2, "defence": 8, "move": 13, "cost": 100 } },
+        { "target": { "units": ["bomber"] }, "set": { "attack": 3, "defence": 8, "cost": 120 } }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 /** Statistiche per giocatore (grafici di fine partita) e dettaglio delle finanze. */
 import { cityDef, type GameContext } from './context';
-import { cityIncome, computeEconomy, effectiveIncomePct, ownsWholeCountry, unitUpkeep } from './economy';
+import { cityIncome, computeEconomy, effectiveIncomePct, forEachUpkeep, ownsWholeCountry } from './economy';
 import { allUnits, type GameState, type PlayerId, type PlayerStats } from './state';
 
 export function playerStats(state: GameState, ctx: GameContext, player: PlayerId): PlayerStats {
@@ -72,14 +72,7 @@ export function financeBreakdown(state: GameState, ctx: GameContext, player: Pla
     u.total += value;
     upkeep.set(type, u);
   };
-  for (const s of state.stacks) {
-    if (s.owner !== player) continue;
-    for (const u of allUnits(s)) add(u.type, unitUpkeep(state, ctx, player, u));
-  }
-  for (const city of Object.values(state.cities)) {
-    if (city.owner !== player) continue;
-    for (const b of city.buildings) add(b.type, unitUpkeep(state, ctx, player, b));
-  }
+  forEachUpkeep(state, ctx, player, (u, value) => add(u.type, value));
 
   const eco = computeEconomy(state, ctx, player);
   return {

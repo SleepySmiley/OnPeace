@@ -72,6 +72,33 @@ describe('stanza di gioco', () => {
     expect(t.manager.join(room.id, 'Carla')).toMatch(/già cominciata/);
   });
 
+  it('dottrina: si sceglie in sala d’attesa e durante la scelta dei paesi, poi si blocca', () => {
+    const t = setup();
+    const { room, seat: host } = t.manager.create('Anna', '#e05a4f', { startingFunds: 100_000 });
+    const guest = t.manager.join(room.id, 'Bruno');
+    if (typeof guest === 'string') throw new Error(guest);
+    expect(room.handle(host.id, { t: 'doctrine', strategy: 'inesistente', general: [] })).toMatch(/sconosciuta/);
+    expect(room.handle(host.id, { t: 'doctrine', strategy: 'guerra_lampo', general: ['carrista'] })).toBeNull();
+    expect(t.last(room.id, host.id, 'lobby')!.lobby.doctrine).toEqual({ strategy: 'guerra_lampo', general: ['carrista'] });
+    // gli altri non la vedono
+    expect(t.last(room.id, guest.seat.id, 'lobby')!.lobby.doctrine.strategy).toBeNull();
+
+    room.handle(host.id, { t: 'start' });
+    expect(room.state!.players.find((p) => p.id === host.id)!.strategy).toBe('guerra_lampo');
+    expect(room.handle(guest.seat.id, { t: 'doctrine', strategy: 'difesa', general: [] })).toBeNull();
+    expect(t.last(room.id, host.id, 'game')!.view.players.find((p) => p.id === guest.seat.id)!.strategy).toBeNull();
+
+    room.handle(host.id, { t: 'pick', country: 'aa' });
+    room.handle(guest.seat.id, { t: 'pick', country: 'bb' });
+    expect(room.phase).toBe('playing');
+    const players = room.state!.players;
+    expect(players.map((p) => p.strategy)).toEqual(['guerra_lampo', 'difesa']);
+    expect(players[0]!.generalUpgrades).toEqual(['carrista', 'difesa', 'fortuna']);
+    expect(room.handle(host.id, { t: 'doctrine', strategy: null, general: [] })).toMatch(/prima del turno 1/);
+    // da ora le strategie sono pubbliche
+    expect(t.last(room.id, host.id, 'game')!.view.players[1]!.strategy).toBe('difesa');
+  });
+
   it('il turno si risolve quando tutti hanno finito', () => {
     const t = playing();
     const { room, host, guest } = t;

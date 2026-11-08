@@ -13,6 +13,8 @@ export function loadRules(): Rules {
     units: readJson('rules', 'units.json'),
     buildings: readJson('rules', 'buildings.json'),
     defaults: readJson('rules', 'defaults.json'),
+    strategies: readJson('rules', 'strategies.json'),
+    general: readJson('rules', 'general.json'),
   });
 }
 

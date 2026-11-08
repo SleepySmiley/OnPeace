@@ -2,6 +2,8 @@
 import { cityDef, type GameContext } from './context';
 import { controlsCapital } from './economy';
 import { RuleError } from './errors';
+import { buildingOf, unitOf } from './forces';
+import { isPurchasable } from './schema/rules';
 import { createUnit, stackInCity } from './setup';
 import { getPlayer, newId, type GameState, type PlayerId, type StackState } from './state';
 
@@ -11,9 +13,10 @@ export interface PurchaseOrder {
   buildings: string[];
 }
 
-export function purchaseCost(ctx: GameContext, order: PurchaseOrder): number {
-  const units = order.units.reduce((s, u) => s + ctx.catalog.unit(u.type).cost * u.count, 0);
-  const buildings = order.buildings.reduce((s, b) => s + ctx.catalog.building(b).cost, 0);
+/** Costo dell'ordine per il giocatore (con i prezzi della sua strategia). */
+export function purchaseCost(state: GameState, ctx: GameContext, player: PlayerId, order: PurchaseOrder): number {
+  const units = order.units.reduce((s, u) => s + unitOf(state, ctx, player, u.type).cost * u.count, 0);
+  const buildings = order.buildings.reduce((s, b) => s + buildingOf(state, ctx, player, b).cost, 0);
   return units + buildings;
 }
 
@@ -44,7 +47,7 @@ export function validatePurchase(
       continue;
     }
     if (!Number.isInteger(item.count) || item.count < 1) errors.push(`Quantità non valida per ${unit.name}`);
-    if (unit.role === 'rare') errors.push(`${unit.name} non si può comprare`);
+    if (!isPurchasable(unit)) errors.push(`${unit.name} non si può comprare`);
     if (unit.domain === 'naval' && !def.port) errors.push(`${unit.name}: le navi si comprano solo nei porti`);
     count += item.count;
   }
@@ -65,7 +68,7 @@ export function validatePurchase(
   }
 
   if (errors.length === 0) {
-    const cost = purchaseCost(ctx, order);
+    const cost = purchaseCost(state, ctx, playerId, order);
     const blocked = ctx.rules.economy.blockPurchasesWhenNegative && player.money < 0;
     if (blocked) errors.push('Con il saldo negativo non puoi comprare');
     else if (cost > player.money) errors.push(`Fondi insufficienti: servono ${cost}, hai ${Math.floor(player.money)}`);
@@ -86,9 +89,9 @@ export function applyPurchase(
   const player = getPlayer(state, playerId);
   const city = state.cities[order.city]!;
   const def = cityDef(ctx, order.city);
-  player.money -= purchaseCost(ctx, order);
+  player.money -= purchaseCost(state, ctx, playerId, order);
 
-  for (const id of order.buildings) city.buildings.push(createUnit(state, ctx, id, order.city));
+  for (const id of order.buildings) city.buildings.push(createUnit(state, ctx, id, order.city, playerId));
 
   const count = order.units.reduce((s, u) => s + u.count, 0);
   if (count === 0) return null;
@@ -99,7 +102,7 @@ export function applyPurchase(
     state.stacks.push(stack);
   }
   for (const item of order.units) {
-    for (let i = 0; i < item.count; i++) stack.units.push(createUnit(state, ctx, item.type, order.city));
+    for (let i = 0; i < item.count; i++) stack.units.push(createUnit(state, ctx, item.type, order.city, playerId));
   }
   return stack;
 }

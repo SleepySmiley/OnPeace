@@ -87,8 +87,11 @@ export function describeEvent(game: GameState, e: TurnEvent): string | null {
       const winner = e.winner === 'attacker' ? who(e.attacker) : who(e.defender);
       return `Battaglia${where}: ${who(e.attacker)} (${e.attackers.length}) contro ${who(e.defender)} (${e.defenders.length}) — vince ${winner}`;
     }
-    case 'capture':
-      return `${who(e.player)} conquista ${cityName(e.city)}${e.freeMilitia ? ` (+${e.freeMilitia} Milizie)` : ''}`;
+    case 'capture': {
+      const militia = e.freeMilitia ? ` (+${e.freeMilitia} Milizie)` : '';
+      const rare = e.rare ? ` e trova un'unità rara: ${unitName(e.rare)}` : '';
+      return `${who(e.player)} conquista ${cityName(e.city)}${militia}${rare}`;
+    }
     case 'diplomacy': {
       const map = {
         propose_peace: 'propone la pace a',

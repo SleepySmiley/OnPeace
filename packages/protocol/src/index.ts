@@ -3,7 +3,7 @@
  * I messaggi del client sono validati con zod dal server: non ci si fida mai del client.
  */
 import { z } from 'zod';
-import type { Action, GameSettings, GameState, PlayerId, TurnEvent } from '@onpeace/engine';
+import type { Action, Doctrine, GameSettings, GameState, PlayerId, TurnEvent } from '@onpeace/engine';
 
 /**
  * Colori dei giocatori (client e server usano la stessa tavolozza).
@@ -48,6 +48,9 @@ export const SettingsS = z
     initialCountries: z.number().int().min(1).max(5),
     victory: z.enum(['annihilation', 'homeland', 'turns']),
     maxAlliances: z.number().int().min(0).max(10),
+    rareUnitChancePct: z.number().min(0).max(100),
+    strategies: z.boolean(),
+    general: z.boolean(),
   })
   .partial();
 export type LobbySettings = z.infer<typeof SettingsS>;
@@ -64,6 +67,8 @@ export const ClientMsgS = z.discriminatedUnion('t', [
   z.object({ t: z.literal('settings'), settings: SettingsS }),
   z.object({ t: z.literal('start') }),
   z.object({ t: z.literal('pick'), country: Id }),
+  /** Strategia e potenziamenti del Generale: si cambiano fino all'inizio del turno 1. */
+  z.object({ t: z.literal('doctrine'), strategy: Id.nullable(), general: z.array(Id).max(10) }),
   z.object({ t: z.literal('plan'), actions: PlanS }),
   z.object({ t: z.literal('ready'), done: z.boolean() }),
   z.object({ t: z.literal('chat'), text: z.string().trim().min(1).max(300) }),
@@ -90,6 +95,8 @@ export interface LobbyInfo {
   mapName: string;
   players: LobbyPlayer[];
   settings: Partial<GameSettings>;
+  /** La dottrina scelta da chi riceve il messaggio (quelle degli altri restano segrete). */
+  doctrine: Doctrine;
 }
 
 export interface ChatLine {

@@ -11,6 +11,7 @@
  */
 import type { GameContext } from './context';
 import { areAllies } from './diplomacy';
+import { buildingOf, groupView } from './forces';
 import { distance, type Point } from './geometry';
 import type { TurnEvent } from './turn';
 import type { GameState, PlayerId, StackState } from './state';
@@ -31,12 +32,13 @@ export function visionSources(state: GameState, ctx: GameContext, viewers: Reado
   const out: VisionSource[] = [];
   for (const s of state.stacks) {
     if (s.owner === null || !viewers.has(s.owner)) continue;
-    const view = Math.max(0, ...s.units.map((u) => ctx.catalog.unit(u.type).view));
+    const view = groupView(state, ctx, s.owner, s.units);
     if (view > 0) out.push({ pos: s.pos, range: view * scale });
   }
   for (const city of Object.values(state.cities)) {
     if (city.owner === null || !viewers.has(city.owner)) continue;
-    const view = Math.max(ctx.rules.vision.cityView, ...city.buildings.map((b) => ctx.catalog.building(b.type).view));
+    const owner = city.owner;
+    const view = Math.max(ctx.rules.vision.cityView, ...city.buildings.map((b) => buildingOf(state, ctx, owner, b.type).view));
     out.push({ pos: ctx.cities.get(city.id)!.pos, range: view * scale });
   }
   return out;
@@ -72,7 +74,16 @@ export function viewFor(state: GameState, ctx: GameContext, player: PlayerId): G
   }
 
   for (const p of view.players) {
-    if (!viewers.has(p.id)) p.money = 0;
+    if (!viewers.has(p.id)) {
+      p.money = 0;
+      // i potenziamenti del Generale li conoscono solo il giocatore e i suoi alleati
+      if (state.phase !== 'ended') p.generalUpgrades = [];
+    }
+    // le strategie degli altri restano segrete finché la partita non comincia
+    if (state.phase === 'selection' && p.id !== player) {
+      p.strategy = null;
+      p.generalUpgrades = [];
+    }
   }
   for (const city of Object.values(view.cities)) {
     if (city.owner !== null && viewers.has(city.owner)) continue;

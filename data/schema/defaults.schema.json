@@ -420,6 +420,12 @@
         "rareUnitChancePct": {
           "type": "number",
           "minimum": 0
+        },
+        "strategies": {
+          "type": "boolean"
+        },
+        "general": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -430,7 +436,9 @@
         "countrySelectSeconds",
         "disconnectGraceMinutes",
         "kickAfterInactiveTurns",
-        "rareUnitChancePct"
+        "rareUnitChancePct",
+        "strategies",
+        "general"
       ],
       "additionalProperties": false
     }

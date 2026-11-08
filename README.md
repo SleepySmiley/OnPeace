@@ -59,7 +59,18 @@ Note:
 
 ## Modificare regole e mappe
 
-Le regole e le mappe sono file JSON. Dopo ogni modifica:
+Le regole e le mappe sono file JSON:
+
+| File | Contenuto |
+|---|---|
+| `data/rules/units.json` | Unità, compresi il Generale e le unità rare (`"rare": true`) |
+| `data/rules/buildings.json` | Edifici |
+| `data/rules/strategies.json` | Strategie: modificatori di unità ed edifici |
+| `data/rules/general.json` | Potenziamenti del Generale e quanti se ne scelgono |
+| `data/rules/defaults.json` | Tutti gli altri numeri del gioco e le opzioni predefinite |
+| `data/maps/*.json` | Mappe |
+
+Dopo ogni modifica:
 
 ```bash
 npm run data:check

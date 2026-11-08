@@ -11,8 +11,9 @@
  */
 import { resolveStackRef, type Action, type UnitSelection } from './actions';
 import { cityDef, type GameContext } from './context';
-import { makeFighter, resolveBattle, rngDice, type Dice, type Exchange } from './combat';
+import { fighterFrom, resolveBattle, rngDice, type Dice, type Exchange, type Fighter } from './combat';
 import { areAllies, canAttack, relationBetween } from './diplomacy';
+import { NO_BOOST, boostsFor, statsOf, unitOf, type Boost } from './forces';
 import {
   applyStartOfTurnEconomy,
   isOwnTerritory,
@@ -21,7 +22,7 @@ import {
 } from './economy';
 import { RuleError } from './errors';
 import { distance, type Point } from './geometry';
-import { firstWallCrossing } from './lines';
+import { firstWallCrossing, stackInDefenceLine } from './lines';
 import {
   applyLoad,
   checkLoad,
@@ -52,6 +53,14 @@ import {
   type UnitState,
 } from './state';
 
+/** Un'unità in una battaglia (maxHp manca negli eventi salvati prima di M5). */
+export interface BattleSide {
+  uid: string;
+  type: string;
+  hp: number;
+  maxHp?: number;
+}
+
 export type TurnEvent =
   | { kind: 'economy'; player: PlayerId; income: number; bonus: number; upkeep: number; net: number }
   | { kind: 'purchase'; player: PlayerId; city: string; units: UnitSelection; buildings: string[]; cost: number }
@@ -73,12 +82,14 @@ export type TurnEvent =
       city: string | null;
       attacker: PlayerId;
       defender: PlayerId | null;
-      /** Unità all'inizio della battaglia (con gli HP iniziali). */
-      attackers: { uid: string; type: string; hp: number }[];
-      defenders: { uid: string; type: string; hp: number }[];
+      /** Unità all'inizio della battaglia (con gli HP iniziali e massimi). */
+      attackers: BattleSide[];
+      defenders: BattleSide[];
       winner: 'attacker' | 'defender';
       mutual: boolean;
       exchanges: Exchange[];
+      /** Armi a uso singolo consumate nell'attacco. */
+      spent?: string[];
     }
   | { kind: 'capture'; player: PlayerId; city: string; from: PlayerId | null; freeMilitia: number; rare: string | null }
   | {
@@ -204,7 +215,7 @@ class Resolver {
   private buy(player: PlayerId, item: Queued, order: Extract<Action, { kind: 'buy' }>['order']): void {
     const errors = validatePurchase(this.state, this.ctx, player, order);
     if (errors.length > 0) return this.fail(player, item, errors.join('; '));
-    const cost = purchaseCost(this.ctx, order);
+    const cost = purchaseCost(this.state, this.ctx, player, order);
     applyPurchase(this.state, this.ctx, player, order);
     this.events.push({ kind: 'purchase', player, city: order.city, units: order.units, buildings: order.buildings, cost });
   }
@@ -429,15 +440,14 @@ class Resolver {
     if (this.ctx.rules.reinforcements.freeMilitiaOnCapture) {
       freeMilitia = reinforcementsForPopulation(cs.population, this.ctx.rules);
       for (let i = 0; i < freeMilitia; i++) {
-        dest.units.push(createUnit(this.state, this.ctx, this.ctx.rules.reinforcements.freeMilitiaUnit, city.id));
+        dest.units.push(createUnit(this.state, this.ctx, this.ctx.rules.reinforcements.freeMilitiaUnit, city.id, player));
       }
     }
 
     let rare: string | null = null;
-    const rares = [...this.ctx.catalog.units.values()].filter((u) => u.role === 'rare');
-    if (rares.length > 0 && this.rng.next() * 100 < this.state.settings.rareUnitChancePct) {
-      rare = this.rng.pick(rares).id;
-      dest.units.push(createUnit(this.state, this.ctx, rare, null));
+    if (this.rng.next() * 100 < this.state.settings.rareUnitChancePct) {
+      rare = this.drawRare(city);
+      if (rare) dest.units.push(createUnit(this.state, this.ctx, rare, null, player));
     }
 
     const isCapital = this.ctx.countries.get(city.country)?.capital === city.id;
@@ -445,6 +455,32 @@ class Resolver {
       ? this.ctx.rules.scoring.capitalCaptured
       : this.ctx.rules.scoring.cityCaptured;
     this.events.push({ kind: 'capture', player, city: city.id, from, freeMilitia, rare });
+  }
+
+  /** Estrae un'unità rara secondo i pesi (le navi solo nei porti). */
+  private drawRare(city: CityDef): string | null {
+    const pool = [...this.ctx.catalog.units.values()].filter(
+      (u) => u.rare && u.rareWeight > 0 && (u.domain !== 'naval' || city.port),
+    );
+    const total = pool.reduce((s, u) => s + u.rareWeight, 0);
+    if (total <= 0) return null;
+    let r = this.rng.next() * total;
+    for (const u of pool) {
+      r -= u.rareWeight;
+      if (r < 0) return u.id;
+    }
+    return pool[pool.length - 1]!.id;
+  }
+
+  /** Combattente di un'unità: strategia del proprietario + bonus di comando + difesa situazionale. */
+  private fighter(owner: PlayerId | null, u: UnitState, boost: Boost, extraDefence: number): Fighter {
+    const heal = this.ctx.rules.combat.healAfterBattle;
+    return fighterFrom(statsOf(this.state, this.ctx, owner, u.type), u.id, heal ? undefined : u.hp, {
+      attack: boost.attack,
+      defence: boost.defence + extraDefence,
+      crit: boost.crit,
+      hp: boost.hp,
+    });
   }
 
   /**
@@ -468,15 +504,42 @@ class Resolver {
     if (defUnits.length === 0 && buildings.length === 0) return null;
 
     const fort = buildings.reduce((s, b) => s + (catalog.building(b.type).effects.cityDefenceBonus ?? 0), 0);
-    const startA = attackers.map((u) => ({ uid: u.id, type: u.type, hp: u.hp }));
-    const startD = [...defUnits, ...buildings].map((u) => ({ uid: u.id, type: u.type, hp: u.hp }));
-    const result = resolveBattle(
-      attackers.map((u) => makeFighter(catalog, u.id, u.type, u.hp)),
-      [...defUnits, ...buildings].map((u) => makeFighter(catalog, u.id, u.type, u.hp)),
-      { rules: this.ctx.rules.combat, dice: this.dice, mutual, defenderExtraDefence: fort },
-    );
+    const ownCity = city !== null && city.owner === defenderOwner && defenderOwner !== null;
+
+    const boostA = boostsFor(this.state, this.ctx, player, attackers);
+    const fightersA = attackers.map((u) => {
+      const f = this.fighter(player, u, boostA(u), 0);
+      // le armi a uso singolo non subiscono danni nel proprio attacco: si consumano alla fine
+      if (unitOf(this.state, this.ctx, player, u.type).oneShot) f.immune = true;
+      return f;
+    });
+    const fightersD: Fighter[] = [];
+    for (const s of defenderStacks) {
+      const boost = boostsFor(this.state, this.ctx, s.owner, s.units);
+      const inLine = stackInDefenceLine(this.state, this.ctx, s);
+      for (const u of s.units) {
+        const def = unitOf(this.state, this.ctx, s.owner, u.type);
+        const situational = (ownCity ? def.cityDefence : 0) + (inLine ? def.lineDefence : 0);
+        fightersD.push(this.fighter(s.owner, u, boost(u), situational));
+      }
+    }
+    for (const b of buildings) fightersD.push(this.fighter(defenderOwner, b, NO_BOOST, 0));
+
+    const side = (fs: Fighter[]) => fs.map((f) => ({ uid: f.uid, type: f.type, hp: f.hp, maxHp: f.maxHp }));
+    const startA = side(fightersA);
+    const startD = side(fightersD);
+    const result = resolveBattle(fightersA, fightersD, {
+      rules: this.ctx.rules.combat,
+      dice: this.dice,
+      mutual,
+      defenderExtraDefence: fort,
+    });
     const hpA = new Map(result.attackers.map((f) => [f.uid, f.hp]));
     const hpD = new Map(result.defenders.map((f) => [f.uid, f.hp]));
+
+    // le armi a uso singolo (missili, testate) si consumano attaccando, anche se "sopravvivono"
+    const spent = attackers.filter((u) => hpA.has(u.id) && unitOf(this.state, this.ctx, player, u.type).oneShot);
+    for (const u of spent) hpA.delete(u.id);
 
     const deadA = attackers.filter((u) => !hpA.has(u.id));
     const deadD = [...defUnits, ...buildings].filter((u) => !hpD.has(u.id));
@@ -495,12 +558,15 @@ class Resolver {
     this.state.stacks = this.state.stacks.filter((s) => s.units.length > 0 || !defenderStacks.includes(s));
     if (city) city.buildings = city.buildings.filter((b) => hpD.has(b.id) || city.owner !== defenderOwner);
 
-    // punteggio: valore delle unità distrutte (compreso il carico dei trasporti)
-    const value = (dead: UnitState[]) =>
-      dead.flatMap((u) => allUnits({ units: [u] } as StackState)).reduce((s, u) => s + catalog.typeStats(u.type).cost, 0) *
+    // punteggio: valore delle unità distrutte (compreso il carico dei trasporti); le armi consumate non contano
+    const value = (dead: UnitState[], owner: PlayerId | null) =>
+      dead
+        .flatMap((u) => allUnits({ units: [u] } as StackState))
+        .reduce((s, u) => s + statsOf(this.state, this.ctx, owner, u.type).cost, 0) *
       this.ctx.rules.scoring.unitCostFactor;
-    getPlayer(this.state, player).score += value(deadD);
-    if (defenderOwner) getPlayer(this.state, defenderOwner).score += value(deadA);
+    const spentIds = new Set(spent.map((u) => u.id));
+    getPlayer(this.state, player).score += value(deadD, defenderOwner);
+    if (defenderOwner) getPlayer(this.state, defenderOwner).score += value(deadA.filter((u) => !spentIds.has(u.id)), player);
 
     // danni collaterali alla popolazione della città attaccata
     if (city && cityId) {
@@ -524,6 +590,7 @@ class Resolver {
       winner: result.winner,
       mutual,
       exchanges: result.exchanges,
+      ...(spent.length > 0 ? { spent: spent.map((u) => u.id) } : {}),
     });
     return { winner: result.winner, survivors };
   }

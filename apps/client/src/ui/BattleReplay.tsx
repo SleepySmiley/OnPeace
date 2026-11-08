@@ -60,7 +60,7 @@ export function BattleReplay({ game, battle, onClose }: Props) {
         </h3>
         <ul>
           {units.map((u) => {
-            const max = ctx.catalog.typeStats(u.type).hp;
+            const max = u.maxHp ?? ctx.catalog.typeStats(u.type).hp;
             const now = hp.get(u.uid) ?? 0;
             const dead = now <= 0;
             return (

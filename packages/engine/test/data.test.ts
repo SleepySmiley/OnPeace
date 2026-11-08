@@ -11,11 +11,14 @@ import { MapDef, checkMap, parseRules, reinforcementsForPopulation } from '../sr
 const dataDir = fileURLToPath(new URL('../../../data', import.meta.url));
 const readJson = (...parts: string[]) => JSON.parse(readFileSync(join(dataDir, ...parts), 'utf8'));
 
-const rules = parseRules({
+const rawRules = () => ({
   units: readJson('rules', 'units.json'),
   buildings: readJson('rules', 'buildings.json'),
   defaults: readJson('rules', 'defaults.json'),
+  strategies: readJson('rules', 'strategies.json'),
+  general: readJson('rules', 'general.json'),
 });
+const rules = parseRules(rawRules());
 
 describe('regole', () => {
   it('unità ed edifici caricati', () => {
@@ -39,11 +42,28 @@ describe('regole', () => {
   });
 
   it('rifiuta riferimenti a unità inesistenti', () => {
-    const units = readJson('rules', 'units.json');
-    units.units[0].defenceBonus = [{ vs: ['unita_fantasma'], value: 1 }];
-    expect(() =>
-      parseRules({ units, buildings: readJson('rules', 'buildings.json'), defaults: readJson('rules', 'defaults.json') }),
-    ).toThrow(/unita_fantasma/);
+    const raw = rawRules();
+    raw.units.units[0].defenceBonus = [{ vs: ['unita_fantasma'], value: 1 }];
+    expect(() => parseRules(raw)).toThrow(/unita_fantasma/);
+  });
+
+  it('rifiuta strategie e potenziamenti con riferimenti sbagliati', () => {
+    const raw = rawRules();
+    raw.strategies.strategies[0].modifiers[0].target = { units: ['carro_fantasma'] };
+    raw.general.defaultUpgrades = ['potenziamento_fantasma'];
+    expect(() => parseRules(raw)).toThrow(/carro_fantasma[\s\S]*potenziamento_fantasma/);
+  });
+
+  it('contenuti di M5: strategie, Generale, unità rare', () => {
+    expect(rules.strategies.length).toBeGreaterThanOrEqual(8);
+    expect(rules.strategies.length).toBeLessThanOrEqual(10);
+    const general = rules.units.find((u) => u.id === rules.general.unit)!;
+    expect(general).toMatchObject({ role: 'general', hp: 1, rare: false });
+    const rares = rules.units.filter((u) => u.rare);
+    expect(rares.length).toBeGreaterThanOrEqual(25);
+    expect(rares.some((u) => u.oneShot && u.collateral >= 50)).toBe(true); // la testata nucleare
+    expect(rares.some((u) => u.hunts.includes('general'))).toBe(true);
+    expect(rares.filter((u) => u.role === 'commander').every((u) => u.aura.length > 0)).toBe(true);
   });
 });
 

@@ -47,7 +47,7 @@ function startedGame(): GameState {
   const s = newGame({ startingFunds: 100_000 });
   selectCountry(s, ctx, 'a', c1.id);
   selectCountry(s, ctx, 'b', c2.id);
-  finishSelection(s);
+  finishSelection(s, ctx);
   return s;
 }
 
@@ -86,7 +86,7 @@ describe('preparazione della partita', () => {
   it('a fine scelta parte il turno 1; chi non ha paesi è fuori', () => {
     const s = newGame();
     selectCountry(s, ctx, 'a', c1.id);
-    finishSelection(s);
+    finishSelection(s, ctx);
     expect(s.phase).toBe('playing');
     expect(s.turn).toBe(1);
     expect(s.players[1]!.status).toBe('left');

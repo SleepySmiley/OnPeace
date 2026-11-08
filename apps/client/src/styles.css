@@ -1210,3 +1210,134 @@ button.money:hover {
   background: rgba(255, 255, 255, 0.05);
   text-decoration: none;
 }
+
+/* ---------------------------------------------------------------- dottrina (strategia e Generale) */
+.doctrine section + section {
+  margin-top: 4px;
+}
+
+.doctrine .section-title .num {
+  margin-left: 4px;
+  color: var(--text);
+}
+
+.wide-select {
+  width: 100%;
+}
+
+.strategy-desc {
+  margin-top: 8px;
+}
+
+.changes {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+.changes summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.changes ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.changes li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--row);
+  line-height: 1.4;
+}
+
+.chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.doctrine.compact .chips {
+  grid-template-columns: 1fr;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px;
+  text-align: left;
+  border-color: var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chip:not(:disabled):hover {
+  background: var(--row);
+  border-color: rgba(150, 175, 195, 0.35);
+}
+
+.chip[aria-pressed='true'],
+.chip[aria-pressed='true']:hover {
+  border-color: var(--accent);
+  background: rgba(226, 176, 74, 0.1);
+}
+
+.chip-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.chip-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+.doctrine-panel {
+  max-height: calc(100% - var(--topbar) - 40px);
+}
+
+.lobby-doctrine {
+  margin-top: 6px;
+}
+
+/* unità speciali negli elenchi */
+.tag.rare {
+  background: rgba(226, 176, 74, 0.14);
+  color: var(--accent);
+}
+
+.general-mark {
+  color: var(--accent);
+  margin-right: 4px;
+}
+
+.strategy-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.panel-close {
+  margin-left: auto;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.doctrine-toggle {
+  left: 14px;
+  top: calc(var(--topbar) + 14px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  font-weight: 600;
+}
+
+.doctrine-toggle:hover {
+  border-color: rgba(150, 175, 195, 0.35);
+}

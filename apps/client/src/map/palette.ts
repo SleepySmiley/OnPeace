@@ -15,6 +15,8 @@ export const MAP_COLORS = {
   port: '#8fd0e4',
   label: '#f3ecd6',
   labelShadow: '#0b1118',
+  /** Stella del Generale sulle pile. */
+  general: '#f2c14e',
 } as const;
 
 /** Toni terrosi per i paesi senza padrone, scelti per tinte ben distinte. */

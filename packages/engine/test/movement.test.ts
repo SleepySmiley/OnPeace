@@ -35,7 +35,7 @@ function game(turn = 2): GameState {
   });
   selectCountry(s, ctx, 'a', 'aa');
   selectCountry(s, ctx, 'b', 'bb');
-  finishSelection(s);
+  finishSelection(s, ctx);
   s.turn = turn;
   return s;
 }
@@ -85,7 +85,7 @@ describe('movimento', () => {
   it('la pila mista usa la media dei raggi', () => {
     const s = game();
     const st = place(s, 'a', ['infantry', 'tanks'], [40, 140]);
-    expect(groupRange(ctx, st.units)).toBe(6.5);
+    expect(groupRange(s, ctx, 'a', st.units)).toBe(6.5);
   });
 
   it('truppe di terra: niente mare, niente montagne', () => {

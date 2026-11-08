@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
+  boostsFor,
+  generalUpgradesOf,
   groupRange,
+  unitOf,
   type GameState,
   type PlayerId,
   type StackRef,
@@ -8,6 +11,7 @@ import {
   type UnitSelection,
 } from '@onpeace/engine';
 import { cityName, playerName, unitName } from '../game/describe';
+import { unitTooltip, upgradeName } from '../game/doctrine';
 import { ctx, useSession } from '../game/store';
 import { Stepper } from './Stepper';
 
@@ -62,13 +66,44 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
     stack.units.filter((u) => u.type === type && !moved.has(u.id)).slice(0, count),
   );
   const domains = new Set(chosen.map((c) => ctx.catalog.unit(c.type).domain));
-  const range = groupRange(ctx, chosenUnits);
+  const range = mine ? groupRange(state, ctx, planner, chosenUnits) : 0;
   const hasTransport = stack.units.some((u) => ctx.catalog.unit(u.type).cargo);
   const loadable = chosen.filter((c) => ctx.catalog.unit(c.type).transportable);
   const cargoChosen: UnitSelection = Object.entries(cargoPick)
     .filter(([, n]) => n > 0)
     .map(([type, count]) => ({ type, count }));
   const ref = stackRef(stack, realState);
+  const hasGeneral = stack.units.some((u) => u.type === ctx.catalog.generalUnit);
+  const upgrades = hasGeneral ? generalUpgradesOf(state, ctx, stack.owner) : [];
+  const boost = boostsFor(state, ctx, stack.owner, stack.units);
+  /** Scheda dell'unità con la strategia del proprietario e i bonus di comando della pila. */
+  const tooltip = (type: string) => {
+    const def = unitOf(state, ctx, stack.owner, type);
+    const sample = stack.units.find((u) => u.type === type);
+    const b = sample ? boost(sample) : null;
+    const bonus = b
+      ? [
+          b.attack && `att ${b.attack > 0 ? '+' : ''}${b.attack}`,
+          b.defence && `dif ${b.defence > 0 ? '+' : ''}${b.defence}`,
+          b.crit && `crit +${b.crit}%`,
+          b.hp && `HP +${b.hp}`,
+          b.move && `mov +${b.move}`,
+          b.view && `vista +${b.view}`,
+          b.upkeep && `mantenimento ${b.upkeep}`,
+        ].filter(Boolean)
+      : [];
+    return unitTooltip(def) + (bonus.length > 0 ? `
+Bonus di comando: ${bonus.join(' · ')}` : '');
+  };
+  const label = (type: string) => {
+    const def = ctx.catalog.units.get(type);
+    return (
+      <span className="shop-name">
+        {def?.role === 'general' && <span className="general-mark" aria-hidden>★</span>}
+        {unitName(type)} {def?.rare && <span className="tag rare">rara</span>}
+      </span>
+    );
+  };
 
   return (
     <section className="panel side-panel" aria-label="Pila">
@@ -95,8 +130,8 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
       )}
       <ul className="unit-list">
         {groups.map((g) => (
-          <li key={g.type}>
-            <span className="shop-name">{unitName(g.type)}</span>
+          <li key={g.type} title={stack.fog ? undefined : tooltip(g.type)}>
+            {label(g.type)}
             {mine ? (
               <>
                 <span className="dim num" title="Ancora da muovere / totale">
@@ -115,6 +150,13 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
           </li>
         ))}
       </ul>
+
+      {upgrades.length > 0 && (
+        <p className="hint-text general-bonus">
+          <span className="general-mark" aria-hidden>★</span>
+          Generale: {upgrades.map((u) => upgradeName(u.id)).join(', ')}
+        </p>
+      )}
 
       {mine && (
         <>
