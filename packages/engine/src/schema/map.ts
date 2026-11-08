@@ -12,6 +12,8 @@ export const CountryDef = z.strictObject({
   name: z.string().min(1),
   /** Id della città capitale (deve appartenere al paese). */
   capital: Id,
+  /** Dove scrivere il nome del paese (facoltativo: senza, lo calcola il client). */
+  label: PointS.optional(),
   shape: MultiPolygonS.min(1),
 });
 export type CountryDef = z.infer<typeof CountryDef>;

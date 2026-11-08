@@ -3,6 +3,7 @@ import { inviteIsLocalOnly, inviteLink } from '../game/net';
 import { PLAYER_COLORS, ctx, useSession } from '../game/store';
 import { ChatPanel } from './ChatPanel';
 import { DoctrinePanel } from './DoctrinePanel';
+import { MapPicker } from './MapPicker';
 
 /** Probabilità di trovare un'unità rara conquistando una città. */
 export const RARE_OPTIONS: [number, string][] = [
@@ -117,6 +118,12 @@ export function LobbyScreen() {
           <section>
             <h3 className="section-title">Opzioni</h3>
             <div className="options">
+              <MapPicker
+                maps={lobby.maps}
+                value={lobby.mapId}
+                disabled={!isHost}
+                onChange={(map) => send({ t: 'settings', settings: { map } })}
+              />
               <label>
                 Durata turno
                 <select

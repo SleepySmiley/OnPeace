@@ -5,6 +5,7 @@ import type { ServerMsg } from '@onpeace/protocol';
 import { loadRules, twoIslandMap } from '../../../packages/engine/test/helpers';
 import { memoryLogger } from '../src/log';
 import { RoomManager, type Persistence } from '../src/manager';
+import { singleMap } from '../src/maps';
 import type { RoomSnapshot } from '../src/room';
 
 // resolveTurn resta quello vero; i test sugli errori del motore lo fanno fallire apposta
@@ -21,6 +22,7 @@ afterEach(() => {
 const map = twoIslandMap();
 const ctx = createContext(map, loadRules());
 const nav = new NavGrid(map);
+const maps = singleMap({ ctx, nav });
 
 function setup() {
   let clock = 1_000_000;
@@ -39,7 +41,7 @@ function setup() {
     isConnected: () => true,
   };
   const now = () => clock;
-  const manager = new RoomManager(ctx, nav, store, transport, now, 0, logger.log);
+  const manager = new RoomManager(maps, store, transport, now, 0, logger.log);
   const last = <T extends ServerMsg['t']>(room: string, player: PlayerId, t: T) =>
     (inbox.get(`${room}:${player}`) ?? []).filter((m): m is Extract<ServerMsg, { t: T }> => m.t === t).at(-1);
   return {
@@ -182,7 +184,7 @@ describe('stanza di gioco', () => {
     expect(snap.plans[host.id]).toHaveLength(1);
 
     // "riavvio": un nuovo gestore ricarica i salvataggi
-    const again = new RoomManager(ctx, nav, t.store, t.transport, t.now, 0);
+    const again = new RoomManager(maps, t.store, t.transport, t.now, 0);
     expect(again.loadSaved()).toBe(1);
     const found = again.byToken(host.token)!;
     expect(found.room.state!.turn).toBe(1);
@@ -305,7 +307,7 @@ describe('stanza di gioco', () => {
     };
     vi.useFakeTimers();
     try {
-      const manager = new RoomManager(ctx, nav, store, t.transport, t.now, 0, t.logger.log);
+      const manager = new RoomManager(maps, store, t.transport, t.now, 0, t.logger.log);
       const { room } = manager.create('Anna', '#e05a4f', {});
       await vi.advanceTimersByTimeAsync(10);
       expect(saved).toEqual([]);

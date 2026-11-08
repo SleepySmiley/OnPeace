@@ -10,10 +10,11 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { MapDef, NavGrid, createContext, parseRules, type PlayerId } from '@onpeace/engine';
+import { parseRules, type PlayerId } from '@onpeace/engine';
 import { parseClientMsg, type ClientMsg, type ServerMsg } from '@onpeace/protocol';
 import { describeError, fileLogger } from './log';
 import { RoomManager } from './manager';
+import { MapLibrary } from './maps';
 import { staticHandler } from './static';
 import { Storage } from './storage';
 
@@ -33,9 +34,7 @@ const rules = parseRules({
   strategies: readJson('rules', 'strategies.json'),
   general: readJson('rules', 'general.json'),
 });
-const map = MapDef.parse(readJson('maps', 'prova.json'));
-const ctx = createContext(map, rules);
-const nav = new NavGrid(map);
+const maps = new MapLibrary(join(repoRoot, 'data', 'maps'), rules);
 
 // ---------------------------------------------------------------- connessioni
 interface Conn {
@@ -72,8 +71,7 @@ const raw = (conn: Conn, msg: ServerMsg) => {
 };
 
 const manager = new RoomManager(
-  ctx,
-  nav,
+  maps,
   new Storage(DATA_DIR),
   {
     send(room, player, msg) {
@@ -128,7 +126,10 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
 }
 
 // ---------------------------------------------------------------- HTTP + WebSocket
-const server = createServer(staticHandler(join(repoRoot, 'apps', 'client', 'dist')));
+const serveClient = staticHandler(join(repoRoot, 'apps', 'client', 'dist'));
+const server = createServer((req, res) => {
+  if (!maps.handle(req, res)) serveClient(req, res);
+});
 // compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~6 volte meno
 const wss = new WebSocketServer({
   server,

@@ -6,7 +6,7 @@
  *
  *   npm run prova                                   avvia un server di prova (cartelle temporanee)
  *   npm run prova -- --url https://xxx.trycloudflare.com    contro un server già acceso (anche dal tunnel)
- *   opzioni: --giocatori 6   --turni 25   --seme 1
+ *   opzioni: --giocatori 6   --turni 25   --seme 1   --mappa europa
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -39,9 +39,10 @@ const arg = (name: string, def: string | null) => {
 const PLAYERS = Math.min(8, Math.max(2, Number(arg('giocatori', '6'))));
 const TURNS = Math.max(5, Number(arg('turni', '25')));
 const SEED = Number(arg('seme', '1'));
+const MAP_ID = arg('mappa', 'prova')!;
 const TIMEOUT_MS = 10 * 60_000;
 
-const ctx = createContext(MapDef.parse(readJson(join(dataDir, 'maps', 'prova.json'))), loadRules());
+const ctx = createContext(MapDef.parse(readJson(join(dataDir, 'maps', `${MAP_ID}.json`))), loadRules());
 const nav = new NavGrid(ctx.map);
 const BUYABLE = [...ctx.catalog.units.values()].filter(isPurchasable);
 const BUILDINGS = [...ctx.catalog.buildings.values()];
@@ -293,7 +294,7 @@ async function main() {
     t: 'create',
     name: host.name,
     color: host.color,
-    settings: { turnSeconds: 60, startingFunds: 3000, maxTurns: TURNS, rareUnitChancePct: 20, strategies: true, general: true },
+    settings: { map: MAP_ID, turnSeconds: 60, startingFunds: 3000, maxTurns: TURNS, rareUnitChancePct: 20, strategies: true, general: true },
   });
   while (!host.lobby) await wait(20);
   const game = host.lobby.id;

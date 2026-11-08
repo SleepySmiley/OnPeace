@@ -5,6 +5,7 @@
  */
 import { create } from 'zustand';
 import {
+  MapDef,
   NavGrid,
   createContext,
   createGame,
@@ -31,6 +32,7 @@ import {
   type ClientMsg,
   type LobbyInfo,
   type LobbySettings,
+  type MapSummary,
   type RoomPhase,
   type ServerMsg,
 } from '@onpeace/protocol';
@@ -39,8 +41,42 @@ export type PauseInfo = NonNullable<Extract<ServerMsg, { t: 'status' }>['paused'
 import { rules, testMap } from '../data';
 import { Net, gameFromUrl, loadSession, saveSession, setGameInUrl } from './net';
 
-export const ctx = createContext(testMap, rules);
-export const nav = new NavGrid(testMap);
+/**
+ * Contesto delle regole e griglia di navigazione della mappa in uso. Cambiano quando si passa a
+ * un'altra mappa: chi li importa vede sempre quelli attuali (binding "vivi" dei moduli ES).
+ */
+export let ctx = createContext(testMap, rules);
+export let nav = new NavGrid(testMap);
+
+const mapCache = new Map<string, Promise<MapDef>>([[testMap.id, Promise.resolve(testMap)]]);
+
+/** Scarica dal server (una volta sola) e valida una mappa. */
+export function fetchMap(id: string): Promise<MapDef> {
+  let pending = mapCache.get(id);
+  if (!pending) {
+    pending = fetch(`/mappe/${id}.json`).then(async (res) => {
+      if (!res.ok) throw new Error(`Mappa ${id}: risposta ${res.status} dal server`);
+      return MapDef.parse(await res.json());
+    });
+    mapCache.set(id, pending);
+    pending.catch(() => mapCache.delete(id));
+  }
+  return pending;
+}
+
+/** Le mappe che il server mette a disposizione. */
+export async function fetchMapList(): Promise<MapSummary[]> {
+  const res = await fetch('/mappe');
+  if (!res.ok) throw new Error(`Elenco delle mappe: risposta ${res.status} dal server`);
+  return (await res.json()) as MapSummary[];
+}
+
+/** Rende attiva una mappa (contesto e griglia si ricalcolano solo se cambia). */
+function activateMap(map: MapDef): void {
+  if (ctx.map === map) return;
+  ctx = createContext(map, rules);
+  nav = new NavGrid(map);
+}
 export const PLAYER_COLORS = COLORS;
 
 export type Mode = 'local' | 'online';
@@ -79,6 +115,10 @@ export interface OnlineState {
 }
 
 interface Session {
+  /** Id della mappa in uso (cambia quando se ne carica un'altra: serve a ridisegnare). */
+  mapId: string;
+  /** Si sta scaricando una mappa. */
+  mapLoading: boolean;
   mode: Mode;
   screen: Screen;
   game: GameState | null;
@@ -102,7 +142,9 @@ interface Session {
   focusOn(pos: Point): void;
 
   // partita locale
-  newGame(players: { name: string; color: string }[], settings?: Partial<GameSettings>): void;
+  newGame(players: { name: string; color: string }[], settings?: Partial<GameSettings>, mapId?: string): Promise<void>;
+  /** Mostra una mappa (per esempio quella scelta prima di cominciare). */
+  showMap(mapId: string): Promise<void>;
   beginPlanning(): void;
   continueAfterResults(): void;
   // partita online
@@ -224,6 +266,31 @@ export function reportClientError(err: unknown, extra = ''): void {
 export const useSession = create<Session>((set, get) => {
   const patchOnline = (patch: Partial<OnlineState>) => set({ online: { ...get().online, ...patch } });
 
+  /** Carica e attiva una mappa; true se è pronta. */
+  async function switchMap(id: string): Promise<boolean> {
+    if (ctx.map.id === id) return true;
+    set({ mapLoading: true });
+    try {
+      activateMap(await fetchMap(id));
+      set({ mapId: id, mapLoading: false });
+      return true;
+    } catch (err) {
+      set({ mapLoading: false, notice: 'Non riesco a scaricare la mappa: controlla la connessione e ricarica la pagina' });
+      reportClientError(err);
+      return false;
+    }
+  }
+
+  // i messaggi si gestiscono in ordine; quelli che usano un'altra mappa aspettano che sia pronta
+  let inbox: Promise<void> = Promise.resolve();
+  function onServer(msg: ServerMsg) {
+    inbox = inbox.then(async () => {
+      const need = msg.t === 'lobby' ? msg.lobby.mapId : msg.t === 'game' ? msg.view.mapId : null;
+      if (need && !(await switchMap(need))) return;
+      handleServer(msg);
+    });
+  }
+
   function handleServer(msg: ServerMsg) {
     const s = get();
     switch (msg.t) {
@@ -296,7 +363,7 @@ export const useSession = create<Session>((set, get) => {
 
   function connect(greeting: () => ClientMsg | null) {
     net?.close();
-    net = new Net(handleServer, (connected) => patchOnline({ connected }), greeting);
+    net = new Net(onServer, (connected) => patchOnline({ connected }), greeting);
   }
 
   function sendPlan() {
@@ -307,9 +374,16 @@ export const useSession = create<Session>((set, get) => {
 
   return {
     ...initial,
+    mapId: ctx.map.id,
+    mapLoading: false,
+
+    async showMap(mapId) {
+      await switchMap(mapId);
+    },
 
     // ---------------------------------------------------------------- locale
-    newGame(players, settings) {
+    async newGame(players, settings, mapId) {
+      if (mapId && !(await switchMap(mapId))) return;
       const game = createGame(ctx, {
         id: `locale-${Date.now()}`,
         seed: Math.floor(Math.random() * 2 ** 31),

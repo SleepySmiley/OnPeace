@@ -42,6 +42,8 @@ export const PlanS = z.array(ActionS).max(400);
 /** Opzioni che l'host può scegliere nella sala d'attesa. */
 export const SettingsS = z
   .object({
+    /** Id della mappa (data/maps/<id>.json). */
+    map: Id,
     turnSeconds: z.number().int().min(30).max(720),
     startingFunds: z.number().int().min(0).max(1_000_000),
     maxTurns: z.number().int().min(5).max(500),
@@ -104,11 +106,23 @@ export interface LobbyPlayer {
   inactiveTurns: number;
 }
 
+/** Una mappa tra cui scegliere nella sala d'attesa. */
+export interface MapSummary {
+  id: string;
+  name: string;
+  description: string;
+  countries: number;
+  cities: number;
+}
+
 export interface LobbyInfo {
   id: string;
   hostId: PlayerId;
   phase: RoomPhase;
+  mapId: string;
   mapName: string;
+  /** Le mappe disponibili sul server. */
+  maps: MapSummary[];
   players: LobbyPlayer[];
   settings: Partial<GameSettings>;
   /** La dottrina scelta da chi riceve il messaggio (quelle degli altri restano segrete). */
