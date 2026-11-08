@@ -129,7 +129,7 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
 
 // ---------------------------------------------------------------- HTTP + WebSocket
 const server = createServer(staticHandler(join(repoRoot, 'apps', 'client', 'dist')));
-// compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~10 volte meno
+// compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~6 volte meno
 const wss = new WebSocketServer({
   server,
   path: '/ws',
