@@ -13,6 +13,7 @@ import {
   type PurchaseOrder,
 } from '@onpeace/engine';
 import { countryName, playerName, unitName } from '../game/describe';
+import { unitTooltip } from '../game/doctrine';
 import { ctx, useSession } from '../game/store';
 import { Stepper } from './Stepper';
 
@@ -92,7 +93,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
           <h3 className="section-title">Arruola</h3>
           <ul className="shop">
             {units.map((u) => (
-              <li key={u.id}>
+              <li key={u.id} title={unitTooltip(u)}>
                 <span className="shop-name">{u.name}</span>
                 <span className="num dim">{u.cost}</span>
                 <Stepper

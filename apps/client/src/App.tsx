@@ -10,6 +10,7 @@ import {
   type Point,
 } from '@onpeace/engine';
 import { describeUnits, playerName } from './game/describe';
+import { doctrineOf } from './game/doctrine';
 import { ctx, currentPicker, currentPlanner, nav, useSession, type MoveDraft } from './game/store';
 import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
 import { MapView, type MapClick } from './map/MapView';
@@ -18,6 +19,7 @@ import { BattleReplay } from './ui/BattleReplay';
 import { ChatPanel } from './ui/ChatPanel';
 import { CityPanel } from './ui/CityPanel';
 import { Countdown } from './ui/Countdown';
+import { DoctrinePanel } from './ui/DoctrinePanel';
 import { FinancePanel } from './ui/FinancePanel';
 import { GameOverPanel } from './ui/GameOverPanel';
 import { InfoPanel } from './ui/InfoPanel';
@@ -78,6 +80,7 @@ export function App() {
   const { game, screen, selected, draft, mode, online } = s;
   const [hover, setHover] = useState<HitTarget | null>(null);
   const [tab, setTab] = useState<Tab>('orders');
+  const [doctrineOpen, setDoctrineOpen] = useState(true);
 
   // all'avvio: se c'è una partita online salvata (e il link non ne indica un'altra), si rientra
   useEffect(() => {
@@ -222,6 +225,12 @@ export function App() {
   // ---------------------------------------------------------------- partita
   const picker = game.phase === 'selection' ? currentPicker(s) : null;
   const pickerPlayer = picker ? game.players.find((p) => p.id === picker) : undefined;
+  // durante la scelta dei paesi: online la propria dottrina, in locale quella di chi sta scegliendo
+  const doctrineId = mode === 'online' ? online.me : picker;
+  const doctrinePlayer =
+    game.phase === 'selection' && (game.settings.strategies || game.settings.general)
+      ? game.players.find((p) => p.id === doctrineId && p.status === 'active')
+      : undefined;
   const economy = planner && shown ? computeEconomy(shown, ctx, planner) : null;
   const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
   const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
@@ -323,6 +332,38 @@ export function App() {
           Fondi: <b className="num">{fmt.format(pickerPlayer.money)}</b>
           {mode === 'online' && <Countdown deadline={online.deadline} />}
         </div>
+      )}
+
+      {doctrinePlayer && !doctrineOpen && (
+        <button type="button" className="panel doctrine-toggle" onClick={() => setDoctrineOpen(true)}>
+          <span className="swatch small" style={{ background: doctrinePlayer.color }} />
+          Strategia e Generale ▸
+        </button>
+      )}
+      {doctrinePlayer && doctrineOpen && (
+        <aside className="panel side-panel doctrine-panel" aria-label="Strategia e Generale">
+          <div className="panel-kicker">
+            <span className="swatch small" style={{ background: doctrinePlayer.color }} />
+            Dottrina · {doctrinePlayer.name}
+            <button
+              type="button"
+              className="ghost tiny panel-close"
+              aria-label="Chiudi il pannello"
+              onClick={() => setDoctrineOpen(false)}
+            >
+              ◂ Chiudi
+            </button>
+          </div>
+          <h2>Strategia e Generale</h2>
+          <p className="hint-text">Si può cambiare fino all'inizio del turno 1; gli avversari la scoprono solo allora.</p>
+          <DoctrinePanel
+            compact
+            doctrine={doctrineOf(game, doctrinePlayer.id)}
+            strategies={Boolean(game.settings.strategies)}
+            general={Boolean(game.settings.general)}
+            onChange={s.chooseDoctrine}
+          />
+        </aside>
       )}
 
       {screen === 'planning' && draftEval && (

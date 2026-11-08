@@ -109,9 +109,10 @@ export function createGame(
     seed: opts.seed,
     settings,
     players: opts.players.map((p) => {
-      // una dottrina non valida (es. strategie disattivate dopo la scelta) viene ignorata
-      const d = p.doctrine;
-      const ok = d && checkDoctrine(ctx, settings, d).length === 0;
+      // si tiene solo la parte valida della dottrina (es. l'host ha spento le strategie dopo la scelta)
+      const d = p.doctrine ?? { strategy: null, general: [] };
+      const strategy = d.strategy && checkDoctrine(ctx, settings, { strategy: d.strategy, general: [] }).length === 0;
+      const general = checkDoctrine(ctx, settings, { strategy: null, general: d.general }).length === 0;
       return {
         id: p.id,
         name: p.name,
@@ -119,8 +120,8 @@ export function createGame(
         team: p.team ?? null,
         money: settings.startingFunds,
         homeCountry: null,
-        strategy: ok ? d.strategy : null,
-        generalUpgrades: ok ? [...d.general] : [],
+        strategy: strategy ? d.strategy : null,
+        generalUpgrades: general ? [...d.general] : [],
         status: 'active',
         score: 0,
       };

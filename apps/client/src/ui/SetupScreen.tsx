@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { gameFromUrl } from '../game/net';
 import { PLAYER_COLORS, ctx, useSession } from '../game/store';
+import { RARE_OPTIONS } from './LobbyScreen';
 
 const DEFAULT_NAMES = ['Anna', 'Bruno', 'Carla', 'Dario', 'Elena', 'Fabio', 'Giulia', 'Luca'];
 const NAME_KEY = 'onpeace.name';
@@ -157,6 +158,9 @@ function LocalForm() {
   );
   const [funds, setFunds] = useState(ctx.rules.game.startingFunds);
   const [maxTurns, setMaxTurns] = useState(ctx.rules.game.maxTurns);
+  const [strategies, setStrategies] = useState(ctx.rules.game.strategies);
+  const [general, setGeneral] = useState(ctx.rules.game.general);
+  const [rarePct, setRarePct] = useState(ctx.rules.game.rareUnitChancePct);
 
   const setPlayer = (i: number, patch: Partial<{ name: string; color: string }>) =>
     setPlayers((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
@@ -175,7 +179,12 @@ function LocalForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) newGame(players.map((p) => ({ ...p, name: p.name.trim() })), { startingFunds: funds, maxTurns });
+        if (valid) {
+          newGame(
+            players.map((p) => ({ ...p, name: p.name.trim() })),
+            { startingFunds: funds, maxTurns, strategies, general, rareUnitChancePct: rarePct },
+          );
+        }
       }}
     >
       <h1>Partita sullo stesso PC</h1>
@@ -234,6 +243,30 @@ function LocalForm() {
         <label>
           Durata (turni)
           <input type="number" min={5} max={200} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
+        </label>
+        <label>
+          Strategie
+          <select value={strategies ? 'si' : 'no'} onChange={(e) => setStrategies(e.target.value === 'si')}>
+            <option value="si">Attive</option>
+            <option value="no">Disattivate</option>
+          </select>
+        </label>
+        <label>
+          Generale
+          <select value={general ? 'si' : 'no'} onChange={(e) => setGeneral(e.target.value === 'si')}>
+            <option value="si">Sì</option>
+            <option value="no">No</option>
+          </select>
+        </label>
+        <label>
+          Unità rare
+          <select value={rarePct} onChange={(e) => setRarePct(Number(e.target.value))}>
+            {RARE_OPTIONS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
         </label>
       </fieldset>
       <button type="submit" className="primary" disabled={!valid}>

@@ -151,6 +151,16 @@ describe('strategie', () => {
     expect(() => setDoctrine(s, ctx, 'a', { strategy: null, general: [] })).toThrow(/prima del turno 1/);
   });
 
+  it('se l’host spegne le strategie si scarta solo la strategia, non i potenziamenti', () => {
+    const s = createGame(ctx, {
+      id: 'x',
+      seed: 1,
+      players: [{ id: 'a', name: 'A', color: '#c33', doctrine: { strategy: 'guerriglia', general: ['fante'] } }],
+      settings: { strategies: false },
+    });
+    expect(s.players[0]).toMatchObject({ strategy: null, generalUpgrades: ['fante'] });
+  });
+
   it('le strategie avversarie restano segrete durante la scelta dei paesi', () => {
     const s = createGame(ctx, {
       id: 'x',

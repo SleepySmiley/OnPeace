@@ -2,11 +2,22 @@ import { useState } from 'react';
 import { inviteLink } from '../game/net';
 import { PLAYER_COLORS, ctx, useSession } from '../game/store';
 import { ChatPanel } from './ChatPanel';
+import { DoctrinePanel } from './DoctrinePanel';
 
-/** Sala d'attesa online: link d'invito, giocatori, colori, opzioni dell'host. */
+/** Probabilità di trovare un'unità rara conquistando una città. */
+export const RARE_OPTIONS: [number, string][] = [
+  [0, 'Nessuna'],
+  [2, 'Poche (2%)'],
+  [5, 'Normali (5%)'],
+  [10, 'Molte (10%)'],
+  [20, 'Moltissime (20%)'],
+];
+
+/** Sala d'attesa online: link d'invito, giocatori, colori, opzioni dell'host, dottrina. */
 export function LobbyScreen() {
   const online = useSession((s) => s.online);
   const send = useSession((s) => s.send);
+  const chooseDoctrine = useSession((s) => s.chooseDoctrine);
   const leave = useSession((s) => s.leaveOnline);
   const [copied, setCopied] = useState(false);
   const lobby = online.lobby;
@@ -31,6 +42,8 @@ export function LobbyScreen() {
   const link = inviteLink(lobby.id);
   const settings = lobby.settings;
   const used = new Set(lobby.players.map((p) => p.color));
+  const strategiesOn = settings.strategies ?? ctx.rules.game.strategies;
+  const generalOn = settings.general ?? ctx.rules.game.general;
 
   return (
     <div className="modal-backdrop">
@@ -147,9 +160,57 @@ export function LobbyScreen() {
                   ))}
                 </select>
               </label>
+              <label>
+                Strategie
+                <select
+                  disabled={!isHost}
+                  value={strategiesOn ? 'si' : 'no'}
+                  onChange={(e) => send({ t: 'settings', settings: { strategies: e.target.value === 'si' } })}
+                >
+                  <option value="si">Attive</option>
+                  <option value="no">Disattivate</option>
+                </select>
+              </label>
+              <label>
+                Generale
+                <select
+                  disabled={!isHost}
+                  value={generalOn ? 'si' : 'no'}
+                  onChange={(e) => send({ t: 'settings', settings: { general: e.target.value === 'si' } })}
+                >
+                  <option value="si">Sì</option>
+                  <option value="no">No</option>
+                </select>
+              </label>
+              <label>
+                Unità rare
+                <select
+                  disabled={!isHost}
+                  value={settings.rareUnitChancePct ?? ctx.rules.game.rareUnitChancePct}
+                  onChange={(e) => send({ t: 'settings', settings: { rareUnitChancePct: Number(e.target.value) } })}
+                >
+                  {RARE_OPTIONS.map(([v, label]) => (
+                    <option key={v} value={v}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </section>
         </div>
+
+        {(strategiesOn || generalOn) && (
+          <section className="lobby-doctrine">
+            <h3 className="section-title">La tua dottrina (segreta fino al turno 1)</h3>
+            <DoctrinePanel
+              doctrine={lobby.doctrine}
+              strategies={strategiesOn}
+              general={generalOn}
+              onChange={chooseDoctrine}
+            />
+          </section>
+        )}
 
         <h3 className="section-title">Chat</h3>
         <div className="lobby-chat">

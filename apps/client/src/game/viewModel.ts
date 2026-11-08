@@ -23,6 +23,8 @@ export interface StackMarker {
   cargo: number;
   /** Fuori vista: si conosce la posizione, non la composizione. */
   fog: boolean;
+  /** Nella pila c'è un Generale. */
+  general: boolean;
 }
 
 export interface PathMarker {
@@ -102,6 +104,7 @@ export function buildView(p: {
       domain,
       cargo: allUnits(s).length - s.units.length,
       fog: Boolean(s.fog),
+      general: allUnits(s).some((u) => u.type === ctx.catalog.generalUnit),
     };
   });
 

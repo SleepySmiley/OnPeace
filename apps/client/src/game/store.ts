@@ -12,8 +12,10 @@ import {
   nextPicker,
   resolveTurn,
   selectCountry,
+  setDoctrine,
   RuleError,
   type Action,
+  type Doctrine,
   type GameSettings,
   type GameState,
   type PlayerId,
@@ -106,6 +108,8 @@ interface Session {
   markChatRead(): void;
   // comuni
   pickCountry(countryId: string): void;
+  /** Strategia e Generale di chi sceglie ora (online: io; in locale: chi sta scegliendo il paese). */
+  chooseDoctrine(doctrine: Doctrine): void;
   select(sel: Selected): void;
   addAction(action: Action): void;
   removeAction(index: number): void;
@@ -355,6 +359,25 @@ export const useSession = create<Session>((set, get) => {
       if (nextPicker(next, ctx) === null) {
         finishSelection(next, ctx);
         return set({ game: next, screen: 'handoff', plannerIndex: 0, notice: null });
+      }
+      set({ game: next, notice: null });
+    },
+
+    chooseDoctrine(doctrine) {
+      const s = get();
+      if (s.mode === 'online') {
+        net?.send({ t: 'doctrine', strategy: doctrine.strategy, general: doctrine.general });
+        return;
+      }
+      if (!s.game || s.game.phase !== 'selection') return;
+      const picker = nextPicker(s.game, ctx);
+      if (!picker) return;
+      const next = structuredClone(s.game);
+      try {
+        setDoctrine(next, ctx, picker, doctrine);
+      } catch (err) {
+        if (err instanceof RuleError) return set({ notice: err.message });
+        throw err;
       }
       set({ game: next, notice: null });
     },

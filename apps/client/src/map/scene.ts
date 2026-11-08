@@ -61,6 +61,23 @@ function domainGlyph(g: Graphics, domain: StackMarker['domain'], x: number, y: n
   else g.circle(x, y, 3).fill(white);
 }
 
+/** Stella a cinque punte centrata in (x, y). */
+function star(g: Graphics, x: number, y: number, r: number) {
+  const pts: number[] = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    pts.push(x + rr * Math.cos(a), y + rr * Math.sin(a));
+  }
+  g.poly(pts).fill('#0b1118');
+}
+
+/** Distintivo del Generale: tondo dorato con una stella scura (diverso dalla stella delle capitali). */
+function generalBadge(g: Graphics, x: number, y: number) {
+  g.circle(x, y, 6.5).fill(MAP_COLORS.general).stroke({ width: 1.5, color: '#0b1118' });
+  star(g, x, y + 0.3, 4);
+}
+
 export function buildScene(app: Application, map: MapDef, fitScale: () => number): Scene {
   const world = new Container();
   const overlay = new Container();
@@ -203,6 +220,7 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       if (marker.selected) g.roundRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6, 6).stroke({ width: 2, color: '#ffffff' });
       g.roundRect(-w / 2, -h / 2, w, h, 4).fill(marker.color).stroke({ width: 1.5, color: '#0b1118' });
       if (!marker.fog) domainGlyph(g, marker.domain, -w / 2 + 8, 0);
+      if (marker.general && !marker.fog) generalBadge(g, w / 2, -h / 2);
       const text = new Text({ text: label, style: countStyle });
       text.anchor.set(0, 0.5);
       text.x = -w / 2 + 14;

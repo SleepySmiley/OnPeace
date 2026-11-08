@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { relationKey, type Action, type GameState, type PlayerId } from '@onpeace/engine';
 import { playerName } from '../game/describe';
+import { strategyName } from '../game/doctrine';
 import { ctx, useSession } from '../game/store';
 
 const RELATION_LABEL = { war: 'Guerra', peace: 'Pace', alliance: 'Alleanza' } as const;
@@ -73,6 +74,9 @@ export function PlayersPanel({ game, planner, actions }: Props) {
               <span className="player-name">
                 {p.name}
                 {isMe && <span className="dim"> (tu)</span>}
+                {game.settings.strategies && game.phase !== 'selection' && (
+                  <span className="strategy-label">{strategyName(p.strategy)}</span>
+                )}
               </span>
               <span className="num dim" title="Città">
                 {cities} città

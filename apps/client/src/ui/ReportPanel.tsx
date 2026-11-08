@@ -41,6 +41,8 @@ function BattleDetail({ e }: { e: BattleEvent }) {
   const typeOf = new Map([...e.attackers, ...e.defenders].map((u) => [u.uid, u.type]));
   const lostA = e.attackers.filter((u) => killed.has(u.uid));
   const lostD = e.defenders.filter((u) => killed.has(u.uid));
+  const spentIds = new Set(e.spent ?? []);
+  const spent = e.attackers.filter((u) => spentIds.has(u.uid));
   const shown = e.exchanges.slice(0, 14);
   return (
     <div className="battle-detail">
@@ -53,6 +55,12 @@ function BattleDetail({ e }: { e: BattleEvent }) {
         <dd>{lostA.length ? describeUnits(asUnits(lostA)) : 'nessuna'}</dd>
         <dt>Perdite difesa</dt>
         <dd>{lostD.length ? describeUnits(asUnits(lostD)) : 'nessuna'}</dd>
+        {spent.length > 0 && (
+          <>
+            <dt>Armi consumate</dt>
+            <dd>{describeUnits(asUnits(spent))}</dd>
+          </>
+        )}
       </dl>
       <button type="button" className="ghost tiny" onClick={() => openReplay(e)}>
         ▶ Rivedi la battaglia
