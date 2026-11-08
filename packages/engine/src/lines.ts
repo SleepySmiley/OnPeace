@@ -51,6 +51,19 @@ export function defenceLines(state: GameState, ctx: GameContext, owner: PlayerId
   return out;
 }
 
+/** La pila fa parte di una linea difensiva (un'altra pila dello stesso tipo è abbastanza vicina). */
+export function stackInDefenceLine(state: GameState, ctx: GameContext, stack: StackState): boolean {
+  if (stack.owner === null) return false;
+  const max = ctx.rules.movement.defenceLineMaxDistance * ctx.map.rangeScale;
+  const k = lineKinds(ctx, stack);
+  if (!k.land && !k.naval) return false;
+  return state.stacks.some((other) => {
+    if (other === stack || other.owner !== stack.owner || distance(other.pos, stack.pos) > max) return false;
+    const o = lineKinds(ctx, other);
+    return (k.land && o.land) || (k.naval && o.naval);
+  });
+}
+
 /** Primo muro nemico incrociato dal segmento from→to (t sul segmento), oppure null. */
 export function firstWallCrossing(
   state: GameState,

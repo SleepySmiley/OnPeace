@@ -110,7 +110,7 @@ describe('partite simulate', () => {
         const pick = free.splice(rng.int(0, free.length - 1), 1)[0]!;
         selectCountry(s, ctx, p.id, pick.id);
       }
-      finishSelection(s);
+      finishSelection(s, ctx);
       checkInvariants(s);
       for (let t = 0; t < 20 && s.phase === 'playing'; t++) {
         const actions: Record<string, Action[]> = {};

@@ -9,6 +9,7 @@
 import { SAME_POINT, resolveStackRef, type Action, type UnitSelection } from './actions';
 import { cityDef, type GameContext } from './context';
 import { canAttack } from './diplomacy';
+import { boostsFor, unitOf } from './forces';
 import { distance, distanceToSegment, type Point } from './geometry';
 import type { NavGrid } from './navigation';
 import type { CityDef } from './schema/map';
@@ -58,8 +59,10 @@ export function pickUnits(
   return out;
 }
 
-export function groupRange(ctx: GameContext, units: readonly UnitState[]): number {
-  const moves = units.map((u) => ctx.catalog.unit(u.type).move);
+/** Raggio di un gruppo che si muove insieme (media o minimo), con strategia e bonus di comando. */
+export function groupRange(state: GameState, ctx: GameContext, owner: PlayerId, units: readonly UnitState[]): number {
+  const boost = boostsFor(state, ctx, owner, units);
+  const moves = units.map((u) => Math.max(0, unitOf(state, ctx, owner, u.type).move + boost(u).move));
   if (moves.length === 0) return 0;
   if (ctx.rules.movement.stackRange === 'minimum') return Math.min(...moves);
   return moves.reduce((s, m) => s + m, 0) / moves.length;
@@ -165,7 +168,9 @@ export function checkMove(
   if (defs.some((d) => d.domain !== domain)) {
     return { ok: false, errors: ['Terra, mare e aria si muovono separatamente'] };
   }
-  if (defs.some((d) => d.move <= 0)) return { ok: false, errors: ['Alcune unità non possono muoversi'] };
+  if (picked.some((u) => unitOf(state, ctx, player, u.type).move <= 0)) {
+    return { ok: false, errors: ['Alcune unità non possono muoversi'] };
+  }
 
   // destinazione: pila bersaglio, città vicina o punto libero
   let target: StackState | null = null;
@@ -187,7 +192,7 @@ export function checkMove(
   }
   const path = [...action.path.slice(0, -1), end];
 
-  const range = groupRange(ctx, picked);
+  const range = groupRange(state, ctx, player, picked);
   const length = pathLength(source.pos, path);
   if (length > range * ctx.map.rangeScale + EPS) {
     errors.push(`Percorso troppo lungo: ${(length / ctx.map.rangeScale).toFixed(1)} su ${range.toFixed(1)}`);
@@ -255,8 +260,8 @@ export function placeUnits(
 
 // ------------------------------------------------------------------ trasporti
 
-function cargoSpace(ctx: GameContext, transport: UnitState, unit: UnitState): boolean {
-  const cargo = ctx.catalog.unit(transport.type).cargo;
+function cargoSpace(state: GameState, ctx: GameContext, owner: PlayerId, transport: UnitState, unit: UnitState): boolean {
+  const cargo = unitOf(state, ctx, owner, transport.type).cargo;
   if (!cargo || transport.cargo.length >= cargo.capacity) return false;
   const def = ctx.catalog.unit(unit.type);
   if (cargo.carries === 'any_land') return def.domain === 'land' && def.transportable;
@@ -281,7 +286,7 @@ export function checkLoad(state: GameState, ctx: GameContext, player: PlayerId, 
   for (const unit of picked) {
     const t = transports.find((tr) => {
       const virtual = { ...tr, cargo: new Array(used.get(tr.id)).fill(null) as UnitState[] };
-      return tr !== unit && cargoSpace(ctx, virtual, unit);
+      return tr !== unit && cargoSpace(state, ctx, player, virtual, unit);
     });
     if (!t) return { ok: false, errors: [`Nessun posto sui trasporti per ${ctx.catalog.unit(unit.type).name}`] };
     used.set(t.id, used.get(t.id)! + 1);

@@ -9,7 +9,7 @@
  * - Distruzione reciproca finale: vince il difensore.
  * - "Stack bonus": il lato più debole tira con un dado sbilanciato verso i valori bassi.
  */
-import type { Catalog } from './catalog';
+import type { Catalog, TypeStats } from './catalog';
 import type { Rng } from './rng';
 import type { RulesDefaults } from './schema/rules';
 
@@ -24,6 +24,11 @@ export interface Fighter {
   crit: number;
   /** Bonus di difesa contro tipi di attaccante specifici. */
   bonusVs: Readonly<Record<string, number>>;
+  role?: string;
+  /** Ruoli nemici che questo combattente colpisce per primi (es. i comandanti). */
+  hunts?: readonly string[];
+  /** Non subisce danni in questa battaglia (armi a uso singolo che attaccano: si consumano dopo). */
+  immune?: boolean;
 }
 
 /** Sorgente di casualità del combattimento, sostituibile nei test. */
@@ -87,19 +92,34 @@ export interface BattleOptions {
   maxExchanges?: number;
 }
 
-/** Crea i combattenti a partire da tipi e HP delle unità. */
-export function makeFighter(catalog: Catalog, uid: string, type: string, hp?: number): Fighter {
-  const s = catalog.typeStats(type);
+/** Variazioni situazionali di un combattente (bonus di comando, città, linea difensiva). */
+export interface FighterExtra {
+  attack?: number;
+  defence?: number;
+  crit?: number;
+  hp?: number;
+}
+
+/** Crea un combattente dalle statistiche (già con la strategia del proprietario). */
+export function fighterFrom(stats: TypeStats, uid: string, hp?: number, extra: FighterExtra = {}): Fighter {
+  const maxHp = Math.max(1, stats.hp + (extra.hp ?? 0));
   return {
     uid,
-    type,
-    hp: hp ?? s.hp,
-    maxHp: s.hp,
-    attack: s.attack,
-    defence: s.defence,
-    crit: s.crit,
-    bonusVs: s.bonusVs,
+    type: stats.id,
+    hp: Math.min(hp ?? maxHp, maxHp),
+    maxHp,
+    attack: Math.max(0, stats.attack + (extra.attack ?? 0)),
+    defence: Math.max(0, stats.defence + (extra.defence ?? 0)),
+    crit: Math.min(100, Math.max(0, stats.crit + (extra.crit ?? 0))),
+    bonusVs: stats.bonusVs,
+    role: stats.role,
+    hunts: stats.hunts,
   };
+}
+
+/** Crea i combattenti a partire da tipi e HP delle unità (valori base). */
+export function makeFighter(catalog: Catalog, uid: string, type: string, hp?: number): Fighter {
+  return fighterFrom(catalog.typeStats(type), uid, hp);
 }
 
 const bonusAgainst = (f: Fighter, attackerType: string) => f.bonusVs[attackerType] ?? 0;
@@ -124,12 +144,13 @@ function byDesc<T>(items: T[], key: (t: T) => number): T[] {
   return [...items].sort((a, b) => key(b) - key(a));
 }
 
-/** Toglie `damage` HP a partire dal primo dell'elenco; il resto passa al successivo. */
+/** Toglie `damage` HP a partire dal primo dell'elenco; il resto passa al successivo. Gli immuni non incassano. */
 function applyDamage(ordered: Fighter[], damage: number, hits: { uid: string; hp: number }[]): string[] {
   const killed: string[] = [];
   let left = damage;
   for (const f of ordered) {
     if (left <= 0) break;
+    if (f.immune) continue;
     const taken = Math.min(f.hp, left);
     f.hp -= taken;
     left -= taken;
@@ -163,7 +184,13 @@ export function resolveBattle(
     if (front.attack <= 0) break; // nessuno può attaccare: la battaglia finisce
     const effDef = (f: Fighter) =>
       Math.max(0, f.defence + targetExtra + (rules.defenceBonusAddsToMax ? bonusAgainst(f, front.type) : 0));
-    const targetsOrder = byDesc(targets, effDef);
+    // chi dà la caccia a certi ruoli (es. i comandanti) li colpisce per primi
+    const hunted = new Set(hitters.flatMap((f) => f.hunts ?? []));
+    const isHunted = (f: Fighter) => f.role !== undefined && hunted.has(f.role);
+    const targetsOrder =
+      hunted.size === 0
+        ? byDesc(targets, effDef)
+        : [...byDesc(targets.filter(isHunted), effDef), ...byDesc(targets.filter((f) => !isHunted(f)), effDef)];
     const guard = targetsOrder[0]!;
 
     let reducerHit = 1;

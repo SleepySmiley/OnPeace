@@ -62,7 +62,7 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
     stack.units.filter((u) => u.type === type && !moved.has(u.id)).slice(0, count),
   );
   const domains = new Set(chosen.map((c) => ctx.catalog.unit(c.type).domain));
-  const range = groupRange(ctx, chosenUnits);
+  const range = mine ? groupRange(state, ctx, planner, chosenUnits) : 0;
   const hasTransport = stack.units.some((u) => ctx.catalog.unit(u.type).cargo);
   const loadable = chosen.filter((c) => ctx.catalog.unit(c.type).transportable);
   const cargoChosen: UnitSelection = Object.entries(cargoPick)

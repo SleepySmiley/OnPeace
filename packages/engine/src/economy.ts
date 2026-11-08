@@ -3,6 +3,7 @@
  * mantenimento delle unità, rinforzi a cicli.
  */
 import { cityDef, countryDef, type GameContext } from './context';
+import { boostsFor, generalUpgradesOf, statsOf } from './forces';
 import type { RulesDefaults } from './schema/rules';
 import { allUnits, type GameState, type PlayerId, type UnitState } from './state';
 
@@ -13,11 +14,21 @@ export function reinforcementsForPopulation(population: number, defaults: RulesD
   return Math.min(row?.reinforcements ?? 0, maxPerCity);
 }
 
-/** Rinforzi di un ciclo per la città: popolazione + edifici (es. Centro di reclutamento). */
+/**
+ * Rinforzi di un ciclo per la città: popolazione + edifici (es. Centro di reclutamento)
+ * + eventuale potenziamento del Generale che si trova lì.
+ */
 export function cityReinforcementQuota(state: GameState, ctx: GameContext, cityId: string): number {
   const city = state.cities[cityId]!;
   let quota = reinforcementsForPopulation(city.population, ctx.rules);
   for (const b of city.buildings) quota += ctx.catalog.building(b.type).effects.extraReinforcements ?? 0;
+  const general = ctx.catalog.generalUnit;
+  const hasGeneral = state.stacks.some(
+    (s) => s.city === cityId && s.owner === city.owner && s.owner !== null && s.units.some((u) => u.type === general),
+  );
+  if (hasGeneral) {
+    for (const up of generalUpgradesOf(state, ctx, city.owner)) quota += up.extraReinforcements;
+  }
   return quota;
 }
 
@@ -66,18 +77,41 @@ export function cityIncome(state: GameState, ctx: GameContext, cityId: string): 
   return (def.income * effectiveIncomePct(state, ctx, cityId) * (city.population / def.population)) / 100;
 }
 
-/** Mantenimento per turno di un'unità o edificio. */
-export function unitUpkeep(state: GameState, ctx: GameContext, owner: PlayerId, unit: UnitState): number {
+/**
+ * Mantenimento per turno di un'unità o edificio: costo (con la strategia) / divisore,
+ * meno la Banca della città d'origine e i bonus di comando (`boostUpkeep`, negativo = risparmio).
+ * Le unità rare non pagano mantenimento.
+ */
+export function unitUpkeep(state: GameState, ctx: GameContext, owner: PlayerId, unit: UnitState, boostUpkeep = 0): number {
   const isBuilding = ctx.catalog.isBuilding(unit.type);
-  if (!isBuilding && ctx.catalog.unit(unit.type).role === 'rare') return 0;
-  let upkeep = ctx.catalog.typeStats(unit.type).cost / ctx.rules.economy.upkeepDivisor;
+  if (!isBuilding && ctx.catalog.unit(unit.type).rare) return 0;
+  let upkeep = statsOf(state, ctx, owner, unit.type).cost / ctx.rules.economy.upkeepDivisor;
   if (unit.origin) {
     const origin = state.cities[unit.origin];
     if (origin?.owner === owner) {
       for (const b of origin.buildings) upkeep -= ctx.catalog.building(b.type).effects.upkeepReduction ?? 0;
     }
   }
-  return Math.max(0, upkeep);
+  return Math.max(0, upkeep + boostUpkeep);
+}
+
+/** Chiama `visit` con il mantenimento di ogni unità e edificio del giocatore. */
+export function forEachUpkeep(
+  state: GameState,
+  ctx: GameContext,
+  player: PlayerId,
+  visit: (unit: UnitState, upkeep: number) => void,
+): void {
+  for (const stack of state.stacks) {
+    if (stack.owner !== player) continue;
+    const units = allUnits(stack);
+    const boost = boostsFor(state, ctx, player, units);
+    for (const u of units) visit(u, unitUpkeep(state, ctx, player, u, boost(u).upkeep));
+  }
+  for (const city of Object.values(state.cities)) {
+    if (city.owner !== player) continue;
+    for (const b of city.buildings) visit(b, unitUpkeep(state, ctx, player, b));
+  }
 }
 
 export interface EconomyReport {
@@ -109,14 +143,7 @@ export function computeEconomy(state: GameState, ctx: GameContext, player: Playe
     bonus += (countryIncome * ctx.rules.economy.fullCountryBonusPct) / 100;
   }
   let upkeep = 0;
-  for (const stack of state.stacks) {
-    if (stack.owner !== player) continue;
-    for (const u of allUnits(stack)) upkeep += unitUpkeep(state, ctx, player, u);
-  }
-  for (const city of Object.values(state.cities)) {
-    if (city.owner !== player) continue;
-    for (const b of city.buildings) upkeep += unitUpkeep(state, ctx, player, b);
-  }
+  forEachUpkeep(state, ctx, player, (_, value) => (upkeep += value));
   income = Math.round(income);
   bonus = Math.round(bonus);
   upkeep = Math.round(upkeep);

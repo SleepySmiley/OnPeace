@@ -228,7 +228,7 @@ export class Room {
   private afterPick(): void {
     const { ctx, now } = this.deps;
     if (this.picker() === null) {
-      finishSelection(this.s.state!);
+      finishSelection(this.s.state!, ctx);
       this.s.phase = 'playing';
       this.s.deadline = now() + this.turnSeconds() * 1000;
     } else {

@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "unit": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "picks": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "defaultUpgrades": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      }
+    },
+    "upgrades": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "aura": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "all": {
+                      "type": "boolean"
+                    },
+                    "units": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]*$"
+                      }
+                    },
+                    "roles": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "ground_main_attack",
+                          "ground_main_defence",
+                          "ground_secondary_defence",
+                          "ground_special_defence",
+                          "ground_stealth",
+                          "naval_main_attack",
+                          "naval_stealth",
+                          "naval_transport",
+                          "air_main_attack",
+                          "air_special_attack",
+                          "air_stealth",
+                          "air_support",
+                          "air_transport",
+                          "general",
+                          "commander",
+                          "other"
+                        ]
+                      }
+                    },
+                    "domains": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "land",
+                          "naval",
+                          "air"
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "attack": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "defence": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "crit": {
+                  "type": "number"
+                },
+                "hp": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "move": {
+                  "type": "number"
+                },
+                "view": {
+                  "type": "number"
+                },
+                "upkeep": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "target"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "extraReinforcements": {
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "unit",
+    "picks",
+    "defaultUpgrades",
+    "upgrades"
+  ],
+  "additionalProperties": false
+}

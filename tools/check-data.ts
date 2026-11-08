@@ -8,7 +8,11 @@ let failed = false;
 let rules;
 try {
   rules = loadRules();
-  console.log(`regole ok: ${rules.units.length} unità, ${rules.buildings.length} edifici`);
+  const rare = rules.units.filter((u) => u.rare).length;
+  console.log(
+    `regole ok: ${rules.units.length - rare} unità, ${rare} rare, ${rules.buildings.length} edifici, ` +
+      `${rules.strategies.length} strategie, ${rules.general.upgrades.length} potenziamenti del Generale`,
+  );
 } catch (err) {
   console.error(String(err));
   process.exit(1);

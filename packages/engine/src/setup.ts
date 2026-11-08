@@ -1,7 +1,8 @@
 /** Creazione della partita e scelta dei paesi (ricerca 01 §1.3). */
 import { cityDef, countryDef, type GameContext } from './context';
 import { reinforcementsForPopulation } from './economy';
-import { assertRule } from './errors';
+import { RuleError, assertRule } from './errors';
+import { statsOf } from './forces';
 import {
   getPlayer,
   newId,
@@ -13,11 +14,18 @@ import {
   type UnitState,
 } from './state';
 
+/** Scelte di un giocatore prima del turno 1: strategia e potenziamenti del Generale. */
+export interface Doctrine {
+  strategy: string | null;
+  general: string[];
+}
+
 export interface NewPlayer {
   id: PlayerId;
   name: string;
   color: string;
   team?: number | null;
+  doctrine?: Doctrine;
 }
 
 export function defaultSettings(ctx: GameContext): GameSettings {
@@ -30,11 +38,60 @@ export function defaultSettings(ctx: GameContext): GameSettings {
     maxAlliances: ctx.rules.diplomacy.maxAlliances,
     rareUnitChancePct: g.rareUnitChancePct,
     turnSeconds: ctx.rules.turn.defaultSeconds,
+    strategies: g.strategies,
+    general: g.general,
   };
 }
 
-export function createUnit(state: GameState, ctx: GameContext, type: string, origin: string | null): UnitState {
-  return { id: newId(state, 'u'), type, hp: ctx.catalog.typeStats(type).hp, origin, cargo: [] };
+/** Nuova unità con gli HP pieni (secondo la strategia del proprietario, se indicato). */
+export function createUnit(
+  state: GameState,
+  ctx: GameContext,
+  type: string,
+  origin: string | null,
+  owner: PlayerId | null = null,
+): UnitState {
+  return { id: newId(state, 'u'), type, hp: statsOf(state, ctx, owner, type).hp, origin, cargo: [] };
+}
+
+/** Motivi per cui la dottrina non è valida (vuoto = valida). */
+export function checkDoctrine(ctx: GameContext, settings: Pick<GameSettings, 'strategies' | 'general'>, d: Doctrine): string[] {
+  const errors: string[] = [];
+  if (d.strategy !== null) {
+    if (!settings.strategies) errors.push('In questa partita le strategie sono disattivate');
+    else if (!ctx.catalog.strategies.has(d.strategy)) errors.push(`Strategia sconosciuta: ${d.strategy}`);
+  }
+  if (d.general.length > 0) {
+    const { picks } = ctx.catalog.rules.general;
+    if (!settings.general) errors.push('In questa partita il Generale non c’è');
+    if (new Set(d.general).size !== d.general.length) errors.push('Potenziamento del Generale ripetuto');
+    if (d.general.length > picks) errors.push(`Il Generale ha al massimo ${picks} potenziamenti`);
+    for (const id of d.general) {
+      if (!ctx.catalog.generalUpgrades.has(id)) errors.push(`Potenziamento sconosciuto: ${id}`);
+    }
+  }
+  return errors;
+}
+
+/** Durante la scelta dei paesi il giocatore può cambiare strategia e potenziamenti del Generale. */
+export function setDoctrine(state: GameState, ctx: GameContext, playerId: PlayerId, d: Doctrine): void {
+  assertRule(state.phase === 'selection', 'Strategia e Generale si scelgono prima del turno 1');
+  const errors = checkDoctrine(ctx, state.settings, d);
+  if (errors.length > 0) throw new RuleError(errors.join('; '));
+  const player = getPlayer(state, playerId);
+  player.strategy = d.strategy;
+  player.generalUpgrades = [...d.general];
+}
+
+/** Completa i potenziamenti mancanti con quelli predefiniti (fino al numero consentito). */
+export function completeGeneralUpgrades(ctx: GameContext, chosen: readonly string[]): string[] {
+  const { picks, defaultUpgrades } = ctx.catalog.rules.general;
+  const out = chosen.filter((id) => ctx.catalog.generalUpgrades.has(id)).slice(0, picks);
+  for (const id of defaultUpgrades) {
+    if (out.length >= picks) break;
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
 }
 
 /** Nuova partita: tutte le città neutrali e presidiate, giocatori senza paesi. */
@@ -51,17 +108,23 @@ export function createGame(
     turn: 0,
     seed: opts.seed,
     settings,
-    players: opts.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      color: p.color,
-      team: p.team ?? null,
-      money: settings.startingFunds,
-      homeCountry: null,
-      strategy: null,
-      status: 'active',
-      score: 0,
-    })),
+    players: opts.players.map((p) => {
+      // una dottrina non valida (es. strategie disattivate dopo la scelta) viene ignorata
+      const d = p.doctrine;
+      const ok = d && checkDoctrine(ctx, settings, d).length === 0;
+      return {
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        team: p.team ?? null,
+        money: settings.startingFunds,
+        homeCountry: null,
+        strategy: ok ? d.strategy : null,
+        generalUpgrades: ok ? [...d.general] : [],
+        status: 'active',
+        score: 0,
+      };
+    }),
     cities: {},
     stacks: [],
     relations: {},
@@ -177,14 +240,34 @@ export function affordableCountries(state: GameState, ctx: GameContext, player: 
     .map((c) => c.id);
 }
 
-/** Fine della scelta: comincia il turno 1. */
-export function finishSelection(state: GameState): void {
+/**
+ * Fine della scelta: comincia il turno 1. Le dottrine si bloccano e, se il Generale
+ * è in gioco, ognuno lo riceve nella capitale del paese natale.
+ */
+export function finishSelection(state: GameState, ctx: GameContext): void {
   assertRule(state.phase === 'selection', 'La partita è già iniziata');
   for (const p of state.players) {
     if (!p.homeCountry) p.status = 'left';
   }
   state.phase = 'playing';
   state.turn = 1;
+  for (const p of state.players) {
+    if (!state.settings.strategies) p.strategy = null;
+    if (!state.settings.general) {
+      p.generalUpgrades = [];
+      continue;
+    }
+    p.generalUpgrades = completeGeneralUpgrades(ctx, p.generalUpgrades ?? []);
+    if (p.status !== 'active' || !p.homeCountry) continue;
+    const capital = countryDef(ctx, p.homeCountry).capital;
+    if (state.cities[capital]?.owner !== p.id) continue;
+    let stack = stackInCity(state, p.id, capital);
+    if (!stack) {
+      stack = { id: newId(state, 's'), owner: p.id, pos: cityDef(ctx, capital).pos, city: capital, units: [], exposed: false };
+      state.stacks.push(stack);
+    }
+    stack.units.push(createUnit(state, ctx, ctx.catalog.generalUnit, null, p.id));
+  }
 }
 
 /** Pila del giocatore dentro una città, se c'è. */

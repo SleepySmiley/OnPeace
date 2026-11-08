@@ -15,7 +15,10 @@ export interface PlayerState {
   money: number;
   /** Primo paese scelto: conta per alcune condizioni di vittoria. */
   homeCountry: string | null;
+  /** Strategia scelta (null = nessuna: valori base). */
   strategy: string | null;
+  /** Potenziamenti scelti per il Generale (assenti nei salvataggi più vecchi). */
+  generalUpgrades?: string[];
   status: 'active' | 'eliminated' | 'surrendered' | 'left';
   score: number;
 }
@@ -84,6 +87,10 @@ export interface GameSettings {
   maxAlliances: number;
   rareUnitChancePct: number;
   turnSeconds: number;
+  /** Strategie attive (se no, tutti giocano con i valori base). Assente nei salvataggi vecchi. */
+  strategies?: boolean;
+  /** Ogni giocatore ha un Generale. Assente nei salvataggi vecchi. */
+  general?: boolean;
 }
 
 export interface GameState {

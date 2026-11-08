@@ -353,7 +353,7 @@ export const useSession = create<Session>((set, get) => {
         throw err;
       }
       if (nextPicker(next, ctx) === null) {
-        finishSelection(next);
+        finishSelection(next, ctx);
         return set({ game: next, screen: 'handoff', plannerIndex: 0, notice: null });
       }
       set({ game: next, notice: null });

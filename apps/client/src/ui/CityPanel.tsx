@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import {
+  buildingOf,
   cityIncome,
   controlsCapital,
   effectiveIncomePct,
+  isPurchasable,
   purchaseCost,
+  unitOf,
   validatePurchase,
   type GameState,
   type PlayerId,
@@ -33,7 +36,10 @@ export function CityPanel({ cityId, state, planner }: Props) {
   const canBuy = mine && controlsCapital(state, ctx, planner, def.country);
   const ownStack = state.stacks.find((s) => s.city === cityId && s.owner === planner);
 
-  const units = [...ctx.catalog.units.values()].filter((u) => u.role !== 'rare' && (u.domain !== 'naval' || def.port));
+  // unità acquistabili, con i valori della strategia di chi compra
+  const units = [...ctx.catalog.units.values()]
+    .filter((u) => isPurchasable(u) && (u.domain !== 'naval' || def.port))
+    .map((u) => (planner ? unitOf(state, ctx, planner, u.id) : u));
   const order: PurchaseOrder = {
     city: cityId,
     units: Object.entries(cart)
@@ -42,7 +48,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
     buildings: [],
   };
   const count = order.units.reduce((s, u) => s + u.count, 0);
-  const cost = count > 0 ? purchaseCost(ctx, order) : 0;
+  const cost = count > 0 && planner ? purchaseCost(state, ctx, planner, order) : 0;
   const errors = count > 0 && planner ? validatePurchase(state, ctx, planner, order) : [];
   const money = planner ? (state.players.find((p) => p.id === planner)?.money ?? 0) : 0;
 
@@ -120,6 +126,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
           <ul className="shop">
             {[...ctx.catalog.buildings.values()]
               .filter((b) => !b.portOnly || def.port)
+              .map((b) => buildingOf(state, ctx, planner, b.id))
               .map((b) => {
                 const built = city.buildings.some((x) => x.type === b.id);
                 const buildErrors = validatePurchase(state, ctx, planner!, { city: cityId, units: [], buildings: [b.id] });

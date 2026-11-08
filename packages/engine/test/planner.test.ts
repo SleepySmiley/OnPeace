@@ -27,7 +27,7 @@ function game() {
   });
   selectCountry(s, ctx, 'a', 'aa');
   selectCountry(s, ctx, 'b', 'bb');
-  finishSelection(s);
+  finishSelection(s, ctx);
   s.turn = 2;
   return s;
 }
