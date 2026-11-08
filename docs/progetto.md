@@ -16,11 +16,11 @@ Le meccaniche riprendono quelle di atWar (ricerca completa in [ricerca/](ricerca
 | Giocatori | Di solito 5–8; mappa media |
 | Contenuti v1 | Base + strategie + edifici + unità rare |
 | Fuori dalla v1 | Bot/IA, progressione persistente, partite lunghe, editor in gioco, account, mobile |
-| Mappe | File JSON creati e modificati da Claude su richiesta |
+| Mappe | File JSON creati e modificati da Claude su richiesta; quelle reali si costruiscono da `data/mondo/` |
 | Accesso | Nickname + link d'invito, codice di rientro salvato nel browser |
 | Hosting | Server sul PC di uno di noi, gli altri entrano tramite tunnel |
 | Stack | TypeScript: Node.js + WebSocket, PixiJS per la mappa, React per i pannelli |
-| Tema e nome della mappa base | Da decidere dopo il prototipo |
+| Ambientazione | Mondo reale di oggi: paesi e città veri (una selezione). Mappa del mondo e mappe dei continenti |
 
 ---
 
@@ -220,6 +220,23 @@ Tutte provvisorie.
 | Uscita dell'ultimo | Se esce o viene espulso l'ultimo giocatore che non aveva finito, il turno si risolve subito |
 | Segnalazioni | Pulsante "Segnala" per chi è in partita; gli errori dell'interfaccia partono da soli (al massimo 10 per sessione). Finiscono in `logs/segnalazioni.jsonl`, con lo stato della partita per i feedback scritti |
 
+### 2.16 Decisioni prese con le mappe reali (M7)
+Tutte provvisorie, nei file di `data/mondo/`.
+
+| Tema | Decisione |
+|---|---|
+| Fonte | Natural Earth 5.1.2 (pubblico dominio): confini 1:50 milioni, località 1:10 milioni con popolazione e nome italiano |
+| Mappe | Mondo, Europa, Asia, Africa, Nord America, Sud America, Oceania e Sud-est asiatico. Ogni continente è ritagliato dagli stessi dati: i paesi tagliati dal bordo restano con la parte che si vede |
+| Proiezioni | Mondo: Miller, tagliato a 169°O (lo stretto di Bering), quindi il Pacifico non si attraversa da un bordo all'altro. Continenti: azimutale equivalente di Lambert centrata sul continente |
+| Scala | 1 punto di raggio vale 60 km nel mondo, 36 km in Europa, 50–60 km negli altri continenti: un Carro fa 250–420 km a turno |
+| Paesi | Quelli di oggi. I microstati vanno al vicino con cui confinano di più (Vaticano e San Marino all'Italia, Monaco alla Francia); le isole sotto una soglia e i paesi fatti solo di isole minuscole spariscono. Alaska, Hawaii e Guyana francese sono paesi a sé, perché lontani dalla capitale. Somaliland con la Somalia, Cipro del Nord con Cipro |
+| Città | Sempre la capitale; poi le più popolose, a una distanza minima (4 punti nello stesso paese, 2 tra paesi diversi), in numero proporzionale ad area e popolazione del paese |
+| Popolazione e reddito | Popolazione di gioco = popolazione reale in milioni elevata a 0,38 (tra 0,3 e 3,2). Reddito = 120 × popolazione di gioco × un fattore tra 0,65 e 1,5 che cresce con il PIL pro capite del paese. Gli stessi ordini di grandezza della mappa di prova |
+| Porti | Le città entro 30 km dal mare |
+| Invalicabili | Himalaya e altopiano del Tibet, calotta glaciale della Groenlandia |
+| Passaggi | Per le truppe di terra: tunnel della Manica, ponti di Øresund e Belt, Bosforo, Kerch, tunnel e ponti del Giappone. Per le navi: Suez, Panama, Gibilterra, Bosforo e Dardanelli, Øresund, Kerch, Messina, Bab el-Mandeb, Hormuz, Singapore |
+| Lettura | A zoom basso si vedono solo i nomi che ci stanno e i presidi neutrali delle città isolate; il resto compare ingrandendo |
+
 ---
 
 ## 3. Architettura tecnica
@@ -233,8 +250,9 @@ OnPeace/
   apps/client/         Vite + React (pannelli, lobby) + PixiJS 8 (mappa)
   data/rules/          unità, edifici, parametri predefiniti (JSON); poi strategie e rare
   data/maps/           mappe (JSON)
+  data/mondo/          configurazione delle mappe reali (inquadrature, paesi, città, montagne, passaggi)
   data/schema/         JSON Schema generati dagli schemi zod (autocompletamento in VS Code)
-  tools/               generatore di mappe, verifica dei dati, generazione schemi
+  tools/               mappe reali (tools/mondo), generatore di mappe inventate, verifica dei dati, generazione schemi
   docs/
 ```
 
@@ -249,18 +267,20 @@ OnPeace/
 ### 3.3 Formato mappa (`data/maps/*.json`)
 - **Contenuto**:
   - dimensioni e scala, cioè quante unità della mappa vale 1 punto di raggio;
-  - paesi, con forma (multipoligono) e capitale. La terra è l'unione dei paesi: tutto il resto è mare. Il valore del paese si calcola dalle sue città;
+  - paesi, con forma (multipoligono), capitale e, se c'è, il punto dove scriverne il nome. La terra è l'unione dei paesi: tutto il resto è mare. Il valore del paese si calcola dalle sue città;
   - città, con posizione, paese, popolazione, reddito nominale e flag porto;
   - zone invalicabili e scorciatoie.
 - Validato da uno **JSON Schema**, così le modifiche fatte da Claude si controllano subito.
 - **Validazione dei percorsi**: all'avvio della partita il server converte i poligoni in una griglia di navigazione (terra/mare/invalicabile) e controlla ogni tratto di percorso campionandolo.
 - **Linee difensive**: segmenti calcolati tra pile alleate vicine; un percorso nemico che ne interseca uno si ferma e deve attaccare.
+- **Mappe reali** (`npm run mondo`, codice in `tools/mondo`): proietta i dati di Natural Earth, ritaglia l'inquadratura, unisce o toglie i paesi troppo piccoli, sceglie le città, segna i porti, aggiunge zone invalicabili e passaggi, poi controlla la mappa come le altre. Le mappe reali hanno fino a ~85.000 vertici: il test terra/mare usa un indice spaziale (caselle e fasce di lati), e il client disegna i confini una volta sola.
 
 ### 3.4 Server (`apps/server`)
 - **Autoritativo**: il client invia azioni, il server le valida e le salva subito. Se un giocatore ricarica la pagina, non perde nulla.
 - **Gestione del turno**: timer gestito dal server; "Fine turno" anticipato quando tutti hanno finito; risoluzione con il motore; invio a ciascuno della propria vista più gli eventi visibili.
 - **Persistenza**: un file JSON per partita in `games/`, scritto in modo atomico a ogni azione (piani compresi). Se il PC si riavvia, la partita riprende. (SQLite scartato: il modulo nativo non si installa con gli script npm bloccati, e i file JSON bastano.)
 - **Rete**: un solo processo e una sola porta (3210) servono sia il client compilato sia il WebSocket su `/ws`. È ciò che serve per il tunnel.
+- **Mappe**: all'avvio legge tutte quelle di `data/maps/` e le serve al client su `/mappe` (elenco) e `/mappe/<id>.json` (compresse). L'host sceglie la mappa nella sala d'attesa; contesto delle regole e griglia di navigazione di ogni mappa si calcolano al primo uso.
 - **Accesso**: link `/p/<idPartita>` e token casuale salvato nel browser per rientrare. Chi crea la partita ne è l'host.
 - **Interfaccia di attesa**: mostra in ogni momento chi ha già finito il turno e chi stiamo aspettando. È una delle lamentele principali su atWar.
 - **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; un salvataggio bloccato (OneDrive, antivirus) viene ritentato. Se il processo cade lo stesso, salva tutto prima di uscire.
@@ -312,11 +332,12 @@ OnPeace/
 | **M4 Interfaccia completa** ✅ | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
 | **M5 Contenuti** ✅ | Strategie, Generale, unità rare (gli edifici erano già in M1) | Varietà e bilanciamento |
 | **M6 Serata di prova** 🟡 | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni. Pronti: `npm run serata`, guida in gioco, pausa, segnalazioni, prova generale. Mancano la serata e le correzioni dopo | Prima partita tra amici |
+| **M7 Mondo reale** ✅ | Mappa del mondo e dei continenti con paesi e città veri, costruite dai dati di Natural Earth; scelta della mappa; mappe grandi leggibili | Si gioca sul mondo o su un continente |
 
 ---
 
 ## 5. Da decidere più avanti
-- Tema, nome e mappa definitiva (dopo il prototipo).
+- Equilibrio tra paesi reali: Stati Uniti, Russia o Cina valgono molto più di un paese piccolo. Se serve: dividere i paesi grandi in regioni, oppure limitare la scelta iniziale.
 - Bilanciamento di strategie, potenziamenti del Generale e rare, dopo le prime partite.
 - Voto sulle impostazioni durante la partita, spettatori, replay completo dell'intera partita: tutti facili da aggiungere grazie al registro degli eventi.
 - Bot che sostituiscano gli assenti (fuori dalla v1).

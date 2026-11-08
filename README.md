@@ -22,6 +22,9 @@ npm run lint           # ESLint
 npm run typecheck      # controllo dei tipi su tutto il progetto
 npm run data:check     # verifica regole e mappe in data/
 npm run data:schema    # rigenera i JSON Schema in data/schema/
+npm run mondo:scarica  # scarica una volta i dati geografici (Natural Earth) in .cache/
+npm run mondo          # ricostruisce le mappe reali da data/mondo/ (oppure: npm run mondo -- europa)
+npm run mondo:anteprima -- europa anteprima.svg   # disegna una mappa in SVG per controllarla
 npm run map:generate -- [seme] [nome]   # genera una mappa inventata in data/maps/<nome>.json
 ```
 
@@ -67,8 +70,9 @@ Dopo la serata, per le correzioni:
 | `apps/client` | Interfaccia: React per i pannelli, PixiJS per la mappa |
 | `data/rules` | Unità, edifici e parametri delle regole (ogni numero del gioco sta qui) |
 | `data/maps` | Mappe in JSON: paesi (forme), città, zone invalicabili, scorciatoie |
+| `data/mondo` | Configurazione delle mappe reali: inquadratura, paesi, città, montagne, passaggi |
 | `data/schema` | JSON Schema generati: danno autocompletamento e controllo in VS Code |
-| `tools` | Generatore di mappe, verifica dati, generazione schemi, avvio della serata, prova generale |
+| `tools` | Costruzione delle mappe reali (`tools/mondo`), generatore di mappe inventate, verifica dati, generazione schemi, avvio della serata, prova generale |
 
 ## Modificare regole e mappe
 
@@ -90,3 +94,22 @@ npm run data:check
 ```
 
 Il comando controlla il formato (schema) e la coerenza: città dentro il proprio paese, capitali valide, porti vicini al mare, città non in montagna, distanze minime.
+
+### Mappe reali
+
+Il mondo e i continenti (`mondo`, `europa`, `asia`, `africa`, `nordamerica`, `sudamerica`, `oceania`) si costruiscono dai dati di [Natural Earth](https://www.naturalearthdata.com/) (pubblico dominio). Questi file in `data/maps/` non si ritoccano a mano: si cambia la configurazione e si ricostruisce.
+
+| File | Contenuto |
+|---|---|
+| `data/mondo/mappe.json` | Per ogni mappa: proiezione e inquadratura, km per punto di raggio, quante città, distanza minima; in cima le formule di popolazione e reddito |
+| `data/mondo/paesi.json` | Paesi esclusi, uniti (es. Somaliland con la Somalia), divisi (Alaska, Hawaii, Guyana francese), nomi |
+| `data/mondo/citta.json` | Capitali scelte a mano, nomi, città escluse o sempre incluse |
+| `data/mondo/geografia.json` | Zone invalicabili e passaggi (tunnel, ponti, canali, stretti) in longitudine e latitudine |
+
+```bash
+npm run mondo:scarica   # solo la prima volta
+npm run mondo           # ricostruisce tutte le mappe e le controlla
+npm test
+```
+
+Il server legge le mappe all'avvio: dopo averle ricostruite va riavviato.
