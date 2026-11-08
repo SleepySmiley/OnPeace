@@ -25,13 +25,13 @@ export function describeUnits(sel: UnitSelection): string {
   return sel.map((s) => `${s.count} ${unitName(s.type)}`).join(', ');
 }
 
-/** "a Norpolis" se la destinazione è una città, altrimenti "in Vargard" (paese) o "in mare". */
-function placeName(pos: readonly [number, number]): string {
+/** Destinazione: città (se agganciata), altrimenti paese o mare. */
+function placeOf(pos: readonly [number, number]): { city: string | null; text: string } {
   const snap = ctx.rules.movement.citySnapDistance * ctx.map.rangeScale;
   const city = ctx.map.cities.find((c) => Math.hypot(c.pos[0] - pos[0], c.pos[1] - pos[1]) <= snap);
-  if (city) return `a ${city.name}`;
+  if (city) return { city: city.name, text: `a ${city.name}` };
   const country = ctx.map.countries.find((c) => pointInMultiPolygon(pos, c.shape as MultiPolygon));
-  return country ? `in ${country.name}` : 'in mare';
+  return { city: null, text: country ? `in ${country.name}` : 'in mare' };
 }
 
 export function describeAction(game: GameState, action: Action, step?: PlannedStep): string {
@@ -42,11 +42,12 @@ export function describeAction(game: GameState, action: Action, step?: PlannedSt
     }
     case 'move': {
       const end = step?.path?.[step.path.length - 1] ?? action.path[action.path.length - 1]!;
-      const where = placeName(end);
+      const place = placeOf(end);
       if (step?.arrival === 'attack_city' || step?.arrival === 'attack_stack' || action.target) {
-        return `Attacca ${where} con ${describeUnits(action.units)}`;
+        const what = place.city ?? `una pila ${place.text}`;
+        return `Attacca ${what} con ${describeUnits(action.units)}`;
       }
-      return `Muovi ${describeUnits(action.units)} ${where}`;
+      return `Muovi ${describeUnits(action.units)} ${place.text}`;
     }
     case 'load':
       return `Carica ${describeUnits(action.units)}`;

@@ -272,7 +272,7 @@ OnPeace/
 |---|---|---|
 | **M0 Fondamenta** ✅ | Monorepo, TypeScript, lint, test; schemi JSON; dati delle unità; **mappa di prova inventata** (12 paesi, 60 città) | La mappa disegnata nel browser |
 | **M1 Motore** ✅ | Economia, acquisti, movimento con validazione geometrica, linee difensive, combattimento, risoluzione del turno con turnblock, diplomazia, vittoria; test | Test verdi e simulazioni |
-| **M2 Sandbox** | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
+| **M2 Sandbox** ✅ | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
 | **M3 Multiplayer** | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
 | **M4 Interfaccia completa** | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
 | **M5 Contenuti** | Strategie, edifici, unità rare | Varietà e bilanciamento |
