@@ -230,6 +230,8 @@ Tutte provvisorie, nei file di `data/mondo/`.
 | Proiezioni | Mondo: Miller, tagliato a 169°O (lo stretto di Bering), quindi il Pacifico non si attraversa da un bordo all'altro. Continenti: azimutale equivalente di Lambert centrata sul continente |
 | Scala | 1 punto di raggio vale 60 km nel mondo, 36 km in Europa, 50–60 km negli altri continenti: un Carro fa 250–420 km a turno |
 | Paesi | Quelli di oggi. I microstati vanno al vicino con cui confinano di più (Vaticano e San Marino all'Italia, Monaco alla Francia); le isole sotto una soglia e i paesi fatti solo di isole minuscole spariscono. Alaska, Hawaii e Guyana francese sono paesi a sé, perché lontani dalla capitale. Somaliland con la Somalia, Cipro del Nord con Cipro |
+| Paesi grandi | Divisi in regioni per l'equilibrio, con i confini veri di stati e province: Stati Uniti (5), Russia (7, i distretti federali), Cina (6), India (5), Canada (6), Brasile (5, le regioni ufficiali), Australia (5). La regione con la capitale nazionale ha quella come capitale, le altre la città più grande. Nel mondo il paese più ricco (il Giappone) vale 2,4 volte l'Italia; prima gli Stati Uniti valevano 6,6 volte |
+| Confini contesi | Si seguono i confini riconosciuti dall'Italia: la Crimea è dell'Ucraina (in Natural Earth è della Russia) |
 | Città | Sempre la capitale; poi le più popolose, a una distanza minima (4 punti nello stesso paese, 2 tra paesi diversi), in numero proporzionale ad area e popolazione del paese |
 | Popolazione e reddito | Popolazione di gioco = popolazione reale in milioni elevata a 0,38 (tra 0,3 e 3,2). Reddito = 120 × popolazione di gioco × un fattore tra 0,65 e 1,5 che cresce con il PIL pro capite del paese. Gli stessi ordini di grandezza della mappa di prova |
 | Porti | Le città entro 30 km dal mare |
@@ -332,12 +334,12 @@ OnPeace/
 | **M4 Interfaccia completa** ✅ | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
 | **M5 Contenuti** ✅ | Strategie, Generale, unità rare (gli edifici erano già in M1) | Varietà e bilanciamento |
 | **M6 Serata di prova** 🟡 | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni. Pronti: `npm run serata`, guida in gioco, pausa, segnalazioni, prova generale. Mancano la serata e le correzioni dopo | Prima partita tra amici |
-| **M7 Mondo reale** ✅ | Mappa del mondo e dei continenti con paesi e città veri, costruite dai dati di Natural Earth; scelta della mappa; mappe grandi leggibili | Si gioca sul mondo o su un continente |
+| **M7 Mondo reale** ✅ | Mappa del mondo e dei continenti con paesi e città veri, costruite dai dati di Natural Earth; paesi grandi divisi in regioni; scelta della mappa; mappe grandi leggibili | Si gioca sul mondo o su un continente |
 
 ---
 
 ## 5. Da decidere più avanti
-- Equilibrio tra paesi reali: Stati Uniti, Russia o Cina valgono molto più di un paese piccolo. Se serve: dividere i paesi grandi in regioni, oppure limitare la scelta iniziale.
+- Equilibrio tra paesi e regioni dopo le prime partite: se serve, altre divisioni (Messico, Argentina, Indonesia, Kazakistan) o limiti nella scelta iniziale.
 - Bilanciamento di strategie, potenziamenti del Generale e rare, dopo le prime partite.
 - Voto sulle impostazioni durante la partita, spettatori, replay completo dell'intera partita: tutti facili da aggiungere grazie al registro degli eventi.
 - Bot che sostituiscano gli assenti (fuori dalla v1).

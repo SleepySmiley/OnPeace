@@ -30,7 +30,7 @@ import {
 } from '@onpeace/engine';
 import { dataDir, loadRules, readJson } from '../data-io';
 import { formatMap } from '../map-format';
-import { loadCountries, loadPlaces, type GeoMultiPolygon, type LonLat, type NePlace } from './fonti';
+import { loadAdmin1, loadCountries, loadPlaces, type GeoMultiPolygon, type LonLat, type NePlace } from './fonti';
 import { densify, laea, miller, type Projection } from './proiezioni';
 
 // il pacchetto è CommonJS: in ESM le funzioni stanno sotto "default"
@@ -111,11 +111,20 @@ const GeoFileS = z.strictObject({
   ),
 });
 
+const RegionS = z.strictObject({ id: IdS, nome: z.string().min(1), membri: z.array(z.string()).min(1) });
+const RegionsFileS = z.strictObject({
+  /** Territori che passano da un paese all'altro (codici delle suddivisioni). */
+  trasferisci: z.array(z.strictObject({ nome: z.string(), da: z.string(), a: z.string(), codici: z.array(z.string()).min(1) })),
+  /** Paesi grandi divisi in regioni: codice del paese → regioni, ognuna con le sue suddivisioni. */
+  paesi: z.record(z.string(), z.array(RegionS).min(2)),
+});
+
 const cfgDir = join(dataDir, 'mondo');
 const mapsFile = MapsFileS.parse(readJson(join(cfgDir, 'mappe.json')));
 const countriesFile = CountriesFileS.parse(readJson(join(cfgDir, 'paesi.json')));
 const citiesFile = CitiesFileS.parse(readJson(join(cfgDir, 'citta.json')));
 const geoFile = GeoFileS.parse(readJson(join(cfgDir, 'geografia.json')));
+const regionsFile = RegionsFileS.parse(readJson(join(cfgDir, 'regioni.json')));
 const rules = loadRules();
 
 // ---------------------------------------------------------------- utilità
@@ -215,7 +224,88 @@ function prepareCountries(): GeoCountry[] {
     const piece = pc.intersection(parent.shape as Geom, box) as GeoMultiPolygon;
     if (piece.length === 0) continue;
     parent.shape = pc.difference(parent.shape as Geom, box) as GeoMultiPolygon;
-    list.push({ id: d.id, codes: new Set(), name: d.nome, gdpPerCapita: parent.gdpPerCapita, label: null, shape: piece });
+    list.push({ id: d.id, codes: new Set(parent.codes), name: d.nome, gdpPerCapita: parent.gdpPerCapita, label: null, shape: piece });
+  }
+
+  // coordinate arrotondate a ~10 m: confini e coste dei due insiemi di dati quasi coincidenti
+  // mandano in crisi le operazioni sui poligoni, arrotondati invece si comportano bene
+  const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
+  const snap = (mp: GeoMultiPolygon): GeoMultiPolygon =>
+    mp.map((poly) => poly.map((ring) => ring.map(([x, y]) => [r4(x), r4(y)] as LonLat)));
+  const admin1 = new Map([...loadAdmin1()].map(([code, shape]) => [code, snap(shape)]));
+  /** Unione delle suddivisioni indicate (avvisa se un codice non esiste). */
+  const unionOf = (codes: string[], where: string): GeoMultiPolygon => {
+    const parts = codes.flatMap((code) => {
+      const shape = admin1.get(code);
+      if (!shape) console.warn(`  (regioni.json) ${where}: suddivisione "${code}" non c'è nei dati`);
+      return shape ? [shape as Geom] : [];
+    });
+    return parts.length === 0 ? [] : (pc.union(...(parts as [Geom, ...Geom[]])) as GeoMultiPolygon);
+  };
+
+  for (const t of regionsFile.trasferisci) {
+    const from = byCode(t.da);
+    const to = byCode(t.a);
+    if (!from || !to) {
+      console.warn(`  (regioni.json) trasferisci ${t.nome}: paese mancante`);
+      continue;
+    }
+    from.shape = snap(from.shape);
+    to.shape = snap(to.shape);
+    const piece = pc.intersection(from.shape as Geom, unionOf(t.codici, t.nome) as Geom) as GeoMultiPolygon;
+    from.shape = pc.difference(from.shape as Geom, piece as Geom) as GeoMultiPolygon;
+    to.shape = pc.union(to.shape as Geom, piece as Geom) as GeoMultiPolygon;
+  }
+
+  for (const [code, regions] of Object.entries(regionsFile.paesi)) {
+    const parent = byCode(code);
+    if (!parent) {
+      console.warn(`  (regioni.json) paese "${code}" non c'è nei dati`);
+      continue;
+    }
+    // ogni regione prende la parte del paese coperta dalle sue suddivisioni, senza sovrapporsi alle precedenti
+    let rest = snap(parent.shape);
+    const pieces = regions.map((r) => {
+      const piece = pc.intersection(rest as Geom, unionOf(r.membri, r.nome) as Geom) as GeoMultiPolygon;
+      rest = pc.difference(rest as Geom, piece as Geom) as GeoMultiPolygon;
+      return piece;
+    });
+    // quello che resta (coste disegnate in modo un po' diverso nei due insiemi di dati) va alla regione più vicina
+    const extra: GeoMultiPolygon[] = pieces.map(() => []);
+    for (const poly of rest) {
+      const p = poly[0]![0]!;
+      let best = 0;
+      let bestD = Infinity;
+      pieces.forEach((piece, i) => {
+        for (const pp of piece) {
+          for (const q of pp[0]!) {
+            const d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2;
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+        }
+      });
+      extra[best]!.push(poly);
+    }
+    extra.forEach((polys, i) => {
+      if (polys.length > 0) pieces[i] = pc.union(pieces[i] as Geom, polys as Geom) as GeoMultiPolygon;
+    });
+    list.splice(
+      list.indexOf(parent),
+      1,
+      ...regions
+        .map((r, i) => ({
+          id: r.id,
+          codes: new Set(parent.codes),
+          name: r.nome,
+          gdpPerCapita: parent.gdpPerCapita,
+          label: null,
+          shape: pieces[i]!,
+        }))
+        .filter((r) => r.shape.length > 0),
+    );
   }
   return list;
 }
@@ -448,7 +538,13 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
     if (pos[0] < 0 || pos[1] < 0 || pos[0] > frame.width || pos[1] > frame.height) continue;
     // poco fuori dalla costa (o fuori per l'arrotondamento): si aggancia al paese giusto, se è vicino
     const rounded: Pt = [round1(pos[0]), round1(pos[1])];
-    const country = countryAt(pos) ?? countries.find((c) => c.geo.codes.has(place.a3));
+    // (tra i paesi con lo stesso codice, per esempio le regioni di un paese grande, il più vicino)
+    const country =
+      countryAt(pos) ??
+      countries
+        .filter((c) => c.geo.codes.has(place.a3))
+        .map((c) => ({ c, d: distanceToBoundary(pos, c.shape as MultiPolygon) }))
+        .sort((a, b) => a.d - b.d)[0]?.c;
     const at = country ? snapInside(rounded, country.shape, snapMax) : null;
     if (!country || !at || inNoGo(at)) continue;
     candidates.push({ place, country, pos: at });
@@ -548,7 +644,7 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
   const cityPoints = chosen.map((c) => c.pos);
   const countryDefs: CountryDef[] = countries.map((c) => {
     let label: Pt | null = null;
-    if (c.geo.label && c.geo.codes.size > 0) {
+    if (c.geo.label) {
       const l = frame.toMap(frame.preparePoint(c.geo.label));
       const free = clearance(l, cityPoints) >= RANGE_SCALE * 1.5;
       if (free && pointInMultiPolygon(l, c.shape as MultiPolygon) && !inNoGo(l)) label = [round1(l[0]), round1(l[1])];
