@@ -7,7 +7,9 @@ export const NE_VERSION = 'v5.1.2';
 export const NE_DIR = join(repoRoot, '.cache', 'natural-earth');
 export const NE_COUNTRIES = 'ne_50m_admin_0_countries';
 export const NE_PLACES = 'ne_10m_populated_places';
-export const NE_FILES = [NE_COUNTRIES, NE_PLACES];
+/** Stati e province, solo per i paesi grandi (Stati Uniti, Russia, Cina, India, Canada, Brasile, Australia…). */
+export const NE_ADMIN1 = 'ne_50m_admin_1_states_provinces';
+export const NE_FILES = [NE_COUNTRIES, NE_PLACES, NE_ADMIN1];
 
 /** Coordinate geografiche: [longitudine, latitudine] in gradi. */
 export type LonLat = [number, number];
@@ -50,13 +52,16 @@ function readGeoJson(name: string): Feature[] {
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+const round4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 export function loadCountries(): NeCountry[] {
   return readGeoJson(NE_COUNTRIES).map((f) => {
     const p = f.properties;
     const g = f.geometry;
-    const shape = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    const raw = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    // arrotondate a ~10 m come le suddivisioni interne, così i confini in comune coincidono
+    const shape = raw.map((poly) => poly.map((ring) => ring.map(([x, y]) => [round4(x), round4(y)] as LonLat)));
     const pop = num(p.POP_EST);
     return {
       a3: str(p.ADM0_A3),
@@ -67,6 +72,19 @@ export function loadCountries(): NeCountry[] {
       shape,
     };
   });
+}
+
+/** Suddivisioni interne (stati, province) per codice ISO 3166-2, es. "US-CA". */
+export function loadAdmin1(): Map<string, GeoMultiPolygon> {
+  const out = new Map<string, GeoMultiPolygon>();
+  for (const f of readGeoJson(NE_ADMIN1)) {
+    const code = str(f.properties.iso_3166_2);
+    const g = f.geometry;
+    if (!code || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
+    const shape = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+    out.set(code, [...(out.get(code) ?? []), ...shape]);
+  }
+  return out;
 }
 
 /** Tipi di località che non sono città vere e proprie. */

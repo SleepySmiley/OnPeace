@@ -105,6 +105,7 @@ Il mondo e i continenti (`mondo`, `europa`, `asia`, `africa`, `nordamerica`, `su
 | `data/mondo/paesi.json` | Paesi esclusi, uniti (es. Somaliland con la Somalia), divisi (Alaska, Hawaii, Guyana francese), nomi |
 | `data/mondo/citta.json` | Capitali scelte a mano, nomi, città escluse o sempre incluse |
 | `data/mondo/geografia.json` | Zone invalicabili e passaggi (tunnel, ponti, canali, stretti) in longitudine e latitudine |
+| `data/mondo/regioni.json` | Paesi grandi divisi in regioni (gruppi di stati e province, per codice ISO 3166-2) e territori riassegnati (Crimea all'Ucraina) |
 
 ```bash
 npm run mondo:scarica   # solo la prima volta

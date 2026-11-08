@@ -1,0 +1,60 @@
+{
+  "trasferisci": [
+    { "nome": "Crimea", "da": "RUS", "a": "UKR", "codici": ["UA-43", "UA-40"] }
+  ],
+  "paesi": {
+    "USA": [
+      { "id": "usa_nordest", "nome": "USA Nordest", "membri": ["US-CT", "US-ME", "US-MA", "US-NH", "US-RI", "US-VT", "US-NJ", "US-NY", "US-PA"] },
+      { "id": "usa_midwest", "nome": "Midwest", "membri": ["US-IL", "US-IN", "US-MI", "US-OH", "US-WI", "US-IA", "US-KS", "US-MN", "US-MO", "US-NE", "US-ND", "US-SD"] },
+      { "id": "usa_sudest", "nome": "USA Sud-est", "membri": ["US-DC", "US-DE", "US-FL", "US-GA", "US-MD", "US-NC", "US-SC", "US-VA", "US-WV", "US-AL", "US-KY", "US-MS", "US-TN"] },
+      { "id": "usa_sudovest", "nome": "Texas e Sud-ovest", "membri": ["US-TX", "US-OK", "US-AR", "US-LA", "US-NM", "US-AZ"] },
+      { "id": "usa_ovest", "nome": "USA Ovest", "membri": ["US-CA", "US-OR", "US-WA", "US-NV", "US-UT", "US-CO", "US-ID", "US-MT", "US-WY"] }
+    ],
+    "RUS": [
+      { "id": "russia_centrale", "nome": "Russia centrale", "membri": ["RU-BEL", "RU-BRY", "RU-VLA", "RU-VOR", "RU-IVA", "RU-KLU", "RU-KOS", "RU-KRS", "RU-LIP", "RU-MOS", "RU-MOW", "RU-ORL", "RU-RYA", "RU-SMO", "RU-TAM", "RU-TVE", "RU-TUL", "RU-YAR"] },
+      { "id": "russia_nordovest", "nome": "Russia nord-occidentale", "membri": ["RU-KR", "RU-KO", "RU-ARK", "RU-NEN", "RU-VLG", "RU-KGD", "RU-LEN", "RU-SPE", "RU-MUR", "RU-NGR", "RU-PSK"] },
+      { "id": "russia_sud", "nome": "Russia meridionale", "membri": ["RU-AD", "RU-KL", "RU-KDA", "RU-AST", "RU-VGG", "RU-ROS", "RU-DA", "RU-IN", "RU-KB", "RU-KC", "RU-SE", "RU-CE", "RU-STA"] },
+      { "id": "volga", "nome": "Volga", "membri": ["RU-BA", "RU-ME", "RU-MO", "RU-TA", "RU-UD", "RU-CU", "RU-PER", "RU-KIR", "RU-NIZ", "RU-ORE", "RU-PNZ", "RU-SAM", "RU-SAR", "RU-ULY"] },
+      { "id": "urali", "nome": "Urali", "membri": ["RU-KGN", "RU-SVE", "RU-TYU", "RU-KHM", "RU-YAN", "RU-CHE"] },
+      { "id": "siberia", "nome": "Siberia", "membri": ["RU-ALT", "RU-AL", "RU-TY", "RU-KK", "RU-KYA", "RU-IRK", "RU-KEM", "RU-NVS", "RU-OMS", "RU-TOM"] },
+      { "id": "estremo_oriente", "nome": "Estremo Oriente russo", "membri": ["RU-SA", "RU-KAM", "RU-PRI", "RU-KHA", "RU-AMU", "RU-MAG", "RU-SAK", "RU-YEV", "RU-CHU", "RU-BU", "RU-ZAB"] }
+    ],
+    "CHN": [
+      { "id": "cina_nord", "nome": "Cina settentrionale", "membri": ["CN-BJ", "CN-TJ", "CN-HE", "CN-SX", "CN-NM"] },
+      { "id": "manciuria", "nome": "Manciuria", "membri": ["CN-LN", "CN-JL", "CN-HL"] },
+      { "id": "cina_est", "nome": "Cina orientale", "membri": ["CN-SH", "CN-JS", "CN-ZJ", "CN-AH", "CN-FJ", "CN-JX", "CN-SD"] },
+      { "id": "cina_sud", "nome": "Cina centro-meridionale", "membri": ["CN-HA", "CN-HB", "CN-HN", "CN-GD", "CN-GX", "CN-HI"] },
+      { "id": "cina_sudovest", "nome": "Cina sud-occidentale", "membri": ["CN-CQ", "CN-SC", "CN-GZ", "CN-YN", "CN-XZ"] },
+      { "id": "cina_nordovest", "nome": "Cina nord-occidentale", "membri": ["CN-SN", "CN-GS", "CN-QH", "CN-NX", "CN-XJ"] }
+    ],
+    "IND": [
+      { "id": "india_nord", "nome": "India settentrionale", "membri": ["IN-JK", "IN-LA", "IN-HP", "IN-PB", "IN-CH", "IN-HR", "IN-DL", "IN-UT", "IN-RJ"] },
+      { "id": "india_centro", "nome": "India centrale", "membri": ["IN-UP", "IN-MP", "IN-CT"] },
+      { "id": "india_est", "nome": "India orientale", "membri": ["IN-BR", "IN-JH", "IN-WB", "IN-OR", "IN-SK", "IN-AS", "IN-AR", "IN-MN", "IN-ML", "IN-MZ", "IN-NL", "IN-TR"] },
+      { "id": "india_ovest", "nome": "India occidentale", "membri": ["IN-GJ", "IN-MH", "IN-GA", "IN-DH"] },
+      { "id": "india_sud", "nome": "India meridionale", "membri": ["IN-AP", "IN-TG", "IN-KA", "IN-KL", "IN-TN", "IN-PY", "IN-LD", "IN-AN"] }
+    ],
+    "CAN": [
+      { "id": "canada_atlantico", "nome": "Canada atlantico", "membri": ["CA-NB", "CA-NS", "CA-PE", "CA-NL"] },
+      { "id": "quebec", "nome": "Québec", "membri": ["CA-QC"] },
+      { "id": "ontario", "nome": "Ontario", "membri": ["CA-ON"] },
+      { "id": "praterie", "nome": "Praterie", "membri": ["CA-MB", "CA-SK", "CA-AB"] },
+      { "id": "columbia_britannica", "nome": "Columbia Britannica", "membri": ["CA-BC", "CA-YT"] },
+      { "id": "grande_nord", "nome": "Grande Nord canadese", "membri": ["CA-NT", "CA-NU"] }
+    ],
+    "BRA": [
+      { "id": "brasile_nord", "nome": "Brasile settentrionale", "membri": ["BR-AC", "BR-AM", "BR-AP", "BR-PA", "BR-RO", "BR-RR", "BR-TO"] },
+      { "id": "brasile_nordest", "nome": "Nordest brasiliano", "membri": ["BR-MA", "BR-PI", "BR-CE", "BR-RN", "BR-PB", "BR-PE", "BR-AL", "BR-SE", "BR-BA"] },
+      { "id": "brasile_centro", "nome": "Brasile centro-occidentale", "membri": ["BR-MT", "BR-MS", "BR-GO", "BR-DF"] },
+      { "id": "brasile_sudest", "nome": "Sudest brasiliano", "membri": ["BR-SP", "BR-RJ", "BR-MG", "BR-ES"] },
+      { "id": "brasile_sud", "nome": "Brasile meridionale", "membri": ["BR-PR", "BR-SC", "BR-RS"] }
+    ],
+    "AUS": [
+      { "id": "nuovo_galles", "nome": "Nuovo Galles del Sud", "membri": ["AU-NSW", "AU-ACT", "AU-X02~"] },
+      { "id": "victoria", "nome": "Victoria e Tasmania", "membri": ["AU-VIC", "AU-TAS"] },
+      { "id": "queensland", "nome": "Queensland", "membri": ["AU-QLD"] },
+      { "id": "australia_ovest", "nome": "Australia Occidentale", "membri": ["AU-WA"] },
+      { "id": "australia_centro", "nome": "Australia centrale", "membri": ["AU-SA", "AU-NT"] }
+    ]
+  }
+}
