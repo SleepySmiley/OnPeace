@@ -20,7 +20,8 @@
     "data:check": "tsx tools/check-data.ts",
     "data:schema": "tsx tools/write-schemas.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:3210",
-    "serata": "tsx tools/serata.ts"
+    "serata": "tsx tools/serata.ts",
+    "prova": "tsx tools/prova-generale.ts"
   },
   "engines": {
     "node": ">=22"

@@ -91,7 +91,8 @@ const loaded = manager.loadSaved();
 
 function handleMessage(conn: Conn, msg: ClientMsg): void {
   if (msg.t === 'report') {
-    if (++conn.reports > MAX_REPORTS_PER_CONN) return;
+    // solo da chi è in una partita (ha il link d'invito): il server è su Internet, il disco no
+    if (!conn.room || ++conn.reports > MAX_REPORTS_PER_CONN) return;
     manager.report(conn.room, conn.player, msg);
     if (msg.kind === 'feedback') raw(conn, { t: 'notice', message: 'Grazie! Segnalazione registrata.' });
     return;
@@ -128,7 +129,13 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
 
 // ---------------------------------------------------------------- HTTP + WebSocket
 const server = createServer(staticHandler(join(repoRoot, 'apps', 'client', 'dist')));
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 256 * 1024 });
+// compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~10 volte meno
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  maxPayload: 256 * 1024,
+  perMessageDeflate: { threshold: 1024 },
+});
 
 wss.on('connection', (ws) => {
   const conn: Conn = { ws, room: null, player: null, alive: true, reports: 0 };
