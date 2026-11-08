@@ -366,8 +366,8 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
     for (const poly of c.shape)
       for (const ring of poly) for (const p of ring) (owners.get(key(p)) ?? owners.set(key(p), new Set()).get(key(p))!).add(c);
   const area = (c: Country) => multiPolygonArea(c.shape as MultiPolygon);
-  for (const small of [...countries].sort((a, b) => area(a) - area(b))) {
-    if (area(small) >= cfg.paeseMinKm2 * km2) break;
+  /** Unisce un paese al vicino con cui condivide più confine; se non confina con nessuno lo toglie. */
+  const absorb = (small: Country) => {
     const shared = new Map<Country, number>();
     for (const poly of small.shape)
       for (const ring of poly)
@@ -376,11 +376,15 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
             if (o !== small && countries.includes(o)) shared.set(o, (shared.get(o) ?? 0) + 1);
     const neighbour = [...shared.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
     countries = countries.filter((c) => c !== small);
-    if (!neighbour) continue;
+    if (!neighbour) return;
     neighbour.shape = tidy(pc.union(neighbour.shape as Geom, small.shape as Geom));
     neighbour.box = bounds(neighbour.shape as MultiPolygon);
     for (const code of small.geo.codes) neighbour.geo.codes.add(code);
     for (const poly of neighbour.shape) for (const ring of poly) for (const p of ring) owners.get(key(p))?.add(neighbour);
+  };
+  for (const small of [...countries].sort((a, b) => area(a) - area(b))) {
+    if (area(small) >= cfg.paeseMinKm2 * km2) break;
+    absorb(small);
   }
 
   const draft = { width: frame.width, height: frame.height, countries: [] as CountryDef[] } as unknown as MapDef;
@@ -422,6 +426,13 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
     const at = country ? snapInside(rounded, country.shape, snapMax) : null;
     if (!country || !at || inNoGo(at)) continue;
     candidates.push({ place, country, pos: at });
+  }
+  // lembi di paesi tagliati dal bordo della mappa, senza nessuna città: vanno al vicino
+  for (const country of [...countries]) {
+    if (!candidates.some((c) => c.country === country)) {
+      warn(`${country.name}: nessuna città dentro la mappa, unito al vicino o tolto`);
+      absorb(country);
+    }
   }
 
   // 5. scelta delle città: la capitale, poi le più popolose ben distanziate, in proporzione al paese
