@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { gameFromUrl } from '../game/net';
 import { PLAYER_COLORS, ctx, useSession } from '../game/store';
 import { RARE_OPTIONS } from './LobbyScreen';
+import { MapPicker, useMapChoice } from './MapPicker';
 
 const DEFAULT_NAMES = ['Anna', 'Bruno', 'Carla', 'Dario', 'Elena', 'Fabio', 'Giulia', 'Luca'];
 const NAME_KEY = 'onpeace.name';
@@ -66,6 +67,7 @@ function CreateForm() {
   const [name, setName] = useState(savedName);
   const [color, setColor] = useState(PLAYER_COLORS[0]!);
   const [turnSeconds, setTurnSeconds] = useState(ctx.rules.turn.defaultSeconds);
+  const choice = useMapChoice();
   const [code, setCode] = useState('');
   const valid = name.trim().length > 0;
 
@@ -75,7 +77,7 @@ function CreateForm() {
         e.preventDefault();
         if (!valid) return;
         rememberName(name.trim());
-        createOnline(name.trim(), color, { turnSeconds });
+        createOnline(name.trim(), color, { turnSeconds, ...(choice.mapId ? { map: choice.mapId } : {}) });
       }}
     >
       <h1>Nuova partita online</h1>
@@ -87,6 +89,7 @@ function CreateForm() {
       </fieldset>
       <fieldset className="options">
         <legend>Opzioni (modificabili nella sala d'attesa)</legend>
+        <MapPicker maps={choice.maps} value={choice.mapId} onChange={choice.setMapId} failed={choice.failed} />
         <label>
           Durata turno
           <select value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))}>
@@ -161,6 +164,7 @@ function LocalForm() {
   const [strategies, setStrategies] = useState(ctx.rules.game.strategies);
   const [general, setGeneral] = useState(ctx.rules.game.general);
   const [rarePct, setRarePct] = useState(ctx.rules.game.rareUnitChancePct);
+  const choice = useMapChoice();
 
   const setPlayer = (i: number, patch: Partial<{ name: string; color: string }>) =>
     setPlayers((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
@@ -180,9 +184,10 @@ function LocalForm() {
       onSubmit={(e) => {
         e.preventDefault();
         if (valid) {
-          newGame(
+          void newGame(
             players.map((p) => ({ ...p, name: p.name.trim() })),
             { startingFunds: funds, maxTurns, strategies, general, rareUnitChancePct: rarePct },
+            choice.mapId ?? undefined,
           );
         }
       }}
@@ -236,6 +241,7 @@ function LocalForm() {
       </fieldset>
       <fieldset className="options">
         <legend>Opzioni</legend>
+        <MapPicker maps={choice.maps} value={choice.mapId} onChange={choice.setMapId} failed={choice.failed} />
         <label>
           Fondi iniziali
           <input type="number" min={0} step={100} value={funds} onChange={(e) => setFunds(Number(e.target.value))} />

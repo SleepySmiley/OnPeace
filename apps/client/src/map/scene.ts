@@ -28,6 +28,13 @@ export interface Scene {
 }
 
 const flat = (ring: readonly Point[]) => ring.flatMap((p) => [p[0], p[1]]);
+
+/** Rettangolo a schermo [x0, y0, x1, y1]. */
+type Rect = [number, number, number, number];
+const overlaps = (a: Rect, b: Rect) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+
+/** Distanza (in pixel) sotto cui le città sono troppo fitte per mostrare i presidi neutrali. */
+const NEUTRAL_MIN_PX = 34;
 const UI_FONT = '"IBM Plex Sans Condensed", system-ui, sans-serif';
 
 /** Linea tratteggiata (in coordinate mondo). */
@@ -130,12 +137,22 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
   }
   mountains.stroke({ width: 1.3, color: MAP_COLORS.mountainLine, alpha: 0.45, join: 'round' });
 
-  // strati che dipendono dallo zoom (spessori costanti a schermo)
+  // confini: disegnati una volta sola, a 1 pixel qualunque sia lo zoom (le mappe reali hanno
+  // decine di migliaia di vertici: ridisegnarli a ogni scatto di rotellina renderebbe lo zoom lento)
   const borders = new Graphics();
+  for (const country of map.countries) {
+    for (const poly of country.shape) for (const ring of poly) borders.poly(flat(ring));
+  }
+  borders.stroke({ width: 1, color: MAP_COLORS.border, alpha: 0.85, pixelLine: true });
+  // paesi che si possono scegliere: ridisegnati solo quando cambia l'elenco
+  const pickBorders = new Graphics();
+  let pickKey = '';
+
+  // strati che dipendono dallo zoom (spessori costanti a schermo)
   const highlight = new Graphics();
   const paths = new Graphics();
   const draftG = new Graphics();
-  world.addChild(grid, shallows, baseFills, ownerFills, mountains, borders, highlight, paths, draftG);
+  world.addChild(grid, shallows, baseFills, ownerFills, mountains, borders, pickBorders, highlight, paths, draftG);
 
   // ---------------------------------------------------------------- etichette dei paesi
   const countryLabelStyle = new TextStyle({
@@ -148,12 +165,17 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
   });
   // da evitare: le città e, poco sopra, le etichette delle pile
   const avoid: Point[] = map.cities.flatMap((c) => [c.pos, [c.pos[0], c.pos[1] - 32] as Point]);
-  const countryLabels = map.countries.map((country) => {
-    const text = new Text({ text: country.name.toUpperCase(), style: countryLabelStyle });
-    text.anchor.set(0.5, 0.5);
-    overlay.addChild(text);
-    return { text, at: labelPoint(country.shape as MultiPolygon, avoid) };
-  });
+  const countryBoxes = new Map(map.countries.map((c) => [c.id, bounds(c.shape as MultiPolygon)]));
+  // dal paese più grande: se due nomi si sovrappongono resta quello del paese più grande
+  const countryLabels = map.countries
+    .map((country) => {
+      const text = new Text({ text: country.name.toUpperCase(), style: countryLabelStyle });
+      text.anchor.set(0.5, 0.5);
+      overlay.addChild(text);
+      const [x0, y0, x1, y1] = countryBoxes.get(country.id)!;
+      return { text, w: x1 - x0, h: y1 - y0, at: country.label ?? labelPoint(country.shape as MultiPolygon, avoid) };
+    })
+    .sort((a, b) => b.w * b.h - a.w * a.h);
 
   // ---------------------------------------------------------------- città
   const cityLabelStyle = new TextStyle({
@@ -177,8 +199,16 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     label.y = isCapital ? 10 : 8;
     node.addChild(mark, label);
     cityLayer.addChild(node);
-    return { city, node, mark, label, isCapital };
+    // distanza dalla città più vicina: dice da che zoom in poi c'è spazio per nome e presidio
+    let nearest = Infinity;
+    for (const other of map.cities) if (other !== city) nearest = Math.min(nearest, distance(city.pos, other.pos));
+    return { city, node, mark, label, isCapital, nearest };
   });
+  const nearestById = new Map(cityNodes.map((c) => [c.city.id, c.nearest]));
+  // ordine dei nomi: prima le capitali, poi le città più popolose
+  const labelOrder = [...cityNodes].sort(
+    (a, b) => Number(b.isCapital) - Number(a.isCapital) || b.city.population - a.city.population,
+  );
 
   function drawCities() {
     for (const { city, mark, isCapital } of cityNodes) {
@@ -249,21 +279,6 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
   // ---------------------------------------------------------------- disegni legati allo zoom
   function drawZoomDependent() {
     const px = 1 / scale;
-    borders.clear();
-    for (const country of map.countries) {
-      for (const poly of country.shape) {
-        for (const ring of poly) {
-          borders.poly(flat(ring)).stroke({ width: 1.3 * px, color: MAP_COLORS.border, alpha: 0.8, join: 'round' });
-        }
-      }
-    }
-    if (view.pickable) {
-      for (const id of view.pickable) {
-        for (const poly of countryById.get(id)!.shape) {
-          borders.poly(flat(poly[0]!)).stroke({ width: 2 * px, color: '#f3ecd6', alpha: 0.55, join: 'round' });
-        }
-      }
-    }
     drawHighlight();
 
     paths.clear();
@@ -301,6 +316,16 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     }
   }
 
+  function drawPickable() {
+    const key = view.pickable ? [...view.pickable].join(',') : '';
+    if (key === pickKey) return;
+    pickKey = key;
+    pickBorders.clear();
+    if (!view.pickable) return;
+    for (const id of view.pickable) for (const poly of countryById.get(id)!.shape) pickBorders.poly(flat(poly[0]!));
+    pickBorders.stroke({ width: 1, color: '#f3ecd6', alpha: 0.75, pixelLine: true });
+  }
+
   function drawOwners() {
     ownerFills.clear();
     for (const country of map.countries) {
@@ -317,17 +342,33 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
 
   function positionOverlay(camera: Camera) {
     const zoom = camera.scale / fitScale();
-    for (const { text, at } of countryLabels) {
-      const [sx, sy] = camera.toScreen(at);
-      text.position.set(sx, sy);
-      text.alpha = zoom > 3.5 ? 0.45 : 0.88;
+    const screenW = app.screen.width;
+    const screenH = app.screen.height;
+    const onScreen = (r: Rect) => r[2] > 0 && r[0] < screenW && r[3] > 0 && r[1] < screenH;
+    // nomi dei paesi: solo se il nome ci sta nel paese e non copre quello di un paese più grande
+    const placed: Rect[] = [];
+    for (const l of countryLabels) {
+      const [sx, sy] = camera.toScreen(l.at);
+      l.text.position.set(sx, sy);
+      l.text.alpha = zoom > 3.5 ? 0.45 : 0.88;
+      const w = l.text.width;
+      const h = l.text.height;
+      const r: Rect = [sx - w / 2, sy - h / 2, sx + w / 2, sy + h / 2];
+      const fits = l.w * camera.scale >= w * 0.85 && l.h * camera.scale >= h * 1.4;
+      l.text.visible = fits && onScreen(r) && !placed.some((p) => overlaps(p, r));
+      if (l.text.visible) placed.push(r);
     }
+    // nomi delle città: quella sotto il mouse e la selezionata sempre, le altre se c'è posto
     const hoveredCity = hovered?.kind === 'city' ? hovered.id : null;
-    for (const { city, node, label, isCapital } of cityNodes) {
+    for (const { city, node } of cityNodes) node.position.set(...camera.toScreen(city.pos));
+    for (const { city, label, nearest } of labelOrder) {
+      const forced = city.id === hoveredCity || city.id === view.selectedCity;
       const [sx, sy] = camera.toScreen(city.pos);
-      node.position.set(sx, sy);
-      label.visible =
-        city.id === hoveredCity || city.id === view.selectedCity || zoom >= 1.7 || (isCapital && zoom >= 1.15);
+      const w = label.width;
+      const r: Rect = [sx - w / 2, sy + label.y, sx + w / 2, sy + label.y + label.height];
+      const room = nearest * camera.scale >= 26 && onScreen(r) && !placed.some((p) => overlaps(p, r));
+      label.visible = forced || room;
+      if (label.visible) placed.push(r);
     }
     // pile: in città sopra il simbolo; più pile nello stesso punto affiancate
     const slots = new Map<string, number>();
@@ -339,6 +380,13 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       s.sx = sx + slot * (s.w + 4);
       s.sy = sy + (s.marker.inCity ? -22 : 0);
       s.node.position.set(s.sx, s.sy);
+      // presidi neutrali: nascosti dove le città sono troppo fitte a questo zoom
+      const crowded =
+        s.marker.owner === null &&
+        !s.marker.selected &&
+        s.marker.inCity !== null &&
+        (nearestById.get(s.marker.inCity) ?? Infinity) * camera.scale < NEUTRAL_MIN_PX;
+      s.node.visible = !crowded;
     }
     for (const child of markerLayer.children) {
       const pos = (child as Graphics & { worldPos?: Point }).worldPos;
@@ -358,6 +406,7 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     },
     setView(next) {
       view = next;
+      drawPickable();
       drawOwners();
       drawCities();
       drawStacks();
@@ -378,7 +427,7 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     hitTest(camera, sx, sy) {
       for (let i = stackNodes.length - 1; i >= 0; i--) {
         const s = stackNodes[i]!;
-        if (Math.abs(sx - s.sx) <= s.w / 2 + 2 && Math.abs(sy - s.sy) <= s.h / 2 + 2) {
+        if (s.node.visible && Math.abs(sx - s.sx) <= s.w / 2 + 2 && Math.abs(sy - s.sy) <= s.h / 2 + 2) {
           return { kind: 'stack', id: s.marker.id };
         }
       }
@@ -393,7 +442,10 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       }
       if (bestCity) return { kind: 'city', id: bestCity };
       const p = camera.toWorld(sx, sy);
-      const country = map.countries.find((c) => pointInMultiPolygon(p, c.shape as MultiPolygon));
+      const country = map.countries.find((c) => {
+        const [x0, y0, x1, y1] = countryBoxes.get(c.id)!;
+        return p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1 && pointInMultiPolygon(p, c.shape as MultiPolygon);
+      });
       return country ? { kind: 'country', id: country.id } : null;
     },
   };

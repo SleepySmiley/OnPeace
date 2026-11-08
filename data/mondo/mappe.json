@@ -1,0 +1,95 @@
+{
+  "citta": {
+    "popolazioneEsponente": 0.38,
+    "popolazioneMin": 0.3,
+    "popolazioneMax": 3.2,
+    "redditoPerPopolazione": 120,
+    "pilProCapiteRiferimento": 12000,
+    "pilEsponente": 0.25,
+    "pilFattoreMin": 0.65,
+    "pilFattoreMax": 1.5,
+    "portoKm": 30,
+    "pesoArea": 0.5,
+    "pesoPopolazione": 1.5,
+    "agganciaKm": 40
+  },
+  "mappe": [
+    {
+      "id": "mondo",
+      "nome": "Mondo",
+      "descrizione": "Tutto il mondo, con i paesi di oggi e le loro città principali.",
+      "proiezione": { "tipo": "miller", "meridianoCentrale": 11, "latMin": -57, "latMax": 84 },
+      "kmPerPunto": 60,
+      "paeseMinKm2": 2000,
+      "isolaMinKm2": 1000,
+      "citta": 420,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "europa",
+      "nome": "Europa",
+      "descrizione": "Dall'Atlantico agli Urali, con il Nord Africa e il Medio Oriente vicino.",
+      "proiezione": { "tipo": "laea", "centro": [16, 50], "larghezzaKm": 6200, "altezzaKm": 4600 },
+      "kmPerPunto": 36,
+      "paeseMinKm2": 1500,
+      "isolaMinKm2": 300,
+      "citta": 150,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "asia",
+      "nome": "Asia",
+      "descrizione": "Dal Medio Oriente al Giappone, dalla Siberia all'Indonesia.",
+      "proiezione": { "tipo": "laea", "centro": [92, 30], "larghezzaKm": 11000, "altezzaKm": 7600 },
+      "kmPerPunto": 60,
+      "paeseMinKm2": 2000,
+      "isolaMinKm2": 800,
+      "citta": 170,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "africa",
+      "nome": "Africa",
+      "descrizione": "Tutta l'Africa, con le coste del Mediterraneo e la penisola arabica.",
+      "proiezione": { "tipo": "laea", "centro": [19, 4], "larghezzaKm": 8200, "altezzaKm": 8400 },
+      "kmPerPunto": 55,
+      "paeseMinKm2": 2000,
+      "isolaMinKm2": 800,
+      "citta": 150,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "nordamerica",
+      "nome": "Nord America",
+      "descrizione": "Canada, Stati Uniti, Messico, America centrale e Caraibi.",
+      "proiezione": { "tipo": "laea", "centro": [-106, 41], "larghezzaKm": 9000, "altezzaKm": 7900 },
+      "kmPerPunto": 50,
+      "paeseMinKm2": 2000,
+      "isolaMinKm2": 800,
+      "citta": 130,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "sudamerica",
+      "nome": "Sud America",
+      "descrizione": "Tutto il Sud America, con l'America centrale e i Caraibi.",
+      "proiezione": { "tipo": "laea", "centro": [-62, -21], "larghezzaKm": 7000, "altezzaKm": 8300 },
+      "kmPerPunto": 50,
+      "paeseMinKm2": 2000,
+      "isolaMinKm2": 800,
+      "citta": 110,
+      "distanzaMinimaPunti": 4
+    },
+    {
+      "id": "oceania",
+      "nome": "Oceania e Sud-est asiatico",
+      "descrizione": "Australia, Nuova Zelanda, Indonesia, Filippine e Indocina.",
+      "proiezione": { "tipo": "laea", "centro": [140, -17], "larghezzaKm": 9600, "altezzaKm": 7600 },
+      "kmPerPunto": 55,
+      "paeseMinKm2": 1500,
+      "isolaMinKm2": 800,
+      "citta": 110,
+      "distanzaMinimaPunti": 4
+    }
+  ]
+}

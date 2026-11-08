@@ -1,8 +1,9 @@
 /** Tutte le partite del server: creazione, ingresso, token di rientro, salvataggi, timer. */
 import { randomBytes } from 'node:crypto';
-import type { GameContext, NavGrid, PlayerId } from '@onpeace/engine';
+import type { PlayerId } from '@onpeace/engine';
 import type { ClientMsg, LobbySettings, ServerMsg } from '@onpeace/protocol';
 import { consoleLogger, type Logger } from './log';
+import type { MapProvider } from './maps';
 import { Room, type RoomSnapshot, type Seat } from './room';
 
 /** Se un salvataggio fallisce (es. file bloccato da OneDrive o dall'antivirus) si riprova dopo questo tempo. */
@@ -30,8 +31,7 @@ export class RoomManager {
   private readonly pendingSave = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
-    private readonly ctx: GameContext,
-    private readonly nav: NavGrid,
+    private readonly maps: MapProvider,
     private readonly store: Persistence,
     private readonly transport: Transport,
     private readonly now: () => number = Date.now,
@@ -41,8 +41,7 @@ export class RoomManager {
 
   private deps(id: string) {
     return {
-      ctx: this.ctx,
-      nav: this.nav,
+      maps: this.maps,
       now: this.now,
       send: (player: PlayerId, msg: ServerMsg) => this.transport.send(id, player, msg),
       changed: (room: Room) => this.scheduleSave(room, this.saveDelayMs),

@@ -20,9 +20,7 @@ import {
   viewFor,
   type Action,
   type Doctrine,
-  type GameContext,
   type GameState,
-  type NavGrid,
   type PlayerId,
   type TurnEvent,
 } from '@onpeace/engine';
@@ -38,6 +36,7 @@ import {
   type ServerMsg,
 } from '@onpeace/protocol';
 import { describeError, type Logger } from './log';
+import type { MapProvider, MapWorld } from './maps';
 
 export interface Seat {
   id: PlayerId;
@@ -73,8 +72,8 @@ export interface RoomSnapshot {
 }
 
 export interface RoomDeps {
-  ctx: GameContext;
-  nav: NavGrid;
+  /** Le mappe: ogni stanza usa quella scelta dall'host. */
+  maps: MapProvider;
   now: () => number;
   send: (player: PlayerId, msg: ServerMsg) => void;
   /** Lo stato della stanza è cambiato: va salvato. */
@@ -158,6 +157,17 @@ export class Room {
 
   // ---------------------------------------------------------------- messaggi
 
+  /** Mappa della partita: quella della partita in corso, altrimenti quella scelta nella sala d'attesa. */
+  get mapId(): string {
+    const id = this.s.state?.mapId ?? this.s.settings.map;
+    return id && this.deps.maps.has(id) ? id : this.deps.maps.defaultId;
+  }
+
+  /** Contesto delle regole e griglia di navigazione della mappa della partita. */
+  private get world(): MapWorld {
+    return this.deps.maps.get(this.mapId);
+  }
+
   /** Gestisce un messaggio del giocatore. Restituisce un errore da mostrargli, o null. */
   handle(player: PlayerId, msg: ClientMsg): string | null {
     const seat = this.s.seats.find((x) => x.id === player);
@@ -169,6 +179,7 @@ export class Room {
         case 'settings':
           if (player !== this.s.hostId) return "Solo chi ha creato la partita può cambiare le opzioni";
           if (this.s.phase !== 'lobby') return 'Le opzioni si cambiano solo prima di cominciare';
+          if (msg.settings.map !== undefined && !this.deps.maps.has(msg.settings.map)) return 'Mappa sconosciuta';
           this.s.settings = { ...this.s.settings, ...msg.settings };
           this.touch();
           this.broadcastLobby();
@@ -215,7 +226,7 @@ export class Room {
 
   /** In sala d'attesa la dottrina resta nel posto; durante la scelta dei paesi va nello stato. */
   private setDoctrine(seat: Seat, doctrine: Doctrine): string | null {
-    const { ctx } = this.deps;
+    const { ctx } = this.world;
     if (this.s.phase === 'lobby') {
       const errors = checkDoctrine(ctx, { ...defaultSettings(ctx), ...this.s.settings }, doctrine);
       if (errors.length > 0) return errors.join('; ');
@@ -238,7 +249,8 @@ export class Room {
     if (player !== this.s.hostId) return 'Solo chi ha creato la partita può cominciare';
     if (this.s.phase !== 'lobby') return 'La partita è già cominciata';
     if (this.s.seats.length < 2) return 'Servono almeno due giocatori';
-    const { ctx } = this.deps;
+    const { ctx } = this.world;
+    const { map: _map, ...settings } = this.s.settings;
     this.s.state = createGame(ctx, {
       id: this.id,
       seed: randomBytes(4).readUInt32LE(0),
@@ -248,7 +260,7 @@ export class Room {
         color: x.color,
         ...(x.doctrine ? { doctrine: x.doctrine } : {}),
       })),
-      settings: this.s.settings,
+      settings,
     });
     this.s.phase = 'selection';
     this.s.skipped = [];
@@ -261,19 +273,19 @@ export class Room {
 
   private picker(): PlayerId | null {
     if (this.s.phase !== 'selection' || !this.s.state) return null;
-    return nextPicker(this.s.state, this.deps.ctx, new Set(this.s.skipped));
+    return nextPicker(this.s.state, this.world.ctx, new Set(this.s.skipped));
   }
 
   private pick(player: PlayerId, country: string): string | null {
     if (this.s.phase !== 'selection' || !this.s.state) return 'Non è il momento di scegliere i paesi';
     if (this.picker() !== player) return 'Non tocca a te scegliere';
-    selectCountry(this.s.state, this.deps.ctx, player, country);
+    selectCountry(this.s.state, this.world.ctx, player, country);
     this.afterPick();
     return null;
   }
 
   private afterPick(): void {
-    const { ctx } = this.deps;
+    const { ctx } = this.world;
     if (this.picker() === null) {
       finishSelection(this.s.state!, ctx);
       this.s.phase = 'playing';
@@ -286,7 +298,7 @@ export class Room {
   }
 
   private turnSeconds(): number {
-    return this.s.state?.settings.turnSeconds ?? this.deps.ctx.rules.turn.defaultSeconds;
+    return this.s.state?.settings.turnSeconds ?? this.world.ctx.rules.turn.defaultSeconds;
   }
 
   private activePlayers(): PlayerId[] {
@@ -331,7 +343,7 @@ export class Room {
     if (this.s.phase === 'lobby') {
       this.s.seats = this.s.seats.filter((x) => x !== seat);
     } else {
-      const need = this.deps.ctx.rules.game.kickAfterInactiveTurns;
+      const need = this.world.ctx.rules.game.kickAfterInactiveTurns;
       if (seat.inactiveTurns < need) return `Si può espellere solo chi è inattivo da ${need} turni`;
       this.removeFromGame(target);
     }
@@ -405,7 +417,8 @@ export class Room {
 
   /** Da chiamare ogni secondo: scadenze della scelta e dei turni. */
   tick(): void {
-    const { now, ctx } = this.deps;
+    const { now } = this.deps;
+    const { ctx } = this.world;
     if (this.s.paused || this.s.deadline === null || now() < this.s.deadline) return;
     if (this.s.phase === 'selection' && this.s.state) {
       const who = this.picker();
@@ -482,7 +495,8 @@ export class Room {
    * gli ordini di un turno, non la serata.
    */
   private tryResolve(state: GameState): { result: ReturnType<typeof resolveTurn>; dropped: PlayerId[] } | null {
-    const { ctx, nav, log } = this.deps;
+    const { log } = this.deps;
+    const { ctx, nav } = this.world;
     const run = (plans: Record<PlayerId, Action[]>) => resolveTurn(state, ctx, nav, plans);
     try {
       return { result: run(this.s.plans), dropped: [] };
@@ -531,7 +545,9 @@ export class Room {
       id: this.id,
       hostId: this.s.hostId,
       phase: this.s.phase,
-      mapName: this.deps.ctx.map.name,
+      mapId: this.mapId,
+      mapName: this.world.ctx.map.name,
+      maps: this.deps.maps.summaries(),
       players: this.s.seats.map((x) => ({
         id: x.id,
         name: x.name,
@@ -561,9 +577,9 @@ export class Room {
     if (!state) return null;
     return {
       t: 'game',
-      view: viewFor(state, this.deps.ctx, player),
+      view: viewFor(state, this.world.ctx, player),
       plan: this.s.plans[player] ?? [],
-      events: eventsFor(this.s.events, state, this.deps.ctx, player),
+      events: eventsFor(this.s.events, state, this.world.ctx, player),
       eventsTurn: this.s.eventsTurn,
     };
   }

@@ -21,7 +21,10 @@
     "data:schema": "tsx tools/write-schemas.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:3210",
     "serata": "tsx tools/serata.ts",
-    "prova": "tsx tools/prova-generale.ts"
+    "prova": "tsx tools/prova-generale.ts",
+    "mondo": "tsx tools/mondo/costruisci.ts",
+    "mondo:scarica": "tsx tools/mondo/scarica.ts",
+    "mondo:anteprima": "tsx tools/mondo/anteprima.ts"
   },
   "engines": {
     "node": ">=22"

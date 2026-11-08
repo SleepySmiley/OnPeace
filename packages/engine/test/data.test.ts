@@ -70,6 +70,8 @@ describe('regole', () => {
 describe('mappe', () => {
   const files = readdirSync(join(dataDir, 'maps')).filter((f) => f.endsWith('.json'));
   const options = { portMaxSeaDistance: rules.defaults.movement.portMaxSeaDistance, minCityDistance: 4 };
+  // sulle mappe reali città di confine e capitali vicine (Vienna e Bratislava) sono normali
+  const optionsFor = (map: MapDef) => (map.id === 'prova' ? options : { ...options, minCityDistance: 1 });
 
   it('esiste almeno una mappa', () => {
     expect(files.length).toBeGreaterThan(0);
@@ -78,7 +80,7 @@ describe('mappe', () => {
   for (const file of files) {
     it(`${file} è valida e coerente`, () => {
       const map = MapDef.parse(readJson('maps', file));
-      expect(checkMap(map, options)).toEqual([]);
+      expect(checkMap(map, optionsFor(map))).toEqual([]);
     });
   }
 

@@ -14,3 +14,6 @@ logs/
 # database delle partite (server)
 *.db
 *.db-journal
+
+# dati geografici scaricati (npm run mondo:scarica)
+.cache/

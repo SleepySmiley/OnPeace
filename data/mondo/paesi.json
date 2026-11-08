@@ -1,0 +1,31 @@
+{
+  "escludi": ["ATA", "ATF", "HMD", "SGS", "IOT", "ATC", "IOA"],
+  "unisci": {
+    "SOL": "SOM",
+    "CYN": "CYP",
+    "KAS": "IND"
+  },
+  "dividi": [
+    { "da": "USA", "id": "alaska", "nome": "Alaska", "riquadro": [-180, 50, -129, 72] },
+    { "da": "USA", "id": "hawaii", "nome": "Hawaii", "riquadro": [-161, 18, -154, 23] },
+    { "da": "FRA", "id": "guyana_francese", "nome": "Guyana francese", "riquadro": [-55, 1, -51, 6.5] }
+  ],
+  "nomi": {
+    "USA": "Stati Uniti",
+    "COD": "RD del Congo",
+    "COG": "Congo",
+    "CAF": "Centrafrica",
+    "ARE": "Emirati Arabi",
+    "BIH": "Bosnia",
+    "DOM": "Rep. Dominicana",
+    "PNG": "Papua Nuova Guinea",
+    "PRK": "Corea del Nord",
+    "KOR": "Corea del Sud",
+    "MKD": "Macedonia del Nord",
+    "CZE": "Cechia",
+    "GNQ": "Guinea Equatoriale",
+    "SAH": "Sahara Occidentale",
+    "PSX": "Palestina",
+    "SSD": "Sudan del Sud"
+  }
+}

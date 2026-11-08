@@ -1,0 +1,17 @@
+{
+  "capitali": {
+    "NLD": "Amsterdam",
+    "ZAF": "Pretoria",
+    "BOL": "La Paz"
+  },
+  "nomi": {
+    "Nur-Sultan": "Astana"
+  },
+  "escludi": [
+    "Hechi",
+    "Amaravati"
+  ],
+  "includi": [
+    "Lagos"
+  ]
+}

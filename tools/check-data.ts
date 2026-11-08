@@ -28,7 +28,8 @@ for (const file of listMapFiles()) {
   }
   const errors = checkMap(parsed.data, {
     portMaxSeaDistance: rules.defaults.movement.portMaxSeaDistance,
-    minCityDistance: 4,
+    // sulle mappe reali città di confine e capitali vicine (Vienna e Bratislava) sono normali
+    minCityDistance: parsed.data.id === 'prova' ? 4 : 1,
   });
   if (errors.length > 0) {
     failed = true;

@@ -1,5 +1,83 @@
-import { distance, pointInMultiPolygon, type MultiPolygon, type Point } from './geometry';
+import { bounds, distance, pointInMultiPolygon, type MultiPolygon, type Point, type Polygon } from './geometry';
 import type { MapDef } from './schema/map';
+
+/**
+ * Poligono con i lati divisi in fasce orizzontali: il test punto-in-poligono (pari-dispari su
+ * tutti gli anelli, buchi compresi) guarda solo i lati della fascia del punto.
+ */
+class IndexedPolygon {
+  readonly box: [number, number, number, number];
+  private readonly bandH: number;
+  private readonly bands: number[][];
+
+  constructor(polygon: Polygon) {
+    this.box = bounds([polygon]);
+    const [, minY, , maxY] = this.box;
+    const count = Math.max(1, Math.min(256, Math.ceil(polygon.reduce((n, r) => n + r.length, 0) / 32)));
+    this.bandH = Math.max((maxY - minY) / count, 1e-9);
+    this.bands = Array.from({ length: count }, () => []);
+    for (const ring of polygon) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [ax, ay] = ring[j]!;
+        const [bx, by] = ring[i]!;
+        const b0 = this.band(Math.min(ay, by));
+        const b1 = this.band(Math.max(ay, by));
+        for (let b = b0; b <= b1; b++) this.bands[b]!.push(ax, ay, bx, by);
+      }
+    }
+  }
+
+  private band(y: number): number {
+    return Math.min(this.bands.length - 1, Math.max(0, Math.floor((y - this.box[1]) / this.bandH)));
+  }
+
+  contains([x, y]: Point): boolean {
+    const [minX, minY, maxX, maxY] = this.box;
+    if (x < minX || x > maxX || y < minY || y > maxY) return false;
+    const edges = this.bands[this.band(y)]!;
+    let inside = false;
+    for (let k = 0; k < edges.length; k += 4) {
+      const ax = edges[k]!;
+      const ay = edges[k + 1]!;
+      const bx = edges[k + 2]!;
+      const by = edges[k + 3]!;
+      if (by > y !== ay > y && x < ((ax - bx) * (y - by)) / (ay - by) + bx) inside = !inside;
+    }
+    return inside;
+  }
+}
+
+/** Indice della terraferma: griglia di caselle, ognuna con i poligoni che la toccano. */
+interface LandIndex {
+  cell: number;
+  cols: number;
+  buckets: (IndexedPolygon[] | undefined)[];
+}
+
+// Le mappe non cambiano dopo la lettura: l'indice si calcola una volta per mappa.
+const landIndexes = new WeakMap<MapDef, LandIndex>();
+
+function landIndex(map: MapDef): LandIndex {
+  let index = landIndexes.get(map);
+  if (index) return index;
+  const cell = Math.max(map.width, map.height) / 64;
+  const cols = Math.ceil(map.width / cell) + 1;
+  const rows = Math.ceil(map.height / cell) + 1;
+  const buckets: (IndexedPolygon[] | undefined)[] = new Array(cols * rows);
+  const clamp = (v: number, max: number) => Math.min(max, Math.max(0, Math.floor(v / cell)));
+  for (const country of map.countries) {
+    for (const polygon of country.shape as MultiPolygon) {
+      const indexed = new IndexedPolygon(polygon);
+      const [minX, minY, maxX, maxY] = indexed.box;
+      for (let r = clamp(minY, rows - 1); r <= clamp(maxY, rows - 1); r++) {
+        for (let c = clamp(minX, cols - 1); c <= clamp(maxX, cols - 1); c++) (buckets[r * cols + c] ??= []).push(indexed);
+      }
+    }
+  }
+  index = { cell, cols, buckets };
+  landIndexes.set(map, index);
+  return index;
+}
 
 export interface MapCheckOptions {
   /** Distanza massima dal mare per un porto, in punti raggio. */
@@ -11,7 +89,9 @@ export interface MapCheckOptions {
 /** true se il punto è in mare, cioè fuori da ogni paese. */
 export function isSea(map: MapDef, p: Point): boolean {
   if (p[0] < 0 || p[1] < 0 || p[0] > map.width || p[1] > map.height) return true;
-  return !map.countries.some((c) => pointInMultiPolygon(p, c.shape as MultiPolygon));
+  const index = landIndex(map);
+  const bucket = index.buckets[Math.floor(p[1] / index.cell) * index.cols + Math.floor(p[0] / index.cell)];
+  return !bucket?.some((polygon) => polygon.contains(p));
 }
 
 /** true se c'è mare entro `radius` unità mappa dal punto (campionamento su cerchi). */

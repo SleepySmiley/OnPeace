@@ -32,6 +32,7 @@ import {
   type Point,
 } from '@onpeace/engine';
 import { dataDir, loadRules } from './data-io';
+import { formatMap } from './map-format';
 
 // ---------------------------------------------------------------- parametri
 const seedText = process.argv[2] ?? 'onpeace-prova-1';
@@ -460,25 +461,6 @@ if (errors.length > 0) {
   console.error('La mappa generata non supera i controlli:');
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
-}
-
-/** JSON leggibile: ogni poligono su una riga, il resto indentato. */
-function formatMap(m: MapDef): string {
-  const raw = new Map<string, string>();
-  const token = (v: unknown) => {
-    const key = `__RAW_${raw.size}__`;
-    raw.set(key, JSON.stringify(v));
-    return key;
-  };
-  const obj = {
-    ...m,
-    countries: m.countries.map((c) => ({ ...c, shape: c.shape.map(token) })),
-    cities: m.cities.map((c) => ({ ...c, pos: token(c.pos) })),
-    noGo: m.noGo.map(token),
-  };
-  let text = JSON.stringify(obj, null, 2);
-  for (const [key, value] of raw) text = text.replace(`"${key}"`, value);
-  return text + '\n';
 }
 
 const outPath = join(dataDir, 'maps', `${fileName}.json`);
