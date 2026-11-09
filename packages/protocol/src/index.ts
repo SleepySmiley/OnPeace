@@ -6,11 +6,15 @@ import { z } from 'zod';
 import type { Action, Doctrine, GameSettings, GameState, PlayerId, TurnEvent } from '@onpeace/engine';
 
 /**
- * Colori dei giocatori (client e server usano la stessa tavolozza).
- * Validati per i daltonici sul fondo scuro dell'interfaccia (#0f1721) con lo script
- * della skill dataviz: l'ordine fa parte della validazione, va mantenuto.
+ * Colori dei giocatori (client e server usano la stessa tavolozza): blu, rosso, verde, giallo,
+ * viola, arancione, azzurro, rosa. Sulla mappa due giocatori qualsiasi possono confinare, quindi
+ * conta la distanza tra TUTTE le coppie, non solo tra colori vicini nell'elenco: in visione
+ * normale ogni coppia è ad almeno ΔE 16 (OKLab ×100; la tavolozza precedente scendeva a 7 tra
+ * rosso e arancio), con deuteranopia e protanopia ad almeno 7,5. Tutti si staccano dal grigio
+ * dei paesi neutrali (ΔE ≥ 22). Verificati con lo script della skill dataviz: l'ordine (i primi
+ * colori sono quelli proposti per primi) fa parte della scelta.
  */
-export const PLAYER_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+export const PLAYER_COLORS = ['#4a8ff0', '#c42f2f', '#2f9e6a', '#eccf3e', '#7a44c8', '#f58a2a', '#5fd3e6', '#e266b8'];
 
 const Id = z.string().min(1).max(64);
 const Point = z.tuple([z.number(), z.number()]);

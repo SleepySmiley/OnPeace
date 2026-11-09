@@ -7,11 +7,12 @@ import {
   type MapDef,
   type MultiPolygon,
   type Point,
+  type Polygon,
 } from '@onpeace/engine';
 import { EMPTY_VIEW, type DraftMarker, type MapViewModel, type StackMarker } from '../game/viewModel';
 import type { Camera } from './camera';
 import { labelPoint } from './label';
-import { MAP_COLORS, assignCountryColors } from './palette';
+import { MAP_COLORS, OWNER_FILL_ALPHA, assignCountryColors, inkOn } from './palette';
 
 export type HitTarget =
   | { kind: 'stack'; id: string }
@@ -37,6 +38,19 @@ const overlaps = (a: Rect, b: Rect) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3]
 const NEUTRAL_MIN_PX = 34;
 const UI_FONT = '"IBM Plex Sans Condensed", system-ui, sans-serif';
 
+/**
+ * Riempie un poligono con i suoi buchi (laghi, enclavi come San Marino nell'Italia).
+ * Un solo cut() per tutti i buchi: in PixiJS 8 dal secondo cut() in poi il buco si attacca anche
+ * al riempimento precedente, cioè a un altro paese, e la triangolazione di un buco esterno al
+ * contorno disegna un cuneo che li unisce (il "fascio" dal Portogallo a San Marino).
+ */
+function fillPolygon(g: Graphics, [outer, ...holes]: Polygon, style: { color: string; alpha?: number }) {
+  g.poly(flat(outer!)).fill(style);
+  if (holes.length === 0) return;
+  for (const hole of holes) g.poly(flat(hole));
+  g.cut();
+}
+
 /** Linea tratteggiata (in coordinate mondo). */
 function dashed(g: Graphics, pts: readonly Point[], dash: number, gap: number) {
   for (let i = 1; i < pts.length; i++) {
@@ -59,9 +73,8 @@ function arrowHead(g: Graphics, from: Point, to: Point, size: number) {
     .closePath();
 }
 
-/** Piccola icona del tipo di pila, centrata in (x, y). */
-function domainGlyph(g: Graphics, domain: StackMarker['domain'], x: number, y: number) {
-  const white = '#ffffff';
+/** Piccola icona del tipo di pila, centrata in (x, y), nel colore `white` (chiaro o scuro a seconda del fondo). */
+function domainGlyph(g: Graphics, domain: StackMarker['domain'], x: number, y: number, white: string) {
   if (domain === 'land') g.rect(x - 3, y - 3, 6, 6).fill(white);
   else if (domain === 'naval') g.poly([x - 4.5, y - 1, x + 4.5, y - 1, x + 2.5, y + 3, x - 2.5, y + 3]).fill(white);
   else if (domain === 'air') g.poly([x, y - 4, x + 4.5, y + 3.5, x, y + 1.5, x - 4.5, y + 3.5]).fill(white);
@@ -113,13 +126,11 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     }
   }
 
+  // paesi neutrali in grigio: il colore spetta solo ai giocatori
   const baseFills = new Graphics();
   const countryColors = assignCountryColors(map);
   for (const country of map.countries) {
-    for (const [outer, ...holes] of country.shape) {
-      baseFills.poly(flat(outer!)).fill({ color: countryColors.get(country.id)! });
-      for (const hole of holes) baseFills.poly(flat(hole)).cut();
-    }
+    for (const poly of country.shape) fillPolygon(baseFills, poly as Polygon, { color: countryColors.get(country.id)! });
   }
 
   const ownerFills = new Graphics();
@@ -219,13 +230,20 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       if (city.port) {
         mark.circle(0, 0, isCapital ? 10.5 : 7).stroke({ width: 1.6, color: MAP_COLORS.port, alpha: 0.95 });
       }
-      if (isCapital) {
-        mark
-          .star(0, 0, 5, 7.5, 3.4)
-          .fill(owner ?? MAP_COLORS.capital)
-          .stroke({ width: 1.4, color: owner ? MAP_COLORS.capital : MAP_COLORS.cityOutline });
+      if (isCapital && owner) {
+        // stella dorata con il centro del colore del giocatore: si vede anche sul proprio paese
+        mark.star(0, 0, 5, 9.6, 4.4).fill(MAP_COLORS.cityOutline);
+        mark.star(0, 0, 5, 8.2, 3.7).fill(MAP_COLORS.capital);
+        mark.star(0, 0, 5, 5.6, 2.5).fill(owner);
+      } else if (isCapital) {
+        mark.star(0, 0, 5, 7.5, 3.4).fill(MAP_COLORS.capital).stroke({ width: 1.4, color: MAP_COLORS.cityOutline });
+      } else if (owner) {
+        // anello chiaro: il punto resta visibile anche sul paese dello stesso colore
+        mark.circle(0, 0, 5.4).fill(MAP_COLORS.cityOutline);
+        mark.circle(0, 0, 4.3).fill(MAP_COLORS.city);
+        mark.circle(0, 0, 3).fill(owner);
       } else {
-        mark.circle(0, 0, 3.8).fill(owner ?? MAP_COLORS.city).stroke({ width: 1.3, color: MAP_COLORS.cityOutline });
+        mark.circle(0, 0, 3.8).fill(MAP_COLORS.city).stroke({ width: 1.3, color: MAP_COLORS.cityOutline });
       }
     }
   }
@@ -237,6 +255,8 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     fontWeight: '500',
     fill: '#ffffff',
   });
+  const countStyleDark = countStyle.clone();
+  countStyleDark.fill = '#0b1118';
   let stackNodes: { marker: StackMarker; node: Container; w: number; h: number; sx: number; sy: number }[] = [];
 
   function drawStacks() {
@@ -249,9 +269,11 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       const g = new Graphics();
       if (marker.selected) g.roundRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6, 6).stroke({ width: 2, color: '#ffffff' });
       g.roundRect(-w / 2, -h / 2, w, h, 4).fill(marker.color).stroke({ width: 1.5, color: '#0b1118' });
-      if (!marker.fog) domainGlyph(g, marker.domain, -w / 2 + 8, 0);
+      // testo e simbolo scuri sui colori chiari (giallo, azzurro)
+      const ink = inkOn(marker.color);
+      if (!marker.fog) domainGlyph(g, marker.domain, -w / 2 + 8, 0, ink);
       if (marker.general && !marker.fog) generalBadge(g, w / 2, -h / 2);
-      const text = new Text({ text: label, style: countStyle });
+      const text = new Text({ text: label, style: ink === '#ffffff' ? countStyle : countStyleDark });
       text.anchor.set(0, 0.5);
       text.x = -w / 2 + 14;
       node.addChild(g, text);
@@ -309,11 +331,9 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       hovered.kind === 'country' ? hovered.id : map.cities.find((c) => c.id === hovered!.id)?.country;
     const country = countryId ? countryById.get(countryId) : undefined;
     if (!country) return;
-    for (const [outer, ...holes] of country.shape) {
-      highlight.poly(flat(outer!)).fill({ color: '#ffffff', alpha: 0.08 });
-      for (const hole of holes) highlight.poly(flat(hole)).cut();
-      highlight.poly(flat(outer!)).stroke({ width: 2.2 / scale, color: MAP_COLORS.hover, alpha: 0.95, join: 'round' });
-    }
+    for (const poly of country.shape) fillPolygon(highlight, poly as Polygon, { color: '#ffffff', alpha: 0.08 });
+    for (const poly of country.shape) highlight.poly(flat(poly[0]!));
+    highlight.stroke({ width: 2.2 / scale, color: MAP_COLORS.hover, alpha: 0.95, join: 'round' });
   }
 
   function drawPickable() {
@@ -331,10 +351,7 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
     for (const country of map.countries) {
       const color = view.countryOwner[country.id];
       if (!color) continue;
-      for (const [outer, ...holes] of country.shape) {
-        ownerFills.poly(flat(outer!)).fill({ color, alpha: 0.62 });
-        for (const hole of holes) ownerFills.poly(flat(hole)).cut();
-      }
+      for (const poly of country.shape) fillPolygon(ownerFills, poly as Polygon, { color, alpha: OWNER_FILL_ALPHA });
     }
   }
 
