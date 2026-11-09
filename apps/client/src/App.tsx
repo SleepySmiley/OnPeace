@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeEconomy, simulatePlan, type Point } from '@onpeace/engine';
 import { describeUnits, playerName } from './game/describe';
 import { doctrineOf } from './game/doctrine';
 import { describeOutcome, dragUnits, evaluateDraft, waypointFor } from './game/draft';
+import { productionOf } from './game/production';
 import { ctx, currentPicker, currentPlanner, nav, useSession } from './game/store';
 import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
 import { MapView, type MapClick } from './map/MapView';
@@ -19,11 +20,13 @@ import { InfoPanel } from './ui/InfoPanel';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { PlanPanel } from './ui/PlanPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
+import { ProductionPanel } from './ui/ProductionPanel';
 import { ReportModal } from './ui/ReportModal';
 import { ReportPanel } from './ui/ReportPanel';
 import { SetupScreen } from './ui/SetupScreen';
 import { StackPanel, stackRef } from './ui/StackPanel';
 import { StatsChart } from './ui/StatsChart';
+import { TurnCard } from './ui/TurnCard';
 
 const fmt = new Intl.NumberFormat('it-IT');
 const noop = () => {};
@@ -108,6 +111,18 @@ export function App() {
   }, [game, mode, online.picker, online.me, unseenTurn]);
 
   const planner = screen === 'planning' ? currentPlanner(s) : null;
+
+  // annuncio all'inizio di ogni turno (una volta per turno e per chi pianifica su questo schermo)
+  const [turnCard, setTurnCard] = useState(false);
+  const announced = useRef<string | null>(null);
+  const closeTurnCard = useCallback(() => setTurnCard(false), []);
+  useEffect(() => {
+    if (!game || game.phase !== 'playing' || !planner) return;
+    const key = `${game.id}:${game.turn}:${planner}`;
+    if (announced.current === key) return;
+    announced.current = key;
+    setTurnCard(true);
+  }, [game, planner]);
   const plannerPlayer = planner && game ? game.players.find((p) => p.id === planner)! : null;
   const actions = useMemo(() => (planner ? (s.plans[planner] ?? []) : []), [planner, s.plans]);
 
@@ -284,6 +299,7 @@ export function App() {
       ? game.players.find((p) => p.id === doctrineId && p.status === 'active')
       : undefined;
   const economy = planner && shown ? computeEconomy(shown, ctx, planner) : null;
+  const production = planner && shown && game.phase === 'playing' ? productionOf(shown, planner) : null;
   const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
   const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
   const iAmDone = mode === 'online' && planner !== null && !online.waiting.includes(planner);
@@ -325,7 +341,13 @@ export function App() {
             {game.phase !== 'ended' && <span className="dim"> / {game.settings.maxTurns}</span>}
           </span>
         )}
-        {mode === 'online' && game.phase !== 'ended' && <Countdown deadline={online.deadline} paused={online.paused} />}
+        {mode === 'online' && game.phase !== 'ended' && (
+          <Countdown
+            deadline={online.deadline}
+            paused={online.paused}
+            {...(game.phase === 'playing' ? { total: game.settings.turnSeconds * 1000 } : {})}
+          />
+        )}
         {isHost && game.phase !== 'ended' && (
           <button
             type="button"
@@ -343,8 +365,9 @@ export function App() {
           </span>
         )}
         {mode === 'online' && game.phase === 'playing' && (
-          <span className="status waiting" title="Chi non ha ancora finito il turno">
-            {waitingNames.length > 0 ? <>In attesa di {waitingNames.join(', ')}</> : <>Tutti pronti</>}
+          <span className={`status waiting ${iAmDone ? 'done' : ''}`} title="Chi non ha ancora finito il turno">
+            {iAmDone && <span className="done-mark">✓ Turno inviato · </span>}
+            {waitingNames.length > 0 ? <>in attesa di {waitingNames.join(', ')}</> : <>tutti pronti</>}
           </span>
         )}
         {mode === 'online' && !online.connected && <span className="status offline">Riconnessione…</span>}
@@ -362,6 +385,25 @@ export function App() {
               {economy.net >= 0 ? '+' : ''}
               {fmt.format(economy.net)}
             </span>
+          </button>
+        )}
+        {production && (
+          <button
+            type="button"
+            className={`status reinforcements link ${production.available === 0 ? 'empty' : ''}`}
+            title="Unità che puoi ancora arruolare e quando i rinforzi si ricaricano (clic: dettaglio per città)"
+            onClick={() => s.select(selected?.kind === 'production' ? null : { kind: 'production' })}
+          >
+            {production.available > 0 ? (
+              <>
+                Rinforzi <b>{production.available}</b>
+                <span className="dim"> · ricarica T{production.nextRefill}</span>
+              </>
+            ) : (
+              <>
+                Rinforzi esauriti<span className="dim"> · di nuovo al T{production.nextRefill}</span>
+              </>
+            )}
           </button>
         )}
         {screen === 'planning' && planner && (
@@ -489,10 +531,21 @@ export function App() {
         </div>
       )}
 
+      {turnCard && planner && game.phase === 'playing' && !online.paused && (
+        <TurnCard
+          key={`${game.turn}:${planner}`}
+          game={shown ?? game}
+          player={planner}
+          events={game.turn > 1 ? s.events : []}
+          onClose={closeTurnCard}
+        />
+      )}
+
       {shown && !draft && selected?.kind === 'city' && (
         <CityPanel key={`${selected.id}:${actions.length}`} cityId={selected.id} state={shown} planner={planner} />
       )}
       {shown && !draft && planner && selected?.kind === 'finance' && <FinancePanel state={shown} player={planner} />}
+      {shown && !draft && planner && selected?.kind === 'production' && <ProductionPanel state={shown} player={planner} />}
       {shown && !draft && selected?.kind === 'stack' && (
         <StackPanel
           key={`${selected.id}:${actions.length}`}

@@ -81,7 +81,12 @@ export const PLAYER_COLORS = COLORS;
 
 export type Mode = 'local' | 'online';
 export type Screen = 'setup' | 'lobby' | 'selection' | 'handoff' | 'planning' | 'results';
-export type Selected = { kind: 'city'; id: string } | { kind: 'stack'; id: string } | { kind: 'finance' } | null;
+export type Selected =
+  | { kind: 'city'; id: string }
+  | { kind: 'stack'; id: string }
+  | { kind: 'finance' }
+  | { kind: 'production' }
+  | null;
 export type BattleEvent = Extract<TurnEvent, { kind: 'battle' }>;
 
 export interface MoveDraft {
