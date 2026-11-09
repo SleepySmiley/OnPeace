@@ -10,7 +10,8 @@ import {
   distance,
   groupRange,
   pathLength,
-  segmentPassable,
+  routeLeg,
+  routePath,
   snapToCity,
   type Action,
   type Arrival,
@@ -47,11 +48,17 @@ export function reachablePoint(anchor: Point, p: Point, left: number): Point {
   return anchor;
 }
 
-/** Da dove riparte la freccia (ultima tappa) e quanto raggio resta, in unità mappa. */
+const domainOf = (draft: MoveDraft) => ctx.catalog.unit(draft.units[0]!.type).domain;
+
+/**
+ * Da dove riparte la freccia (ultima tappa) e quanto raggio resta, in unità mappa.
+ * Le tappe contano con le eventuali deviazioni per stretti e canali.
+ */
 export function legOf(draft: MoveDraft): { anchor: Point; left: number } {
   if (draft.mode === 'unload') return { anchor: draft.sourcePos, left: draft.range };
   const anchor = draft.waypoints[draft.waypoints.length - 1] ?? draft.sourcePos;
-  return { anchor, left: Math.max(0, draft.range - pathLength(draft.sourcePos, draft.waypoints)) };
+  const route = routePath(ctx, nav, domainOf(draft), draft.sourcePos, draft.waypoints) ?? draft.waypoints;
+  return { anchor, left: Math.max(0, draft.range - pathLength(draft.sourcePos, route)) };
 }
 
 export interface DraftEval {
@@ -127,7 +134,8 @@ export function evaluateDraft(
     ...(enemy ? { target: enemy.id } : {}),
   };
   const check = checkMove(preview.state, ctx, nav, planner, action, preview.moved);
-  marker.points = [draft.sourcePos, ...draft.waypoints, check.ok ? check.plan.end : end];
+  // percorso vero: passa da solo per stretti e canali quando dritto non si può
+  marker.points = check.ok ? [draft.sourcePos, ...check.plan.path] : [draft.sourcePos, ...draft.waypoints, end];
   marker.ok = check.ok;
   if (!check.ok) return { ...result, errors: check.errors, end };
   const { plan } = check;
@@ -148,8 +156,10 @@ export function waypointFor(draft: MoveDraft, point: Point): { point: Point } | 
   if (left <= INSIDE * 2) return { error: 'Raggio esaurito: clicca la destinazione finale' };
   const p = reachablePoint(anchor, point, left);
   if (distance(anchor, p) <= SAME_POINT) return { error: 'Sposta il cursore per mettere una tappa' };
-  const domain = ctx.catalog.unit(draft.units[0]!.type).domain;
-  if (!segmentPassable(ctx, nav, domain, anchor, p)) {
+  const domain = domainOf(draft);
+  const via = routeLeg(ctx, nav, domain, anchor, p);
+  if (!via || pathLength(anchor, [...via, p]) > left) {
+    if (via) return { error: 'Troppo lontano passando per lo stretto: metti la tappa più vicino' };
     return {
       error:
         domain === 'land'

@@ -161,9 +161,11 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
 
   // strati che dipendono dallo zoom (spessori costanti a schermo)
   const highlight = new Graphics();
+  /** Passaggi di terra (tunnel, ponti, stretti attraversabili): dove le truppe passano il mare. */
+  const passages = new Graphics();
   const paths = new Graphics();
   const draftG = new Graphics();
-  world.addChild(grid, shallows, baseFills, ownerFills, mountains, borders, pickBorders, highlight, paths, draftG);
+  world.addChild(grid, shallows, baseFills, ownerFills, mountains, borders, passages, pickBorders, highlight, paths, draftG);
 
   // ---------------------------------------------------------------- etichette dei paesi
   const countryLabelStyle = new TextStyle({
@@ -302,6 +304,14 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
   function drawZoomDependent() {
     const px = 1 / scale;
     drawHighlight();
+
+    passages.clear();
+    for (const sc of map.shortcuts) {
+      if (sc.for !== 'land') continue;
+      passages.poly(flat([sc.from, sc.to]), false).stroke({ width: 5 * px, color: '#0b1118', alpha: 0.45, cap: 'round' });
+      dashed(passages, [sc.from, sc.to], 3 * px, 2.5 * px);
+      passages.stroke({ width: 2 * px, color: MAP_COLORS.passage, alpha: 0.9, cap: 'round' });
+    }
 
     paths.clear();
     for (const p of view.paths) drawPath(paths, p.points, p.ok ? p.color : '#ff4d4d', p.attack, px);

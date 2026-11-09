@@ -4,6 +4,8 @@
  * - Terra, mare e aria si muovono come gruppi separati.
  * - Terra solo su terra (o scorciatoie), mare solo in mare (o nei porti), aria ovunque
  *   ma senza fermarsi nelle zone invalicabili.
+ * - Un tratto che non si può fare dritto passa da solo per uno stretto, un tunnel o un canale
+ *   (scorciatoia della mappa), se c'è: la deviazione conta nella lunghezza del percorso.
  * - I trasporti portano con sé il carico.
  */
 import { SAME_POINT, resolveStackRef, type Action, type UnitSelection } from './actions';
@@ -33,6 +35,8 @@ export interface MovePlan {
   arrival: Arrival;
   /** Pila bersaglio (attacco a una pila). */
   target: StackState | null;
+  /** Percorso effettivo dopo la partenza (tappe, passaggi attraversati, arrivo). */
+  path: Point[];
 }
 
 export type Checked<T> = { ok: true; plan: T } | { ok: false; errors: string[] };
@@ -119,6 +123,51 @@ export function segmentPassable(ctx: GameContext, nav: NavGrid, domain: Domain, 
   return true;
 }
 
+/**
+ * Tratto da `a` a `b`: dritto se si può; altrimenti attraverso la scorciatoia della mappa
+ * (stretto, tunnel, ponte, canale) che allunga meno il tragitto. Restituisce i punti da inserire
+ * tra `a` e `b` (vuoto se il tratto è dritto), o null se non c'è modo di passare.
+ */
+export function routeLeg(ctx: GameContext, nav: NavGrid, domain: Domain, a: Point, b: Point): Point[] | null {
+  if (segmentPassable(ctx, nav, domain, a, b)) return [];
+  if (domain === 'air') return null;
+  const options: { via: Point[]; length: number }[] = [];
+  for (const s of ctx.map.shortcuts) {
+    if (s.for !== domain) continue;
+    for (const [p, q] of [
+      [s.from, s.to],
+      [s.to, s.from],
+    ] as [Point, Point][]) {
+      options.push({ via: [p, q], length: distance(a, p) + distance(p, q) + distance(q, b) });
+    }
+  }
+  options.sort((x, y) => x.length - y.length);
+  for (const { via } of options) {
+    const [p, q] = via as [Point, Point];
+    if (segmentPassable(ctx, nav, domain, a, p) && segmentPassable(ctx, nav, domain, q, b)) return via;
+  }
+  return null;
+}
+
+/** Il percorso effettivo da `start` attraverso i punti dati (con i passaggi), o null se un tratto è impossibile. */
+export function routePath(
+  ctx: GameContext,
+  nav: NavGrid,
+  domain: Domain,
+  start: Point,
+  points: readonly Point[],
+): Point[] | null {
+  const route: Point[] = [];
+  let prev = start;
+  for (const p of points) {
+    const via = routeLeg(ctx, nav, domain, prev, p);
+    if (!via) return null;
+    route.push(...via, p);
+    prev = p;
+  }
+  return route;
+}
+
 function unitDefs(ctx: GameContext, units: readonly UnitState[]): UnitDef[] {
   return units.map((u) => ctx.catalog.unit(u.type));
 }
@@ -193,31 +242,27 @@ export function checkMove(
   const path = [...action.path.slice(0, -1), end];
 
   const range = groupRange(state, ctx, player, picked);
-  const length = pathLength(source.pos, path);
+  const route = routePath(ctx, nav, domain, source.pos, path);
+  const length = pathLength(source.pos, route ?? path);
   if (length > range * ctx.map.rangeScale + EPS) {
     errors.push(`Percorso troppo lungo: ${(length / ctx.map.rangeScale).toFixed(1)} su ${range.toFixed(1)}`);
   }
-  let prev = source.pos;
-  for (const p of path) {
-    if (!segmentPassable(ctx, nav, domain, prev, p)) {
-      errors.push(
-        domain === 'land'
-          ? 'Le truppe di terra non attraversano il mare né le montagne'
-          : domain === 'naval'
-            ? 'Le navi restano in mare (o nei porti)'
-            : 'Percorso fuori dalla mappa',
-      );
-      break;
-    }
-    prev = p;
+  if (!route) {
+    errors.push(
+      domain === 'land'
+        ? 'Le truppe di terra non attraversano il mare né le montagne'
+        : domain === 'naval'
+          ? 'Le navi restano in mare (o nei porti)'
+          : 'Percorso fuori dalla mappa',
+    );
   }
   if (domain === 'air' && !endCity && nav.terrainAt(end) === 'nogo') {
     errors.push('Gli aerei non possono fermarsi sulle montagne');
   }
 
   const arrival = target ? 'attack_stack' : classifyArrival(state, ctx, player, domain, end, endCity, errors);
-  if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, plan: { source, units: picked, domain, range, length, end, endCity, arrival, target } };
+  if (errors.length > 0 || !route) return { ok: false, errors };
+  return { ok: true, plan: { source, units: picked, domain, range, length, end, endCity, arrival, target, path: route } };
 }
 
 /**

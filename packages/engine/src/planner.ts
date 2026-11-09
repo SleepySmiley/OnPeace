@@ -74,7 +74,7 @@ export function simulatePlan(
           const check = checkMove(state, ctx, nav, player, action, moved);
           if (!check.ok) return fail(check.errors);
           const { plan } = check;
-          step.path = [plan.source.pos, ...action.path.slice(0, -1), plan.end];
+          step.path = [plan.source.pos, ...plan.path];
           step.arrival = plan.arrival;
           markMoved(moved, plan.units);
           // gli attacchi restano fermi nell'anteprima: l'esito si vede a fine turno

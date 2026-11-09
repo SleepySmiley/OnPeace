@@ -272,7 +272,7 @@ class Resolver {
     }
     if (!check.ok) return this.fail(player, item, check.errors.join('; '));
     const plan = check.plan;
-    const path = [...action.path.slice(0, -1), plan.end];
+    const path = plan.path;
     if (plan.arrival === 'attack_stack') return this.attackStack(player, plan, path);
     if (plan.arrival === 'attack_city') {
       return this.attackCity(player, plan.source, plan.units, plan.domain, path, plan.endCity!, true);
