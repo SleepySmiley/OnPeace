@@ -25,6 +25,7 @@
     { "id": "piccolo_belt", "nome": "Ponte del Piccolo Belt", "per": "land", "da": [9.68, 55.52], "a": [9.85, 55.45] },
     { "id": "bosforo_ponti", "nome": "Ponti del Bosforo", "per": "land", "da": [28.95, 41.07], "a": [29.1, 41.07] },
     { "id": "kerch_ponte", "nome": "Ponte di Kerch", "per": "land", "da": [36.4, 45.3], "a": [36.75, 45.25] },
+    { "id": "gibilterra_terra", "nome": "Stretto di Gibilterra (traversata via terra, per comodità di gioco)", "per": "land", "da": [-5.61, 36.02], "a": [-5.47, 35.91] },
     { "id": "kanmon", "nome": "Tunnel di Kanmon", "per": "land", "da": [130.85, 33.88], "a": [131.0, 34.0] },
     { "id": "seikan", "nome": "Tunnel del Seikan", "per": "land", "da": [140.35, 41.1], "a": [140.3, 41.55] },
     { "id": "seto", "nome": "Ponti di Seto", "per": "land", "da": [133.8, 34.25], "a": [133.85, 34.55] },

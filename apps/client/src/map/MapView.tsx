@@ -27,19 +27,40 @@ interface Props {
   onPointer?: (world: Point, hit: HitTarget | null) => void;
   /** Tasto destro o Esc. */
   onCancel?: () => void;
+  /** La pila si può trascinare (cursore a mano aperta). */
+  draggable?: (hit: HitTarget) => boolean;
+  /** Inizio del trascinamento di una pila: false = la mappa si sposta come al solito. */
+  onDragStart?: (hit: HitTarget) => boolean;
+  /** Rilascio della pila trascinata (posizione, cosa c'è sotto, Maiusc premuto). */
+  onDrop?: (drop: MapClick) => void;
 }
 
-/** Mappa interattiva: rotella per lo zoom, trascinamento per spostarsi, clic per scegliere. */
-export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, onCancel }: Props) {
+/**
+ * Mappa interattiva: rotella per lo zoom, trascinamento per spostarsi, clic per scegliere.
+ * Trascinando una propria pila (se `onDragStart` la accetta) si dà un ordine di movimento.
+ */
+export function MapView({
+  map,
+  view,
+  draft,
+  focus,
+  onHover,
+  onClick,
+  onPointer,
+  onCancel,
+  draggable,
+  onDragStart,
+  onDrop,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const centerRef = useRef<((p: Point) => void) | null>(null);
-  const handlers = useRef({ onHover, onClick, onPointer, onCancel });
+  const handlers = useRef({ onHover, onClick, onPointer, onCancel, draggable, onDragStart, onDrop });
   const latest = useRef({ view, draft });
 
   useEffect(() => {
-    handlers.current = { onHover, onClick, onPointer, onCancel };
-  }, [onHover, onClick, onPointer, onCancel]);
+    handlers.current = { onHover, onClick, onPointer, onCancel, draggable, onDragStart, onDrop };
+  }, [onHover, onClick, onPointer, onCancel, draggable, onDragStart, onDrop]);
 
   useEffect(() => {
     latest.current.view = view;
@@ -96,7 +117,14 @@ export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, 
         scene.update(camera);
       };
 
-      let drag: { x: number; y: number; moved: boolean } | null = null;
+      /** Pressione in corso: `unit` = si trascina una pila (ordine), altrimenti si sposta la mappa. */
+      let drag: { x: number; y: number; moved: boolean; hit: HitTarget | null; unit: boolean } | null = null;
+      const cursorFor = (target: HitTarget | null) =>
+        target?.kind === 'stack' && handlers.current.draggable?.(target)
+          ? 'grab'
+          : target?.kind === 'city' || target?.kind === 'stack'
+            ? 'pointer'
+            : 'default';
       let lastHover: string | null = null;
 
       const local = (e: PointerEvent | WheelEvent | MouseEvent) => {
@@ -119,15 +147,28 @@ export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, 
       };
       const onDown = (e: PointerEvent) => {
         if (e.button !== 0) return;
-        drag = { x: e.clientX, y: e.clientY, moved: false };
+        const [sx, sy] = local(e);
+        drag = { x: e.clientX, y: e.clientY, moved: false, hit: scene.hitTest(camera, sx, sy), unit: false };
         canvas.setPointerCapture(e.pointerId);
       };
       const onMove = (e: PointerEvent) => {
+        const [sx, sy] = local(e);
         if (drag) {
           const dx = e.clientX - drag.x;
           const dy = e.clientY - drag.y;
-          if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
-          drag.moved = true;
+          if (!drag.moved) {
+            if (Math.abs(dx) + Math.abs(dy) < 4) return;
+            drag.moved = true;
+            // oltre la soglia: si trascina la pila (se si può) o si sposta la mappa
+            drag.unit = drag.hit?.kind === 'stack' && (handlers.current.onDragStart?.(drag.hit) ?? false);
+          }
+          if (drag.unit) {
+            const target = scene.hitTest(camera, sx, sy);
+            canvas.style.cursor = 'grabbing';
+            emitHover(target);
+            handlers.current.onPointer?.(camera.toWorld(sx, sy), target);
+            return;
+          }
           drag.x = e.clientX;
           drag.y = e.clientY;
           camera.pan(dx, dy);
@@ -135,21 +176,28 @@ export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, 
           canvas.style.cursor = 'grabbing';
           return;
         }
-        const [sx, sy] = local(e);
         const target = scene.hitTest(camera, sx, sy);
-        canvas.style.cursor = target?.kind === 'city' || target?.kind === 'stack' ? 'pointer' : 'default';
+        canvas.style.cursor = cursorFor(target);
         emitHover(target);
         handlers.current.onPointer?.(camera.toWorld(sx, sy), target);
       };
       const onUp = (e: PointerEvent) => {
-        const wasClick = drag && !drag.moved;
+        const ended = drag;
+        drag = null;
+        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+        if (!ended) return;
+        const [sx, sy] = local(e);
+        const hit = scene.hitTest(camera, sx, sy);
+        canvas.style.cursor = cursorFor(hit);
+        const at = { hit, world: camera.toWorld(sx, sy), shift: e.shiftKey };
+        if (ended.unit) handlers.current.onDrop?.(at);
+        else if (!ended.moved) handlers.current.onClick(at);
+      };
+      // pressione interrotta (es. cambio di finestra): un trascinamento di pila si annulla
+      const onPointerCancel = () => {
+        if (drag?.unit) handlers.current.onCancel?.();
         drag = null;
         canvas.style.cursor = 'default';
-        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-        if (wasClick) {
-          const [sx, sy] = local(e);
-          handlers.current.onClick({ hit: scene.hitTest(camera, sx, sy), world: camera.toWorld(sx, sy), shift: e.shiftKey });
-        }
       };
       const onLeave = () => emitHover(null);
       const onContext = (e: MouseEvent) => {
@@ -177,6 +225,7 @@ export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, 
       canvas.addEventListener('pointermove', onMove);
       canvas.addEventListener('pointerup', onUp);
       canvas.addEventListener('pointerleave', onLeave);
+      canvas.addEventListener('pointercancel', onPointerCancel);
       canvas.addEventListener('contextmenu', onContext);
       app.renderer.on('resize', onResize);
       window.addEventListener('keydown', onKey);
@@ -187,6 +236,7 @@ export function MapView({ map, view, draft, focus, onHover, onClick, onPointer, 
         canvas.removeEventListener('pointermove', onMove);
         canvas.removeEventListener('pointerup', onUp);
         canvas.removeEventListener('pointerleave', onLeave);
+        canvas.removeEventListener('pointercancel', onPointerCancel);
         canvas.removeEventListener('contextmenu', onContext);
         app.renderer.off('resize', onResize);
         window.removeEventListener('keydown', onKey);

@@ -503,6 +503,31 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
     absorb(small);
   }
 
+  // 2b. buchi rimasti senza paese dentro (San Marino e Vaticano, troppo piccoli e già scartati,
+  // lasciavano due buchi nell'Italia: per il gioco erano mare). Le enclavi vere (il Lesotho) restano.
+  const ringCenter = (ring: readonly Pt[]): Pt => {
+    let x = 0;
+    let y = 0;
+    for (const p of ring) {
+      x += p[0];
+      y += p[1];
+    }
+    return [x / ring.length, y / ring.length];
+  };
+  const insideOther = (p: Pt, self: Country) =>
+    countries.some(
+      (c) =>
+        c !== self &&
+        p[0] >= c.box[0] &&
+        p[0] <= c.box[2] &&
+        p[1] >= c.box[1] &&
+        p[1] <= c.box[3] &&
+        pointInMultiPolygon(p, c.shape as MultiPolygon),
+    );
+  for (const c of countries) {
+    c.shape = c.shape.map(([outer, ...holes]) => [outer!, ...holes.filter((h) => insideOther(ringCenter(h), c))]);
+  }
+
   const draft = { width: frame.width, height: frame.height, countries: [] as CountryDef[] } as unknown as MapDef;
   const countryAt = (p: Pt) =>
     countries.find(

@@ -81,7 +81,12 @@ export const PLAYER_COLORS = COLORS;
 
 export type Mode = 'local' | 'online';
 export type Screen = 'setup' | 'lobby' | 'selection' | 'handoff' | 'planning' | 'results';
-export type Selected = { kind: 'city'; id: string } | { kind: 'stack'; id: string } | { kind: 'finance' } | null;
+export type Selected =
+  | { kind: 'city'; id: string }
+  | { kind: 'stack'; id: string }
+  | { kind: 'finance' }
+  | { kind: 'production' }
+  | null;
 export type BattleEvent = Extract<TurnEvent, { kind: 'battle' }>;
 
 export interface MoveDraft {
@@ -93,8 +98,16 @@ export interface MoveDraft {
   range: number;
   waypoints: Point[];
   hover: Point | null;
-  /** Pila nemica sotto il cursore (bersaglio dell'attacco). */
+  /** Pila sotto il cursore: nemica = bersaglio dell'attacco, propria = ci si unisce. */
   target: string | null;
+  /** Si sta trascinando la pila (altrimenti la freccia segue il mouse e si conferma con un clic). */
+  dragging: boolean;
+}
+
+/** Unità scelte nel pannello di una pila (per tipo). Senza scelta si muovono tutte quelle libere. */
+export interface UnitPick {
+  stack: string;
+  counts: Record<string, number>;
 }
 
 export interface OnlineState {
@@ -131,6 +144,7 @@ interface Session {
   reportSeq: number;
   selected: Selected;
   draft: MoveDraft | null;
+  unitPick: UnitPick | null;
   notice: string | null;
   online: OnlineState;
   /** Battaglia mostrata nel replay. */
@@ -163,7 +177,8 @@ interface Session {
   select(sel: Selected): void;
   addAction(action: Action): void;
   removeAction(index: number): void;
-  startDraft(draft: Omit<MoveDraft, 'waypoints' | 'hover' | 'target'>): void;
+  startDraft(draft: Omit<MoveDraft, 'waypoints' | 'hover' | 'target' | 'dragging'>, dragging?: boolean): void;
+  setUnitPick(pick: UnitPick | null): void;
   updateDraft(patch: Partial<MoveDraft>): void;
   cancelDraft(): void;
   endTurn(): void;
@@ -215,6 +230,7 @@ const initial = {
   reportSeq: 0,
   selected: null,
   draft: null,
+  unitPick: null,
   notice: null,
   online: emptyOnline,
   replay: null,
@@ -321,6 +337,7 @@ export const useSession = create<Session>((set, get) => {
           reportSeq: newReport && msg.eventsTurn > 0 ? s.reportSeq + 1 : s.reportSeq,
           selected: stillThere,
           draft: sameTurn ? s.draft : null,
+          unitPick: sameTurn ? s.unitPick : null,
         });
         return;
       }
@@ -394,7 +411,7 @@ export const useSession = create<Session>((set, get) => {
     },
 
     beginPlanning() {
-      set({ screen: 'planning', selected: null, draft: null, notice: null });
+      set({ screen: 'planning', selected: null, draft: null, unitPick: null, notice: null });
     },
 
     continueAfterResults() {
@@ -511,14 +528,15 @@ export const useSession = create<Session>((set, get) => {
     },
 
     select(sel) {
-      set({ selected: sel, draft: null });
+      const pick = get().unitPick;
+      set({ selected: sel, draft: null, unitPick: sel?.kind === 'stack' && pick?.stack === sel.id ? pick : null });
     },
 
     addAction(action) {
       const player = currentPlanner(get());
       if (!player) return;
       const plans = get().plans;
-      set({ plans: { ...plans, [player]: [...(plans[player] ?? []), action] }, draft: null, notice: null });
+      set({ plans: { ...plans, [player]: [...(plans[player] ?? []), action] }, draft: null, unitPick: null, notice: null });
       sendPlan();
     },
 
@@ -530,8 +548,12 @@ export const useSession = create<Session>((set, get) => {
       sendPlan();
     },
 
-    startDraft(draft) {
-      set({ draft: { ...draft, waypoints: [], hover: null, target: null }, notice: null });
+    startDraft(draft, dragging = false) {
+      set({ draft: { ...draft, waypoints: [], hover: null, target: null, dragging }, notice: null });
+    },
+
+    setUnitPick(pick) {
+      set({ unitPick: pick });
     },
 
     updateDraft(patch) {
@@ -556,7 +578,7 @@ export const useSession = create<Session>((set, get) => {
       }
       const planners = activePlayers(s.game);
       if (s.plannerIndex < planners.length - 1) {
-        set({ plannerIndex: s.plannerIndex + 1, screen: 'handoff', selected: null, draft: null });
+        set({ plannerIndex: s.plannerIndex + 1, screen: 'handoff', selected: null, draft: null, unitPick: null });
         return;
       }
       const resolvedTurn = s.game.turn;
@@ -571,6 +593,7 @@ export const useSession = create<Session>((set, get) => {
         screen: 'results',
         selected: null,
         draft: null,
+        unitPick: null,
       });
     },
 

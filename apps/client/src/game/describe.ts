@@ -26,7 +26,7 @@ export function describeUnits(sel: UnitSelection): string {
 }
 
 /** Destinazione: città (se agganciata), altrimenti paese o mare. */
-function placeOf(pos: readonly [number, number]): { city: string | null; text: string } {
+export function placeOf(pos: readonly [number, number]): { city: string | null; text: string } {
   const snap = ctx.rules.movement.citySnapDistance * ctx.map.rangeScale;
   const city = ctx.map.cities.find((c) => Math.hypot(c.pos[0] - pos[0], c.pos[1] - pos[1]) <= snap);
   if (city) return { city: city.name, text: `a ${city.name}` };
@@ -50,7 +50,7 @@ export function describeAction(game: GameState, action: Action, step?: PlannedSt
       return `Muovi ${describeUnits(action.units)} ${place.text}`;
     }
     case 'load':
-      return `Carica ${describeUnits(action.units)}`;
+      return `Imbarca ${describeUnits(action.units)}`;
     case 'unload':
       return `Sbarca ${describeUnits(action.units)}`;
     case 'diplomacy': {

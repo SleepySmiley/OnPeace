@@ -14,7 +14,7 @@ export function PlanPanel({ game, actions, steps }: Props) {
   if (actions.length === 0) {
     return (
       <p className="placeholder">
-        Nessun ordine. Clicca una tua città per arruolare o una tua pila per muoverla. L'ordine conta: le azioni
+        Nessun ordine. Clicca una tua città per arruolare, trascina una tua pila per muoverla. L'ordine conta: le azioni
         vengono eseguite nella sequenza in cui le dai.
       </p>
     );

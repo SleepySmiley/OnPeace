@@ -41,12 +41,16 @@ export interface EventMarker {
 }
 
 export interface DraftMarker {
+  /** Percorso: partenza, tappe, arrivo. */
   points: Point[];
   ok: boolean;
   attack: boolean;
+  /** Centro del cerchio: l'ultima tappa (o la partenza). */
   center: Point;
-  /** Raggio in unità mappa. */
+  /** Raggio ancora percorribile dal centro, in unità mappa. */
   range: number;
+  /** Solo il raggio della pila scelta, senza freccia (prima di trascinarla). */
+  idle?: boolean;
 }
 
 export interface MapViewModel {
@@ -61,6 +65,8 @@ export interface MapViewModel {
 }
 
 export const NEUTRAL_STACK_COLOR = '#9aa3a8';
+/** Frecce degli ordini già dati. */
+export const PLAN_PATH_COLOR = '#f3ecd6';
 
 export const EMPTY_VIEW: MapViewModel = {
   countryOwner: {},
@@ -76,7 +82,6 @@ export function buildView(p: {
   state: GameState;
   selected: Selected;
   steps?: PlannedStep[];
-  plannerColor?: string;
   moved?: ReadonlySet<string>;
   events?: TurnEvent[];
   pickable?: Set<string> | null;
@@ -112,7 +117,8 @@ export function buildView(p: {
     .filter((st) => st.path && st.path.length >= 2)
     .map((st) => ({
       points: st.path!,
-      color: p.plannerColor ?? '#ffffff',
+      // crema, non il colore del giocatore: sul proprio paese sparirebbe
+      color: PLAN_PATH_COLOR,
       attack: st.arrival === 'attack_city' || st.arrival === 'attack_stack',
       ok: st.ok,
     }));

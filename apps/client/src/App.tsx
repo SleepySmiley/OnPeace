@@ -1,17 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  checkMove,
-  checkUnload,
-  computeEconomy,
-  simulatePlan,
-  type Action,
-  type PlanPreview,
-  type PlayerId,
-  type Point,
-} from '@onpeace/engine';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { computeEconomy, simulatePlan, type Point } from '@onpeace/engine';
 import { describeUnits, playerName } from './game/describe';
 import { doctrineOf } from './game/doctrine';
-import { ctx, currentPicker, currentPlanner, nav, useSession, type MoveDraft } from './game/store';
+import { describeOutcome, dragUnits, evaluateDraft, waypointFor } from './game/draft';
+import { productionOf } from './game/production';
+import { ctx, currentPicker, currentPlanner, nav, useSession } from './game/store';
 import { EMPTY_VIEW, buildView, type DraftMarker } from './game/viewModel';
 import { MapView, type MapClick } from './map/MapView';
 import type { HitTarget } from './map/scene';
@@ -27,55 +20,17 @@ import { InfoPanel } from './ui/InfoPanel';
 import { LobbyScreen } from './ui/LobbyScreen';
 import { PlanPanel } from './ui/PlanPanel';
 import { PlayersPanel } from './ui/PlayersPanel';
+import { ProductionPanel } from './ui/ProductionPanel';
 import { ReportModal } from './ui/ReportModal';
 import { ReportPanel } from './ui/ReportPanel';
 import { SetupScreen } from './ui/SetupScreen';
-import { StackPanel } from './ui/StackPanel';
+import { StackPanel, stackRef } from './ui/StackPanel';
 import { StatsChart } from './ui/StatsChart';
+import { TurnCard } from './ui/TurnCard';
 
 const fmt = new Intl.NumberFormat('it-IT');
 const noop = () => {};
 type Tab = 'orders' | 'players' | 'report' | 'chat';
-
-interface DraftEval {
-  marker: DraftMarker;
-  action: Action | null;
-  errors: string[];
-}
-
-/** Costruisce l'ordine dal percorso in preparazione e lo verifica sull'anteprima. */
-function evaluateDraft(
-  draft: MoveDraft,
-  preview: PlanPreview,
-  planner: PlayerId,
-  point: Point | null,
-  target: string | null,
-): DraftEval {
-  const marker: DraftMarker = { points: [], ok: false, attack: false, center: draft.sourcePos, range: draft.range };
-  if (!point) return { marker, action: null, errors: [] };
-  if (draft.mode === 'unload') {
-    const action: Action = { kind: 'unload', from: draft.from, units: draft.units, to: point };
-    const check = checkUnload(preview.state, ctx, nav, planner, action);
-    marker.points = [draft.sourcePos, check.ok ? check.plan.end : point];
-    marker.ok = check.ok;
-    marker.attack = check.ok && check.plan.arrival === 'attack_city';
-    return { marker, action: check.ok ? action : null, errors: check.ok ? [] : check.errors };
-  }
-  const targetStack = target ? preview.state.stacks.find((s) => s.id === target) : undefined;
-  const end = targetStack ? targetStack.pos : point;
-  const action: Action = {
-    kind: 'move',
-    from: draft.from,
-    units: draft.units,
-    path: [...draft.waypoints, end],
-    ...(targetStack ? { target: targetStack.id } : {}),
-  };
-  const check = checkMove(preview.state, ctx, nav, planner, action, preview.moved);
-  marker.points = [draft.sourcePos, ...draft.waypoints, check.ok ? check.plan.end : end];
-  marker.ok = check.ok;
-  marker.attack = check.ok && (check.plan.arrival === 'attack_city' || check.plan.arrival === 'attack_stack');
-  return { marker, action: check.ok ? action : null, errors: check.ok ? [] : check.errors };
-}
 
 export function App() {
   const s = useSession();
@@ -115,6 +70,13 @@ export function App() {
     </>
   );
 
+  // gli avvisi si chiudono da soli (o con un clic)
+  useEffect(() => {
+    if (!s.notice) return;
+    const id = setTimeout(() => useSession.getState().setNotice(null), 6000);
+    return () => clearTimeout(id);
+  }, [s.notice]);
+
   // all'avvio: se c'è una partita online salvata (e il link non ne indica un'altra), si rientra
   useEffect(() => {
     useSession.getState().resumeOnline();
@@ -149,6 +111,18 @@ export function App() {
   }, [game, mode, online.picker, online.me, unseenTurn]);
 
   const planner = screen === 'planning' ? currentPlanner(s) : null;
+
+  // annuncio all'inizio di ogni turno (una volta per turno e per chi pianifica su questo schermo)
+  const [turnCard, setTurnCard] = useState(false);
+  const announced = useRef<string | null>(null);
+  const closeTurnCard = useCallback(() => setTurnCard(false), []);
+  useEffect(() => {
+    if (!game || game.phase !== 'playing' || !planner) return;
+    const key = `${game.id}:${game.turn}:${planner}`;
+    if (announced.current === key) return;
+    announced.current = key;
+    setTurnCard(true);
+  }, [game, planner]);
   const plannerPlayer = planner && game ? game.players.find((p) => p.id === planner)! : null;
   const actions = useMemo(() => (planner ? (s.plans[planner] ?? []) : []), [planner, s.plans]);
 
@@ -173,12 +147,11 @@ export function App() {
             state: shown,
             selected,
             ...(preview ? { steps: preview.steps, moved: preview.moved } : {}),
-            ...(plannerPlayer ? { plannerColor: plannerPlayer.color } : {}),
             ...(screen === 'results' || mode === 'online' ? { events: s.events } : {}),
             pickable,
           })
         : EMPTY_VIEW,
-    [shown, selected, preview, plannerPlayer, screen, mode, s.events, pickable],
+    [shown, selected, preview, screen, mode, s.events, pickable],
   );
 
   const draftEval = useMemo(
@@ -186,16 +159,89 @@ export function App() {
     [draft, preview, planner],
   );
 
+  // pila propria scelta: cerchio tenue con il raggio di ciò che si muoverebbe trascinandola
+  const reachRing = useMemo((): DraftMarker | null => {
+    if (draft || !preview || !planner || selected?.kind !== 'stack') return null;
+    const stack = preview.state.stacks.find((x) => x.id === selected.id);
+    if (!stack || stack.owner !== planner) return null;
+    const drag = dragUnits(preview.state, planner, stack, s.unitPick, preview.moved);
+    if ('error' in drag) return null;
+    return { points: [], ok: true, attack: false, center: stack.pos, range: drag.range * ctx.map.rangeScale, idle: true };
+  }, [draft, preview, planner, selected, s.unitPick]);
+
   const onHover = useCallback((t: HitTarget | null) => setHover(t), []);
 
   const onPointer = useCallback((world: Point, hit: HitTarget | null) => {
     const st = useSession.getState();
     if (!st.draft) return;
-    const plannerId = currentPlanner(st);
-    const enemy =
-      hit?.kind === 'stack' && st.game?.stacks.some((x) => x.id === hit.id && x.owner !== plannerId) ? hit.id : null;
-    st.updateDraft({ hover: world, target: st.draft.mode === 'move' ? enemy : null });
+    st.updateDraft({ hover: world, target: st.draft.mode === 'move' && hit?.kind === 'stack' ? hit.id : null });
   }, []);
+
+  /**
+   * Conferma dell'ordine in preparazione (rilascio della pila o clic).
+   * Con Maiusc si mette una tappa e la freccia continua a seguire il mouse.
+   */
+  const commitDraft = useCallback(
+    ({ hit, world, shift }: MapClick) => {
+      const st = useSession.getState();
+      const d = st.draft;
+      if (!d || !preview || !planner) return;
+      if (shift && d.mode === 'move') {
+        const wp = waypointFor(d, world);
+        if ('error' in wp) {
+          st.updateDraft({ dragging: false });
+          return st.setNotice(wp.error);
+        }
+        st.updateDraft({ waypoints: [...d.waypoints, wp.point], dragging: false, hover: world });
+        return;
+      }
+      const result = evaluateDraft(d, preview, planner, world, d.mode === 'move' && hit?.kind === 'stack' ? hit.id : null);
+      if (result.idle) return st.cancelDraft();
+      if (result.action) return st.addAction(result.action);
+      st.setNotice(result.errors[0] ?? 'Destinazione non valida');
+      // con delle tappe già messe l'ordine resta aperto: si può correggere l'ultimo tratto
+      if (d.waypoints.length > 0) st.updateDraft({ dragging: false });
+      else st.cancelDraft();
+    },
+    [preview, planner],
+  );
+
+  /** Si può trascinare: una propria pila, mentre si danno gli ordini. */
+  const draggable = useCallback(
+    (hit: HitTarget) =>
+      hit.kind === 'stack' &&
+      planner !== null &&
+      preview !== null &&
+      preview.state.stacks.some((x) => x.id === hit.id && x.owner === planner),
+    [planner, preview],
+  );
+
+  const onDragStart = useCallback(
+    (hit: HitTarget) => {
+      const st = useSession.getState();
+      if (hit.kind !== 'stack' || st.screen !== 'planning' || !preview || !planner || !st.game) return false;
+      const stack = preview.state.stacks.find((x) => x.id === hit.id);
+      if (!stack || stack.owner !== planner) return false;
+      const drag = dragUnits(preview.state, planner, stack, st.unitPick, preview.moved);
+      if (st.selected?.kind !== 'stack' || st.selected.id !== stack.id) st.select({ kind: 'stack', id: stack.id });
+      if ('error' in drag) {
+        st.setNotice(drag.error);
+        return false;
+      }
+      st.startDraft(
+        {
+          mode: 'move',
+          from: stackRef(stack, st.game),
+          sourcePos: stack.pos,
+          units: drag.units,
+          range: drag.range * ctx.map.rangeScale,
+        },
+        true,
+      );
+      return true;
+    },
+    [preview, planner],
+  );
 
   const onCancel = useCallback(() => {
     const st = useSession.getState();
@@ -213,27 +259,12 @@ export function App() {
         if (countryId) st.pickCountry(countryId);
         return;
       }
-      if (st.screen === 'planning' && st.draft && preview && planner) {
-        if (shift && st.draft.mode === 'move') {
-          st.updateDraft({ waypoints: [...st.draft.waypoints, world] });
-          return;
-        }
-        const enemy =
-          st.draft.mode === 'move' &&
-          hit?.kind === 'stack' &&
-          preview.state.stacks.some((x) => x.id === hit.id && x.owner !== planner)
-            ? hit.id
-            : null;
-        const result = evaluateDraft(st.draft, preview, planner, world, enemy);
-        if (result.action) st.addAction(result.action);
-        else st.setNotice(result.errors[0] ?? 'Destinazione non valida');
-        return;
-      }
+      if (st.screen === 'planning' && st.draft) return commitDraft({ hit, world, shift });
       if (hit?.kind === 'stack') st.select({ kind: 'stack', id: hit.id });
       else if (hit?.kind === 'city') st.select({ kind: 'city', id: hit.id });
       else st.select(null);
     },
-    [preview, planner],
+    [commitDraft],
   );
 
   // ---------------------------------------------------------------- schermate iniziali
@@ -268,6 +299,7 @@ export function App() {
       ? game.players.find((p) => p.id === doctrineId && p.status === 'active')
       : undefined;
   const economy = planner && shown ? computeEconomy(shown, ctx, planner) : null;
+  const production = planner && shown && game.phase === 'playing' ? productionOf(shown, planner) : null;
   const stepsInvalid = preview?.steps.filter((x) => !x.ok).length ?? 0;
   const handoffPlayer = screen === 'handoff' ? game.players.find((p) => p.id === currentPlanner(s)) : null;
   const iAmDone = mode === 'online' && planner !== null && !online.waiting.includes(planner);
@@ -287,12 +319,15 @@ export function App() {
       <MapView
         map={ctx.map}
         view={view}
-        draft={draftEval?.marker ?? null}
+        draft={draftEval?.marker ?? reachRing}
         focus={s.focus}
         onHover={onHover}
         onClick={onClick}
         onPointer={onPointer}
         onCancel={onCancel}
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDrop={commitDraft}
       />
 
       <header className="topbar">
@@ -306,7 +341,13 @@ export function App() {
             {game.phase !== 'ended' && <span className="dim"> / {game.settings.maxTurns}</span>}
           </span>
         )}
-        {mode === 'online' && game.phase !== 'ended' && <Countdown deadline={online.deadline} paused={online.paused} />}
+        {mode === 'online' && game.phase !== 'ended' && (
+          <Countdown
+            deadline={online.deadline}
+            paused={online.paused}
+            {...(game.phase === 'playing' ? { total: game.settings.turnSeconds * 1000 } : {})}
+          />
+        )}
         {isHost && game.phase !== 'ended' && (
           <button
             type="button"
@@ -324,8 +365,9 @@ export function App() {
           </span>
         )}
         {mode === 'online' && game.phase === 'playing' && (
-          <span className="status waiting" title="Chi non ha ancora finito il turno">
-            {waitingNames.length > 0 ? <>In attesa di {waitingNames.join(', ')}</> : <>Tutti pronti</>}
+          <span className={`status waiting ${iAmDone ? 'done' : ''}`} title="Chi non ha ancora finito il turno">
+            {iAmDone && <span className="done-mark">✓ Turno inviato · </span>}
+            {waitingNames.length > 0 ? <>in attesa di {waitingNames.join(', ')}</> : <>tutti pronti</>}
           </span>
         )}
         {mode === 'online' && !online.connected && <span className="status offline">Riconnessione…</span>}
@@ -343,6 +385,25 @@ export function App() {
               {economy.net >= 0 ? '+' : ''}
               {fmt.format(economy.net)}
             </span>
+          </button>
+        )}
+        {production && (
+          <button
+            type="button"
+            className={`status reinforcements link ${production.available === 0 ? 'empty' : ''}`}
+            title="Unità che puoi ancora arruolare e quando i rinforzi si ricaricano (clic: dettaglio per città)"
+            onClick={() => s.select(selected?.kind === 'production' ? null : { kind: 'production' })}
+          >
+            {production.available > 0 ? (
+              <>
+                Rinforzi <b>{production.available}</b>
+                <span className="dim"> · ricarica T{production.nextRefill}</span>
+              </>
+            ) : (
+              <>
+                Rinforzi esauriti<span className="dim"> · di nuovo al T{production.nextRefill}</span>
+              </>
+            )}
           </button>
         )}
         {screen === 'planning' && planner && (
@@ -429,12 +490,38 @@ export function App() {
         </aside>
       )}
 
-      {screen === 'planning' && draftEval && (
-        <div className="banner draft">
-          {draft?.mode === 'unload' ? 'Sbarco di ' : 'Muovi '}
-          <b>{describeUnits(draft!.units)}</b> · clicca la destinazione
-          {draft?.mode === 'move' && ' · Maiusc+clic: punto intermedio'} · Esc: annulla
-          {draftEval.errors[0] && <span className="error-text block">{draftEval.errors[0]}</span>}
+      {screen === 'planning' && draft && draftEval && (
+        <div className="banner draft" role="status">
+          <div className="draft-line">
+            <span>
+              {draft.mode === 'unload' ? 'Sbarca ' : 'Muovi '}
+              <b>{describeUnits(draft.units)}</b>
+            </span>
+            {draft.hover && !draftEval.idle && (
+              <span className={draftEval.errors[0] ? 'error-text' : draftEval.marker.attack ? 'draft-outcome attack' : 'draft-outcome'}>
+                {draftEval.errors[0] ? '' : '→ '}
+                {describeOutcome(game, draftEval)}
+              </span>
+            )}
+            {draft.mode === 'move' && draft.waypoints.length > 0 && (
+              <span className="dim num">
+                raggio rimasto {(draftEval.left / ctx.map.rangeScale).toFixed(1)} su{' '}
+                {(draft.range / ctx.map.rangeScale).toFixed(1)}
+              </span>
+            )}
+          </div>
+          <div className="draft-keys">
+            {draft.dragging ? 'Rilascia sulla destinazione' : 'Clic sulla destinazione'}
+            {draft.mode === 'move' && (
+              <>
+                {' · '}
+                <kbd>Maiusc</kbd>
+                {draft.dragging ? ' al rilascio: tappa intermedia' : '+clic: altra tappa'}
+              </>
+            )}
+            {' · '}
+            <kbd>Esc</kbd> o tasto destro: annulla
+          </div>
         </div>
       )}
 
@@ -444,10 +531,21 @@ export function App() {
         </div>
       )}
 
+      {turnCard && planner && game.phase === 'playing' && !online.paused && (
+        <TurnCard
+          key={`${game.turn}:${planner}`}
+          game={shown ?? game}
+          player={planner}
+          events={game.turn > 1 ? s.events : []}
+          onClose={closeTurnCard}
+        />
+      )}
+
       {shown && !draft && selected?.kind === 'city' && (
         <CityPanel key={`${selected.id}:${actions.length}`} cityId={selected.id} state={shown} planner={planner} />
       )}
       {shown && !draft && planner && selected?.kind === 'finance' && <FinancePanel state={shown} player={planner} />}
+      {shown && !draft && planner && selected?.kind === 'production' && <ProductionPanel state={shown} player={planner} />}
       {shown && !draft && selected?.kind === 'stack' && (
         <StackPanel
           key={`${selected.id}:${actions.length}`}

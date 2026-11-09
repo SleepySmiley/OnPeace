@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   boostsFor,
+  checkLoad,
   generalUpgradesOf,
   groupRange,
   unitOf,
@@ -9,10 +10,14 @@ import {
   type StackRef,
   type StackState,
   type UnitSelection,
+  type UnitState,
 } from '@onpeace/engine';
-import { cityName, playerName, unitName } from '../game/describe';
-import { unitTooltip, upgradeName } from '../game/doctrine';
+import { cityName, describeUnits, playerName, unitName } from '../game/describe';
+import { upgradeName } from '../game/doctrine';
+import { chosenUnits, freeSelection, pickedSelection } from '../game/draft';
 import { ctx, useSession } from '../game/store';
+import { UnitCard } from './cards';
+import { TipRow } from './InfoTip';
 import { Stepper } from './Stepper';
 
 interface Props {
@@ -32,7 +37,7 @@ export function stackRef(stack: StackState, real: GameState): StackRef {
   return { at: stack.pos };
 }
 
-function groupByType(units: StackState['units'], moved: ReadonlySet<string>) {
+function groupByType(units: readonly UnitState[], moved: ReadonlySet<string>) {
   const groups = new Map<string, { total: number; free: number }>();
   for (const u of units) {
     const g = groups.get(u.type) ?? { total: 0, free: 0 };
@@ -43,57 +48,82 @@ function groupByType(units: StackState['units'], moved: ReadonlySet<string>) {
   return [...groups].map(([type, g]) => ({ type, ...g }));
 }
 
+const count = (sel: UnitSelection) => sel.reduce((s, x) => s + x.count, 0);
+
+/**
+ * Le più numerose unità di terra (scelte nel pannello, o tutte) che salgono sui trasporti della pila:
+ * si toglie un'unità alla volta finché il carico non ci sta.
+ */
+function loadPlan(state: GameState, player: PlayerId, ref: StackRef, candidates: UnitState[]): UnitSelection {
+  const toSel = (units: UnitState[]) => {
+    const m = new Map<string, number>();
+    for (const u of units) m.set(u.type, (m.get(u.type) ?? 0) + 1);
+    return [...m].map(([type, n]) => ({ type, count: n }));
+  };
+  for (let k = candidates.length; k > 0; k--) {
+    const sel = toSel(candidates.slice(0, k));
+    if (checkLoad(state, ctx, player, { kind: 'load', from: ref, units: sel }).ok) return sel;
+  }
+  return [];
+}
+
 export function StackPanel({ stackId, state, realState, planner, moved }: Props) {
   const stack = state.stacks.find((s) => s.id === stackId);
   const startDraft = useSession((s) => s.startDraft);
   const addAction = useSession((s) => s.addAction);
-  const [pick, setPick] = useState<Record<string, number> | null>(null);
+  const unitPick = useSession((s) => s.unitPick);
+  const setUnitPick = useSession((s) => s.setUnitPick);
   const [cargoPick, setCargoPick] = useState<Record<string, number>>({});
 
   const groups = useMemo(() => (stack ? groupByType(stack.units, moved) : []), [stack, moved]);
-  const cargo = useMemo(
-    () => (stack ? groupByType(stack.units.flatMap((u) => u.cargo), new Set()) : []),
-    [stack],
-  );
+  const cargo = useMemo(() => (stack ? groupByType(stack.units.flatMap((u) => u.cargo), new Set()) : []), [stack]);
   if (!stack) return null;
 
   const mine = planner !== null && stack.owner === planner;
-  const selection = pick ?? Object.fromEntries(groups.map((g) => [g.type, g.free]));
-  const chosen: UnitSelection = Object.entries(selection)
-    .filter(([, n]) => n > 0)
-    .map(([type, count]) => ({ type, count }));
-  const chosenUnits = chosen.flatMap(({ type, count }) =>
-    stack.units.filter((u) => u.type === type && !moved.has(u.id)).slice(0, count),
-  );
-  const domains = new Set(chosen.map((c) => ctx.catalog.unit(c.type).domain));
-  const range = mine ? groupRange(state, ctx, planner, chosenUnits) : 0;
-  const hasTransport = stack.units.some((u) => ctx.catalog.unit(u.type).cargo);
-  const loadable = chosen.filter((c) => ctx.catalog.unit(c.type).transportable);
-  const cargoChosen: UnitSelection = Object.entries(cargoPick)
-    .filter(([, n]) => n > 0)
-    .map(([type, count]) => ({ type, count }));
   const ref = stackRef(stack, realState);
+  // scelta del pannello: si parte da nessuna unità; senza scelta il trascinamento muove tutte le libere
+  const picked = pickedSelection(stack, unitPick, moved);
+  const free = freeSelection(stack, moved);
+  const moving = picked.length > 0 ? picked : free;
+  const domains = new Set(moving.map((c) => ctx.catalog.unit(c.type).domain));
+  const range = mine && domains.size === 1 ? groupRange(state, ctx, planner, chosenUnits(stack, moving, moved)) : 0;
+  const setCount = (type: string, n: number) =>
+    setUnitPick({
+      stack: stack.id,
+      counts: { ...(unitPick?.stack === stack.id ? unitPick.counts : {}), [type]: n },
+    });
+
+  // trasporti nella pila: posti, chi può salire, chi è a bordo
+  const transports = stack.units.filter((u) => unitOf(state, ctx, stack.owner, u.type).cargo);
+  const seats = transports.reduce((s, t) => s + unitOf(state, ctx, stack.owner, t.type).cargo!.capacity, 0);
+  const aboard = transports.reduce((s, t) => s + t.cargo.length, 0);
+  const pickedUnits = chosenUnits(stack, picked, moved);
+  const boardable = (u: UnitState) => ctx.catalog.unit(u.type).domain === 'land' && ctx.catalog.unit(u.type).transportable;
+  const candidates = (picked.length > 0 ? pickedUnits : stack.units).filter(boardable);
+  const toLoad = mine && transports.length > 0 ? loadPlan(state, planner, ref, candidates) : [];
+  const transportKinds = groupByType(transports, new Set());
+  const portCity = stack.city ? ctx.cities.get(stack.city)?.port : false;
+  const landOnly = stack.units.every(boardable);
+
   const hasGeneral = stack.units.some((u) => u.type === ctx.catalog.generalUnit);
   const upgrades = hasGeneral ? generalUpgradesOf(state, ctx, stack.owner) : [];
   const boost = boostsFor(state, ctx, stack.owner, stack.units);
   /** Scheda dell'unità con la strategia del proprietario e i bonus di comando della pila. */
-  const tooltip = (type: string) => {
-    const def = unitOf(state, ctx, stack.owner, type);
-    const sample = stack.units.find((u) => u.type === type);
+  const card = (type: string, inStack = true) => () => {
+    const sample = inStack ? stack.units.find((u) => u.type === type) : undefined;
     const b = sample ? boost(sample) : null;
     const bonus = b
       ? [
-          b.attack && `att ${b.attack > 0 ? '+' : ''}${b.attack}`,
-          b.defence && `dif ${b.defence > 0 ? '+' : ''}${b.defence}`,
-          b.crit && `crit +${b.crit}%`,
-          b.hp && `HP +${b.hp}`,
-          b.move && `mov +${b.move}`,
+          b.attack && `attacco ${b.attack > 0 ? '+' : ''}${b.attack}`,
+          b.defence && `difesa ${b.defence > 0 ? '+' : ''}${b.defence}`,
+          b.crit && `critico +${b.crit}%`,
+          b.hp && `vita +${b.hp}`,
+          b.move && `movimento +${b.move}`,
           b.view && `vista +${b.view}`,
           b.upkeep && `mantenimento ${b.upkeep}`,
-        ].filter(Boolean)
+        ].filter((x): x is string => Boolean(x))
       : [];
-    return unitTooltip(def) + (bonus.length > 0 ? `
-Bonus di comando: ${bonus.join(' · ')}` : '');
+    return <UnitCard def={unitOf(state, ctx, stack.owner, type)} base={ctx.catalog.unit(type)} bonus={bonus} />;
   };
   const label = (type: string) => {
     const def = ctx.catalog.units.get(type);
@@ -116,21 +146,21 @@ Bonus di comando: ${bonus.join(' · ')}` : '');
 
       {mine && groups.length > 1 && (
         <div className="button-row select-all">
-          <button type="button" className="ghost tiny" onClick={() => setPick(null)}>
-            Tutte
-          </button>
           <button
             type="button"
             className="ghost tiny"
-            onClick={() => setPick(Object.fromEntries(groups.map((g) => [g.type, 0])))}
+            onClick={() => setUnitPick({ stack: stack.id, counts: Object.fromEntries(groups.map((g) => [g.type, g.free])) })}
           >
-            Nessuna
+            Scegli tutte
+          </button>
+          <button type="button" className="ghost tiny" disabled={picked.length === 0} onClick={() => setUnitPick(null)}>
+            Azzera
           </button>
         </div>
       )}
       <ul className="unit-list">
         {groups.map((g) => (
-          <li key={g.type} title={stack.fog ? undefined : tooltip(g.type)}>
+          <TipRow key={g.type} tip={stack.fog ? null : card(g.type)}>
             {label(g.type)}
             {mine ? (
               <>
@@ -139,15 +169,15 @@ Bonus di comando: ${bonus.join(' · ')}` : '');
                 </span>
                 <Stepper
                   label={`Unità ${unitName(g.type)} da muovere`}
-                  value={selection[g.type] ?? 0}
+                  value={picked.find((p) => p.type === g.type)?.count ?? 0}
                   max={g.free}
-                  onChange={(v) => setPick({ ...selection, [g.type]: v })}
+                  onChange={(v) => setCount(g.type, v)}
                 />
               </>
             ) : (
               <span className="num">{g.total}</span>
             )}
-          </li>
+          </TipRow>
         ))}
       </ul>
 
@@ -159,36 +189,94 @@ Bonus di comando: ${bonus.join(' · ')}` : '');
       )}
 
       {mine && (
+        <div className="move-box">
+          {free.length === 0 ? (
+            <p className="hint-text">Tutte le unità di questa pila si sono già mosse in questo turno.</p>
+          ) : domains.size > 1 ? (
+            <p className="error-text">
+              Terra, mare e aria si muovono separatamente: scegli qui sopra quali unità muovere.
+            </p>
+          ) : (
+            <>
+              <p className="move-what">
+                {picked.length > 0 ? (
+                  <>
+                    Scelte <b>{count(picked)}</b> unità
+                  </>
+                ) : (
+                  <>
+                    Nessuna scelta: si muovono <b>tutte le {count(free)}</b> unità libere
+                  </>
+                )}
+                <span className="dim">
+                  {' '}
+                  · raggio <b className="num">{range.toFixed(1)}</b>
+                </span>
+              </p>
+              <p className="drag-hint">
+                <span className="drag-icon" aria-hidden>
+                  ⤳
+                </span>
+                <span>
+                  Trascina la pila sulla mappa per muovere o attaccare. <kbd>Maiusc</kbd> al rilascio: tappa intermedia.
+                </span>
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {mine && transports.length > 0 && (
         <>
-          <div className="move-summary">
-            {chosen.length === 0 ? (
-              <span className="dim">Nessuna unità selezionata (o già mosse)</span>
-            ) : domains.size > 1 ? (
-              <span className="error-text">Terra, mare e aria si muovono separatamente</span>
-            ) : (
-              <span>
-                Raggio <b className="num">{range.toFixed(1)}</b>
-              </span>
-            )}
-          </div>
-          <div className="button-row">
-            <button
-              type="button"
-              className="primary"
-              disabled={chosen.length === 0 || domains.size > 1}
-              onClick={() =>
-                startDraft({ mode: 'move', from: ref, sourcePos: stack.pos, units: chosen, range: range * ctx.map.rangeScale })
-              }
-            >
-              Muovi / attacca
-            </button>
-            {hasTransport && loadable.length > 0 && (
-              <button type="button" className="ghost" onClick={() => addAction({ kind: 'load', from: ref, units: loadable })}>
-                Carica
+          <h3 className="section-title">Trasporto</h3>
+          <ul className="transport-list">
+            {transportKinds.map((t) => (
+              <li key={t.type}>
+                <span>
+                  {unitName(t.type)}
+                  {t.total > 1 && <span className="dim"> ×{t.total}</span>}
+                </span>
+              </li>
+            ))}
+            <li className="dim">
+              A bordo{' '}
+              <b className="num">
+                {aboard}/{seats}
+              </b>{' '}
+              posti
+            </li>
+          </ul>
+          {toLoad.length > 0 ? (
+            <>
+              <button
+                type="button"
+                className="ghost wide"
+                onClick={() => addAction({ kind: 'load', from: ref, units: toLoad })}
+                title={describeUnits(toLoad)}
+              >
+                Imbarca {count(toLoad)} unità
+                {picked.length === 0 ? '' : ' scelte'}
               </button>
-            )}
-          </div>
+              <p className="hint-text small-gap">
+                Salgono subito a bordo. Poi trascina il trasporto e, vicino alla costa, usa <b>Sbarca</b>: tutto nello
+                stesso turno.
+              </p>
+            </>
+          ) : (
+            <p className="hint-text">
+              {aboard >= seats
+                ? 'Posti esauriti.'
+                : 'Per imbarcare, porta qui truppe di terra (nella stessa città o nello stesso punto).'}
+            </p>
+          )}
         </>
+      )}
+
+      {mine && transports.length === 0 && landOnly && portCity && (
+        <p className="hint-text small-gap">
+          Per attraversare il mare: compra qui una <b>Nave da trasporto</b>, poi imbarca le truppe dal pannello di questa
+          pila.
+        </p>
       )}
 
       {cargo.length > 0 && (
@@ -196,7 +284,7 @@ Bonus di comando: ${bonus.join(' · ')}` : '');
           <h3 className="section-title">A bordo</h3>
           <ul className="unit-list">
             {cargo.map((g) => (
-              <li key={g.type}>
+              <TipRow key={g.type} tip={card(g.type, false)}>
                 <span className="shop-name">{unitName(g.type)}</span>
                 {mine ? (
                   <Stepper
@@ -208,26 +296,31 @@ Bonus di comando: ${bonus.join(' · ')}` : '');
                 ) : (
                   <span className="num">{g.total}</span>
                 )}
-              </li>
+              </TipRow>
             ))}
           </ul>
           {mine && (
-            <button
-              type="button"
-              className="ghost wide"
-              disabled={cargoChosen.length === 0}
-              onClick={() =>
-                startDraft({
-                  mode: 'unload',
-                  from: ref,
-                  sourcePos: stack.pos,
-                  units: cargoChosen,
-                  range: ctx.rules.movement.unloadMaxDistance * ctx.map.rangeScale,
-                })
-              }
-            >
-              Sbarca…
-            </button>
+            <>
+              <button
+                type="button"
+                className="ghost wide"
+                disabled={!cargo.some((g) => (cargoPick[g.type] ?? 0) > 0)}
+                onClick={() =>
+                  startDraft({
+                    mode: 'unload',
+                    from: ref,
+                    sourcePos: stack.pos,
+                    units: Object.entries(cargoPick)
+                      .filter(([, n]) => n > 0)
+                      .map(([type, n]) => ({ type, count: n })),
+                    range: ctx.rules.movement.unloadMaxDistance * ctx.map.rangeScale,
+                  })
+                }
+              >
+                Sbarca…
+              </button>
+              <p className="hint-text small-gap">Scegli quante unità, poi clicca un punto di terra dentro il cerchio.</p>
+            </>
           )}
         </>
       )}

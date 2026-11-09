@@ -17,23 +17,33 @@ export const MAP_COLORS = {
   labelShadow: '#0b1118',
   /** Stella del Generale sulle pile. */
   general: '#f2c14e',
+  /** Passaggi di terra (ponti, tunnel, traversate). */
+  passage: '#f3ecd6',
 } as const;
 
-/** Toni terrosi per i paesi senza padrone, scelti per tinte ben distinte. */
-export const COUNTRY_COLORS = [
-  '#7c8a5a', // oliva
-  '#a8864e', // ocra
-  '#4f8a86', // verde acqua
-  '#9a5f52', // terracotta
-  '#5f8f5c', // verde
-  '#5f7896', // ardesia
-  '#8a6380', // malva
-  '#a89a6a', // sabbia
-  '#7fa08a', // salvia
-  '#6d5a86', // prugna
-  '#a0704a', // ruggine
-  '#6a7a4a', // muschio
-];
+/**
+ * Paesi senza padrone: grigi quasi uguali. Il colore vero spetta solo ai giocatori, così a colpo
+ * d'occhio si vede chi possiede cosa; le minime differenze aiutano soltanto a distinguere i
+ * confini tra paesi neutrali vicini.
+ */
+export const NEUTRAL_COLORS = ['#474d52', '#4d5358', '#42484d', '#4a5156'];
+
+/** Opacità del colore del giocatore sopra il grigio dei paesi: lo scurisce appena, per le scritte. */
+export const OWNER_FILL_ALPHA = 0.84;
+
+/** Luminanza relativa (WCAG) di un colore #rrggbb. */
+function luminance(hex: string): number {
+  const v = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * v[0]! + 0.7152 * v[1]! + 0.0722 * v[2]!;
+}
+
+/** Colore leggibile (chiaro o scuro) per testo e simboli sopra lo sfondo dato. */
+export function inkOn(background: string): string {
+  return luminance(background) > 0.36 ? '#0b1118' : '#ffffff';
+}
 
 /** Paesi confinanti: condividono almeno un vertice del bordo (entro 0,5 unità). */
 export function countryNeighbours(map: MapDef): Map<string, Set<string>> {
@@ -59,21 +69,21 @@ export function countryNeighbours(map: MapDef): Map<string, Set<string>> {
   return result;
 }
 
-/** Colorazione golosa: paesi confinanti non hanno mai lo stesso colore. */
-export function assignCountryColors(map: MapDef): Map<string, string> {
+/** Colorazione golosa: paesi confinanti non hanno mai lo stesso grigio (se ce n'è uno libero). */
+export function assignCountryColors(map: MapDef, colors: readonly string[] = NEUTRAL_COLORS): Map<string, string> {
   const neighbours = countryNeighbours(map);
   const order = [...map.countries].sort(
     (a, b) => neighbours.get(b.id)!.size - neighbours.get(a.id)!.size,
   );
-  const colors = new Map<string, string>();
+  const result = new Map<string, string>();
   const used = new Map<string, number>();
   for (const country of order) {
-    const taken = new Set([...neighbours.get(country.id)!].map((n) => colors.get(n)));
-    const free = COUNTRY_COLORS.filter((c) => !taken.has(c));
-    const pool = free.length > 0 ? free : COUNTRY_COLORS;
+    const taken = new Set([...neighbours.get(country.id)!].map((n) => result.get(n)));
+    const free = colors.filter((c) => !taken.has(c));
+    const pool = free.length > 0 ? free : colors;
     const color = pool.reduce((best, c) => ((used.get(c) ?? 0) < (used.get(best) ?? 0) ? c : best));
-    colors.set(country.id, color);
+    result.set(country.id, color);
     used.set(color, (used.get(color) ?? 0) + 1);
   }
-  return colors;
+  return result;
 }

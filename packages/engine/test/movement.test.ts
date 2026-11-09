@@ -12,6 +12,7 @@ import {
   groupRange,
   relocate,
   selectCountry,
+  simulatePlan,
   stackInCity,
   type GameState,
   type MoveAction,
@@ -107,6 +108,33 @@ describe('movimento', () => {
       none,
     );
     expect(around.ok).toBe(true);
+  });
+
+  it('un tratto che non si può fare dritto passa da solo per lo stretto (e la deviazione conta)', () => {
+    // scorciatoia di terra tra le due isole a y = 140 (come lo Stretto di Gibilterra)
+    const strait: typeof map = {
+      ...map,
+      shortcuts: [{ id: 'stretto', from: [178, 140], to: [222, 140], for: 'land' }],
+    };
+    const c2 = createContext(strait, loadRules());
+    const n2 = new NavGrid(strait);
+    const s = game();
+    const coast = place(s, 'a', ['tanks'], [175, 150]);
+    const order = move(coast.id, [{ type: 'tanks', count: 1 }], [[225, 150]]);
+    const check = checkMove(s, c2, n2, 'a', order, none);
+    expect(check.ok).toBe(true);
+    if (!check.ok) return;
+    expect(check.plan.path).toEqual([[178, 140], [222, 140], [225, 150]]);
+    expect(check.plan.length).toBeGreaterThan(60);
+    // l'anteprima disegna il percorso vero, passando per lo stretto
+    const preview = simulatePlan(s, c2, n2, 'a', [order]);
+    expect(preview.steps[0]!.path).toEqual([[175, 150], [178, 140], [222, 140], [225, 150]]);
+    // senza la scorciatoia il mare resta invalicabile
+    expect(checkMove(s, ctx, nav, 'a', order, none).ok).toBe(false);
+    // con un raggio insufficiente per la deviazione: troppo lungo
+    const far = checkMove(s, c2, n2, 'a', move(coast.id, [{ type: 'tanks', count: 1 }], [[225, 175]]), none);
+    expect(far.ok).toBe(false);
+    if (!far.ok) expect(far.errors.join()).toMatch(/troppo lungo/);
   });
 
   it('terra, mare e aria si muovono separatamente', () => {
