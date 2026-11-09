@@ -13,9 +13,11 @@ import {
   type UnitState,
 } from '@onpeace/engine';
 import { cityName, describeUnits, playerName, unitName } from '../game/describe';
-import { unitTooltip, upgradeName } from '../game/doctrine';
+import { upgradeName } from '../game/doctrine';
 import { chosenUnits, freeSelection, pickedSelection } from '../game/draft';
 import { ctx, useSession } from '../game/store';
+import { UnitCard } from './cards';
+import { TipRow } from './InfoTip';
 import { Stepper } from './Stepper';
 
 interface Props {
@@ -107,22 +109,21 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
   const upgrades = hasGeneral ? generalUpgradesOf(state, ctx, stack.owner) : [];
   const boost = boostsFor(state, ctx, stack.owner, stack.units);
   /** Scheda dell'unità con la strategia del proprietario e i bonus di comando della pila. */
-  const tooltip = (type: string) => {
-    const def = unitOf(state, ctx, stack.owner, type);
-    const sample = stack.units.find((u) => u.type === type);
+  const card = (type: string, inStack = true) => () => {
+    const sample = inStack ? stack.units.find((u) => u.type === type) : undefined;
     const b = sample ? boost(sample) : null;
     const bonus = b
       ? [
-          b.attack && `att ${b.attack > 0 ? '+' : ''}${b.attack}`,
-          b.defence && `dif ${b.defence > 0 ? '+' : ''}${b.defence}`,
-          b.crit && `crit +${b.crit}%`,
-          b.hp && `HP +${b.hp}`,
-          b.move && `mov +${b.move}`,
+          b.attack && `attacco ${b.attack > 0 ? '+' : ''}${b.attack}`,
+          b.defence && `difesa ${b.defence > 0 ? '+' : ''}${b.defence}`,
+          b.crit && `critico +${b.crit}%`,
+          b.hp && `vita +${b.hp}`,
+          b.move && `movimento +${b.move}`,
           b.view && `vista +${b.view}`,
           b.upkeep && `mantenimento ${b.upkeep}`,
-        ].filter(Boolean)
+        ].filter((x): x is string => Boolean(x))
       : [];
-    return unitTooltip(def) + (bonus.length > 0 ? `\nBonus di comando: ${bonus.join(' · ')}` : '');
+    return <UnitCard def={unitOf(state, ctx, stack.owner, type)} base={ctx.catalog.unit(type)} bonus={bonus} />;
   };
   const label = (type: string) => {
     const def = ctx.catalog.units.get(type);
@@ -159,7 +160,7 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
       )}
       <ul className="unit-list">
         {groups.map((g) => (
-          <li key={g.type} title={stack.fog ? undefined : tooltip(g.type)}>
+          <TipRow key={g.type} tip={stack.fog ? null : card(g.type)}>
             {label(g.type)}
             {mine ? (
               <>
@@ -176,7 +177,7 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
             ) : (
               <span className="num">{g.total}</span>
             )}
-          </li>
+          </TipRow>
         ))}
       </ul>
 
@@ -283,7 +284,7 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
           <h3 className="section-title">A bordo</h3>
           <ul className="unit-list">
             {cargo.map((g) => (
-              <li key={g.type}>
+              <TipRow key={g.type} tip={card(g.type, false)}>
                 <span className="shop-name">{unitName(g.type)}</span>
                 {mine ? (
                   <Stepper
@@ -295,7 +296,7 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
                 ) : (
                   <span className="num">{g.total}</span>
                 )}
-              </li>
+              </TipRow>
             ))}
           </ul>
           {mine && (

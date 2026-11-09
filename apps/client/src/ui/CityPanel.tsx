@@ -13,7 +13,8 @@ import {
   type PurchaseOrder,
 } from '@onpeace/engine';
 import { countryName, playerName, unitName } from '../game/describe';
-import { unitTooltip } from '../game/doctrine';
+import { BuildingCard, UnitCard } from './cards';
+import { TipRow } from './InfoTip';
 import { ctx, useSession } from '../game/store';
 import { Stepper } from './Stepper';
 
@@ -93,7 +94,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
           <h3 className="section-title">Arruola</h3>
           <ul className="shop">
             {units.map((u) => (
-              <li key={u.id} title={unitTooltip(u)}>
+              <TipRow key={u.id} tip={() => <UnitCard def={u} base={ctx.catalog.unit(u.id)} showCost />}>
                 <span className="shop-name">{u.name}</span>
                 <span className="num dim">{u.cost}</span>
                 <Stepper
@@ -102,7 +103,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
                   max={Math.max(0, city.reinforcements - count + (cart[u.id] ?? 0))}
                   onChange={(v) => setCart((c) => ({ ...c, [u.id]: v }))}
                 />
-              </li>
+              </TipRow>
             ))}
           </ul>
           <div className="shop-total">
@@ -132,7 +133,10 @@ export function CityPanel({ cityId, state, planner }: Props) {
                 const built = city.buildings.some((x) => x.type === b.id);
                 const buildErrors = validatePurchase(state, ctx, planner!, { city: cityId, units: [], buildings: [b.id] });
                 return (
-                  <li key={b.id} title={b.description}>
+                  <TipRow
+                    key={b.id}
+                    tip={() => <BuildingCard def={b} base={ctx.catalog.building(b.id)} built={built} />}
+                  >
                     <span className="shop-name">{b.name}</span>
                     <span className="num dim">{b.cost}</span>
                     <button
@@ -143,7 +147,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
                     >
                       {built ? 'costruito' : 'Costruisci'}
                     </button>
-                  </li>
+                  </TipRow>
                 );
               })}
           </ul>

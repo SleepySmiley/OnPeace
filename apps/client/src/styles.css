@@ -1628,3 +1628,132 @@ button.guide-fresh:hover {
   font-size: 12.5px;
   line-height: 1.45;
 }
+
+/* ---------------------------------------------------------------- schede di unità ed edifici */
+.tip-card {
+  position: fixed;
+  z-index: 40;
+  width: 268px;
+  padding: 11px 13px 10px;
+  border-radius: 7px;
+  background: var(--panel-solid);
+  border: 1px solid rgba(150, 175, 195, 0.28);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  font-size: 12.5px;
+  line-height: 1.4;
+  animation: tip-in 120ms ease-out;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-card {
+    animation: none;
+  }
+}
+
+.tip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.tip-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tip-cost {
+  color: var(--accent);
+}
+
+.tip-kind {
+  margin-top: 1px;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tip-desc {
+  margin: 7px 0 8px;
+  color: var(--text);
+}
+
+.tip-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0 0 8px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--panel-border);
+}
+
+.tip-stats > div {
+  padding: 4px 7px 5px;
+  background: var(--panel-solid);
+}
+
+.tip-stats dt {
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+
+.tip-stats dd {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.tip-delta {
+  margin-left: 4px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.tip-notes {
+  margin: 0 0 8px;
+  padding-left: 15px;
+  color: var(--text);
+}
+
+.tip-notes li {
+  margin: 1px 0;
+}
+
+.tip-notes li::marker {
+  color: var(--text-dim);
+}
+
+.tip-notes.strong li::marker {
+  color: var(--ok);
+}
+
+.tip-bonus {
+  margin: 0 0 8px;
+  color: var(--capital);
+}
+
+.tip-foot {
+  padding-top: 7px;
+  border-top: 1px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+.tip-foot b {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tip-legend {
+  margin-top: 3px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
