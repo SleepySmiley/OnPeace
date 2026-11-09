@@ -97,6 +97,10 @@ const SECTIONS: Section[] = [
           la nave e poi usa <span className="ui">Sbarca…</span>: tutto nello stesso turno.
         </li>
         <li>
+          <b>Suoni</b>: l'altoparlante in alto apre volume e muto. Avvisano del nuovo turno, degli ultimi secondi (dai
+          30), delle battaglie e delle città prese o perse.
+        </li>
+        <li>
           <b>Ordini</b>: la scheda a destra elenca i tuoi ordini nell'ordine in cui li hai dati. Si tolgono con ✕ finché il
           turno non finisce; quelli che non si possono più eseguire diventano rossi.
         </li>

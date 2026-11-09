@@ -347,6 +347,7 @@ OnPeace/
 | **M6 Serata di prova** ✅ | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni. `npm run serata`, guida in gioco, pausa, segnalazioni, prova generale. Prima serata il 9 novembre 2026; le correzioni chieste sono in M8 | Prima partita tra amici |
 | **M7 Mondo reale** ✅ | Mappa del mondo e dei continenti con paesi e città veri, costruite dai dati di Natural Earth; paesi grandi divisi in regioni; scelta della mappa; mappe grandi leggibili | Si gioca sul mondo o su un continente |
 | **M8 Chiarezza** ✅ | Dopo la prima serata: colori neutrali e dei giocatori, ordini trascinando le pile, schede di unità ed edifici, imbarco più chiaro, Gibilterra a piedi e percorsi che passano da soli per stretti e tunnel, inizio e fine del turno, stato dei rinforzi | Si capisce chi possiede cosa e cosa fa ogni scelta |
+| **M9 Suoni** ✅ | Suoni sintetizzati nel browser (Web Audio, nessun file): azioni (scelta, presa e rilascio delle pile, attacco, acquisto, costruzione, imbarco, fine turno), nuovo turno con l'esito (battaglie, città prese o perse), ultimi secondi, il tuo turno di scelta, chat, ingressi in sala, replay delle battaglie, vittoria e sconfitta. Livelli misurati e mixati su tre fasce; volume e muto nella barra in alto | Il gioco si sente |
 
 ---
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { computeEconomy, simulatePlan, type Point } from '@onpeace/engine';
 import { describeUnits, playerName } from './game/describe';
 import { doctrineOf } from './game/doctrine';
+import { sfx } from './audio/sfx';
+import { useGameSounds } from './audio/useGameSounds';
 import { describeOutcome, dragUnits, evaluateDraft, waypointFor } from './game/draft';
 import { productionOf } from './game/production';
 import { ctx, currentPicker, currentPlanner, nav, useSession } from './game/store';
@@ -24,6 +26,7 @@ import { ProductionPanel } from './ui/ProductionPanel';
 import { ReportModal } from './ui/ReportModal';
 import { ReportPanel } from './ui/ReportPanel';
 import { SetupScreen } from './ui/SetupScreen';
+import { SoundButton } from './ui/SoundButton';
 import { StackPanel, stackRef } from './ui/StackPanel';
 import { StatsChart } from './ui/StatsChart';
 import { TurnCard } from './ui/TurnCard';
@@ -45,6 +48,7 @@ export function App() {
   // Guida (evidenziata finché non la si apre) e, online, Segnala
   const helpButtons = (
     <>
+      <SoundButton />
       <button
         type="button"
         className={freshGuide ? 'tiny guide-fresh' : 'ghost tiny'}
@@ -111,6 +115,19 @@ export function App() {
   }, [game, mode, online.picker, online.me, unseenTurn]);
 
   const planner = screen === 'planning' ? currentPlanner(s) : null;
+
+  useGameSounds({
+    game,
+    me: mode === 'online' ? online.me : null,
+    events: s.events,
+    picker: mode === 'online' ? online.picker : null,
+    deadline: mode === 'online' ? online.deadline : null,
+    paused: Boolean(online.paused),
+    planning:
+      mode === 'online' && game?.phase === 'playing' && planner !== null && online.waiting.includes(planner),
+    chat: online.chat,
+    lobbyPlayers: online.lobby?.players.length ?? 0,
+  });
 
   // annuncio all'inizio di ogni turno (una volta per turno e per chi pianifica su questo schermo)
   const [turnCard, setTurnCard] = useState(false);
@@ -189,15 +206,21 @@ export function App() {
       if (shift && d.mode === 'move') {
         const wp = waypointFor(d, world);
         if ('error' in wp) {
+          sfx.play('error');
           st.updateDraft({ dragging: false });
           return st.setNotice(wp.error);
         }
+        sfx.play('waypoint');
         st.updateDraft({ waypoints: [...d.waypoints, wp.point], dragging: false, hover: world });
         return;
       }
       const result = evaluateDraft(d, preview, planner, world, d.mode === 'move' && hit?.kind === 'stack' ? hit.id : null);
       if (result.idle) return st.cancelDraft();
-      if (result.action) return st.addAction(result.action);
+      if (result.action) {
+        sfx.play(result.marker.attack ? 'attack' : 'move');
+        return st.addAction(result.action);
+      }
+      sfx.play('error');
       st.setNotice(result.errors[0] ?? 'Destinazione non valida');
       // con delle tappe già messe l'ordine resta aperto: si può correggere l'ultimo tratto
       if (d.waypoints.length > 0) st.updateDraft({ dragging: false });
@@ -225,9 +248,11 @@ export function App() {
       const drag = dragUnits(preview.state, planner, stack, st.unitPick, preview.moved);
       if (st.selected?.kind !== 'stack' || st.selected.id !== stack.id) st.select({ kind: 'stack', id: stack.id });
       if ('error' in drag) {
+        sfx.play('error');
         st.setNotice(drag.error);
         return false;
       }
+      sfx.play('pickup');
       st.startDraft(
         {
           mode: 'move',
@@ -260,6 +285,7 @@ export function App() {
         return;
       }
       if (st.screen === 'planning' && st.draft) return commitDraft({ hit, world, shift });
+      if (hit?.kind === 'stack' || hit?.kind === 'city') sfx.play('select');
       if (hit?.kind === 'stack') st.select({ kind: 'stack', id: hit.id });
       else if (hit?.kind === 'city') st.select({ kind: 'city', id: hit.id });
       else st.select(null);
@@ -407,7 +433,14 @@ export function App() {
           </button>
         )}
         {screen === 'planning' && planner && (
-          <button type="button" className={iAmDone ? 'ghost' : 'primary'} onClick={() => s.endTurn()}>
+          <button
+            type="button"
+            className={iAmDone ? 'ghost' : 'primary'}
+            onClick={() => {
+              sfx.play(iAmDone ? 'unready' : 'ready');
+              s.endTurn();
+            }}
+          >
             {iAmDone ? 'Riprendi il turno' : `Fine turno${stepsInvalid > 0 ? ` (${stepsInvalid} non validi)` : ''}`}
           </button>
         )}
