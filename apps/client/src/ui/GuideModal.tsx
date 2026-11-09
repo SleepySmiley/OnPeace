@@ -35,9 +35,10 @@ const SECTIONS: Section[] = [
             testa, poi si sceglie a caso). Il primo è il tuo paese natale.
           </li>
           <li>
-            <b>Turni simultanei</b>: tutti danno gli ordini nello stesso momento. Il turno finisce allo scadere del tempo o
-            quando tutti hanno premuto <span className="ui">Fine turno</span>. Puoi ripensarci con{' '}
-            <span className="ui">Riprendi il turno</span> finché gli altri non hanno finito.
+            <b>Turni simultanei</b>: tutti danno gli ordini nello stesso momento. Il turno finisce allo scadere del tempo (la
+            linea sotto la barra in alto si accorcia, diventa ambra e poi rossa) o quando tutti hanno premuto{' '}
+            <span className="ui">Fine turno</span>. Puoi ripensarci con <span className="ui">Riprendi il turno</span> finché gli
+            altri non hanno finito. Ogni nuovo turno si apre con un breve riepilogo in alto.
           </li>
           <li>
             <b>Esecuzione</b>: il server pesca a caso un giocatore ed esegue il suo prossimo ordine, poi un altro, e così via.{' '}
@@ -63,26 +64,37 @@ const SECTIONS: Section[] = [
     body: (
       <ul>
         <li>
-          <b>Mappa</b>: trascina per spostarti, rotellina per lo zoom, <kbd>Home</kbd> o <kbd>0</kbd> per rivedere tutto.
-          Passando sopra città e pile vedi i dettagli.
+          <b>Mappa</b>: trascina il fondo per spostarti, rotellina per lo zoom, <kbd>Home</kbd> o <kbd>0</kbd> per rivedere
+          tutto. Passando sopra città e pile vedi i dettagli. I paesi grigi sono neutrali; quelli colorati sono dei giocatori.
         </li>
         <li>
           <b>Comprare</b>: clicca una tua città, scegli le quantità con <span className="ui">+</span> e{' '}
           <span className="ui">−</span>, poi <span className="ui">Ordina</span>. Dallo stesso pannello costruisci gli edifici.
-          Le unità comprate si possono muovere subito.
+          Le unità comprate si possono muovere subito. Passando sopra un'unità o un edificio si apre la sua scheda: a cosa
+          serve, statistiche, prezzo e mantenimento.
         </li>
         <li>
-          <b>Muovere e attaccare</b>: clicca una tua pila (o la città e poi <span className="ui">Truppe in città</span>), scegli
-          quante unità, premi <span className="ui">Muovi / attacca</span> e clicca la destinazione. La linea è{' '}
-          <span className="c-ok">verde</span> se il movimento va bene, <span className="c-attack">arancione</span> se è un
-          attacco, <span className="c-bad">rossa</span> se non si può.
+          <b>Muovere e attaccare</b>: <b>trascina</b> una tua pila sulla destinazione. Il cerchio è il raggio d'azione e la
+          freccia non ne esce. La freccia è <span className="c-ok">verde</span> se il movimento va bene,{' '}
+          <span className="c-attack">arancione</span> se è un attacco, <span className="c-bad">rossa</span> se non si può; in
+          basso c'è scritto cosa succederà.
         </li>
         <li>
-          <kbd>Maiusc</kbd>+clic aggiunge una tappa al percorso; <kbd>Esc</kbd> o il clic destro annullano.
+          Per muovere solo una parte della pila, cliccala e scegli le unità nel pannello (si parte da nessuna); senza scelta si
+          muovono tutte quelle libere.
         </li>
         <li>
-          <b>Mare</b>: terra, mare e aria si muovono separatamente. Per attraversare il mare compra una Nave da trasporto in un porto,
-          usa <span className="ui">Carica</span>, muovi la nave e poi <span className="ui">Sbarca…</span>.
+          Tieni <kbd>Maiusc</kbd> mentre rilasci per mettere una tappa: il cerchio si sposta lì e si restringe a quanto resta da
+          percorrere; poi clicca la destinazione. <kbd>Esc</kbd> o il clic destro annullano.
+        </li>
+        <li>
+          <b>Stretti e tunnel</b> (tratteggio chiaro sulla mappa, per esempio Manica e Gibilterra): le truppe di terra li
+          attraversano da sole quando la destinazione è dall'altra parte; la deviazione conta nel raggio.
+        </li>
+        <li>
+          <b>Mare</b>: terra, mare e aria si muovono separatamente. Per attraversare il mare compra una Nave da trasporto in un
+          porto, porta le truppe nella stessa città, premi <span className="ui">Imbarca</span> nel pannello della pila, trascina
+          la nave e poi usa <span className="ui">Sbarca…</span>: tutto nello stesso turno.
         </li>
         <li>
           <b>Ordini</b>: la scheda a destra elenca i tuoi ordini nell'ordine in cui li hai dati. Si tolgono con ✕ finché il
@@ -108,7 +120,9 @@ const SECTIONS: Section[] = [
         </li>
         <li>
           <b>Rinforzi</b>: ogni città può produrre solo un certo numero di unità, che si ricarica ogni{' '}
-          {R.reinforcements.cycleTurns} turni. Chi conquista una città riceve subito delle Milizie gratuite.
+          {R.reinforcements.cycleTurns} turni{R.reinforcements.accumulate ? '' : ' (quelle non usate non si accumulano)'}. In
+          alto vedi quante ne puoi ancora arruolare e a che turno si ricaricano; cliccando, il dettaglio per città. Chi conquista
+          una città riceve subito delle Milizie gratuite.
         </li>
         <li>
           <b>Mantenimento</b>: a ogni turno ogni unità costa 1/{R.economy.upkeepDivisor} del suo prezzo. Con il saldo negativo

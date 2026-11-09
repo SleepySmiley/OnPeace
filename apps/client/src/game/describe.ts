@@ -50,7 +50,7 @@ export function describeAction(game: GameState, action: Action, step?: PlannedSt
       return `Muovi ${describeUnits(action.units)} ${place.text}`;
     }
     case 'load':
-      return `Carica ${describeUnits(action.units)}`;
+      return `Imbarca ${describeUnits(action.units)}`;
     case 'unload':
       return `Sbarca ${describeUnits(action.units)}`;
     case 'diplomacy': {
