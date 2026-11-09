@@ -14,6 +14,7 @@ import {
 } from '@onpeace/engine';
 import { cityName, describeUnits, playerName, unitName } from '../game/describe';
 import { upgradeName } from '../game/doctrine';
+import { sfx } from '../audio/sfx';
 import { chosenUnits, freeSelection, pickedSelection } from '../game/draft';
 import { ctx, useSession } from '../game/store';
 import { UnitCard } from './cards';
@@ -251,7 +252,10 @@ export function StackPanel({ stackId, state, realState, planner, moved }: Props)
               <button
                 type="button"
                 className="ghost wide"
-                onClick={() => addAction({ kind: 'load', from: ref, units: toLoad })}
+                onClick={() => {
+                  sfx.play('embark');
+                  addAction({ kind: 'load', from: ref, units: toLoad });
+                }}
                 title={describeUnits(toLoad)}
               >
                 Imbarca {count(toLoad)} unità

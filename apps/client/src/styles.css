@@ -2006,3 +2006,62 @@ button.reinforcements.empty {
 .turn-card-line.ok {
   color: var(--ok);
 }
+
+/* ---------------------------------------------------------------- suoni */
+.sound {
+  position: relative;
+}
+
+.sound-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+}
+
+.sound-button.off {
+  color: var(--text-dim);
+}
+
+.sound-pop {
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 10px;
+  width: 230px;
+  padding: 12px 14px;
+}
+
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.sound-row input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.sound-row input[type='range'] {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.sound-row input:disabled {
+  opacity: 0.4;
+}
+
+.sound-value {
+  flex: none;
+  width: 26px;
+  text-align: right;
+  color: var(--text-dim);
+}

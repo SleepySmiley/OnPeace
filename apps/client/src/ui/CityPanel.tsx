@@ -15,6 +15,7 @@ import {
 } from '@onpeace/engine';
 import { countryName, playerName, unitName } from '../game/describe';
 import { nextRefillTurn, refillText } from '../game/production';
+import { sfx } from '../audio/sfx';
 import { ctx, useSession } from '../game/store';
 import { BuildingCard, UnitCard } from './cards';
 import { TipRow } from './InfoTip';
@@ -165,6 +166,7 @@ export function CityPanel({ cityId, state, planner }: Props) {
                   className="primary"
                   disabled={count === 0 || errors.length > 0}
                   onClick={() => {
+                    sfx.play('buy');
                     addAction({ kind: 'buy', order });
                     setCart({});
                   }}
@@ -201,12 +203,13 @@ export function CityPanel({ cityId, state, planner }: Props) {
                       type="button"
                       className="ghost"
                       disabled={built || buildErrors.length > 0}
-                      onClick={() =>
+                      onClick={() => {
+                        sfx.play('build');
                         addAction({
                           kind: 'buy',
                           order: { city: cityId, units: [], buildings: [b.id] },
-                        })
-                      }
+                        });
+                      }}
                     >
                       {built ? 'costruito' : 'Costruisci'}
                     </button>

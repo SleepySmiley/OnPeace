@@ -1,5 +1,6 @@
 import type { Action, GameState, PlannedStep } from '@onpeace/engine';
 import { describeAction } from '../game/describe';
+import { sfx } from '../audio/sfx';
 import { useSession } from '../game/store';
 
 interface Props {
@@ -30,7 +31,10 @@ export function PlanPanel({ game, actions, steps }: Props) {
               {describeAction(game, a, step)}
               {step && !step.ok && <span className="error-text block">{step.errors[0]}</span>}
             </span>
-            <button type="button" className="ghost tiny" aria-label="Togli ordine" onClick={() => removeAction(i)}>
+            <button type="button" className="ghost tiny" aria-label="Togli ordine" onClick={() => {
+                sfx.play('remove');
+                removeAction(i);
+              }}>
               ✕
             </button>
           </li>

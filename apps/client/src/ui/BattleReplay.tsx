@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { GameState, TurnEvent } from '@onpeace/engine';
 import { cityName, playerName, unitName } from '../game/describe';
+import { sfx } from '../audio/sfx';
 import { ctx } from '../game/store';
 
 type BattleEvent = Extract<TurnEvent, { kind: 'battle' }>;
@@ -37,6 +38,14 @@ export function BattleReplay({ game, battle, onClose }: Props) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // a ogni scambio mostrato: colpo, critico o unità eliminata
+  useEffect(() => {
+    const x = step > 0 ? battle.exchanges[step - 1] : undefined;
+    if (!x) return;
+    if (x.hits.some((h) => h.hp <= 0)) sfx.play('kill');
+    else sfx.play(x.attackCrit || x.defenceCrit ? 'crit' : 'hit');
+  }, [battle, step]);
 
   // HP di ogni unità dopo `step` scambi
   const hp = useMemo(() => {
