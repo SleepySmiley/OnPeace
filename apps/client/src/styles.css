@@ -487,6 +487,64 @@ input:focus-visible {
   font-size: 13.5px;
 }
 
+/* movimento: che cosa si muove trascinando la pila */
+.move-box {
+  margin: 12px 0 2px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--row);
+}
+
+.move-box .error-text,
+.move-box .hint-text {
+  margin: 0;
+}
+
+.move-what {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+}
+
+.drag-hint {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.drag-icon {
+  color: var(--ok);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+kbd {
+  font-family: var(--font-num);
+  font-size: 11px;
+  padding: 0 5px;
+  border: 1px solid var(--panel-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.transport-list {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+}
+
+.hint-text.small-gap {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
 .stepper {
   display: inline-flex;
   align-items: center;
@@ -617,7 +675,36 @@ input:focus-visible {
 .banner.draft {
   top: auto;
   bottom: 18px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
   border-color: rgba(159, 232, 160, 0.4);
+}
+
+.draft-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+
+.draft-line .error-text {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.draft-outcome {
+  color: #9fe8a0;
+}
+
+.draft-outcome.attack {
+  color: #ff9a62;
+}
+
+.draft-keys {
+  color: var(--text-dim);
+  font-size: 12px;
 }
 
 .toast {

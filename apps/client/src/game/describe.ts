@@ -26,7 +26,7 @@ export function describeUnits(sel: UnitSelection): string {
 }
 
 /** Destinazione: città (se agganciata), altrimenti paese o mare. */
-function placeOf(pos: readonly [number, number]): { city: string | null; text: string } {
+export function placeOf(pos: readonly [number, number]): { city: string | null; text: string } {
   const snap = ctx.rules.movement.citySnapDistance * ctx.map.rangeScale;
   const city = ctx.map.cities.find((c) => Math.hypot(c.pos[0] - pos[0], c.pos[1] - pos[1]) <= snap);
   if (city) return { city: city.name, text: `a ${city.name}` };

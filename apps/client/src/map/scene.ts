@@ -277,7 +277,7 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
       text.anchor.set(0, 0.5);
       text.x = -w / 2 + 14;
       node.addChild(g, text);
-      node.alpha = marker.fog ? 0.6 : marker.moved ? 0.55 : 1;
+      node.alpha = marker.fog ? 0.6 : marker.moved ? 0.7 : 1;
       stackLayer.addChild(node);
       return { marker, node, w, h, sx: 0, sy: 0 };
     });
@@ -308,20 +308,29 @@ export function buildScene(app: Application, map: MapDef, fitScale: () => number
 
     draftG.clear();
     if (draft) {
-      draftG.circle(draft.center[0], draft.center[1], draft.range).fill({ color: '#ffffff', alpha: 0.05 });
-      draftG.circle(draft.center[0], draft.center[1], draft.range).stroke({ width: 1.4 * px, color: '#ffffff', alpha: 0.5 });
+      const [cx, cy] = draft.center;
+      // cerchio di quanto si può ancora percorrere (dall'ultima tappa); tenue prima di trascinare
+      draftG.circle(cx, cy, draft.range).fill({ color: '#ffffff', alpha: draft.idle ? 0.025 : 0.05 });
+      draftG
+        .circle(cx, cy, draft.range)
+        .stroke({ width: (draft.idle ? 1.1 : 1.4) * px, color: '#ffffff', alpha: draft.idle ? 0.28 : 0.55 });
       if (draft.points.length >= 2) {
         drawPath(draftG, draft.points, draft.ok ? (draft.attack ? '#ff7a3d' : '#9fe8a0') : '#ff4d4d', draft.attack, px);
+      }
+      for (const [x, y] of draft.points.slice(1, -1)) {
+        draftG.circle(x, y, 4 * px).fill('#f3ecd6').stroke({ width: 1.5 * px, color: '#0b1118' });
       }
     }
   }
 
   function drawPath(g: Graphics, pts: readonly Point[], color: string, attack: boolean, px: number) {
+    // bordo scuro sotto la freccia: si legge su qualunque colore di paese
+    g.poly(flat(pts), false).stroke({ width: 5.5 * px, color: '#0b1118', alpha: 0.5, cap: 'round', join: 'round' });
     if (attack) dashed(g, pts, 9 * px, 6 * px);
     else g.poly(flat(pts), false);
     g.stroke({ width: 2.4 * px, color, alpha: 0.95, cap: 'round', join: 'round' });
     arrowHead(g, pts[pts.length - 2]!, pts[pts.length - 1]!, 11 * px);
-    g.fill({ color, alpha: 0.95 });
+    g.fill({ color, alpha: 0.95 }).stroke({ width: 1.2 * px, color: '#0b1118', alpha: 0.6, join: 'round' });
   }
 
   function drawHighlight() {
