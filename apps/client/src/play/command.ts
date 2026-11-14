@@ -1,11 +1,12 @@
 /**
- * Che cosa dice e offre il pannello della mossa in ogni momento del turno, senza decidere come
- * si disegna: le proposte della pagina di prova lo mostrano ognuna a modo suo.
+ * Che cosa dice e offre il comando della mossa in ogni momento del turno (cosa fare, il numero
+ * da tenere d'occhio, chi contro chi, dadi, armate, bottoni), senza decidere come si disegna:
+ * la barra in basso della disposizione essenziale lo mostra su una riga.
  */
 import { useSession } from '../store';
-import { PHASES } from '../play/describe';
-import { attackTargets, freeTerritories, maxDice, moveTargets, reinforcementsFor, type MyMove } from '../play/logic';
-import { useGame } from '../play/useGame';
+import { PHASES } from './describe';
+import { attackTargets, freeTerritories, maxDice, moveTargets, reinforcementsFor, type MyMove } from './logic';
+import { useGame } from './useGame';
 
 export interface Side {
   id: string;
@@ -97,7 +98,8 @@ export function useCommand(): Command {
         const parts = [`${r.base} dai territori`];
         if (r.bonus > 0) parts.push(`+${r.bonus} ${r.held.map((c) => board.def.continents.find((x) => x.id === c)?.name).join(', ')}`);
         if (fromSets > 0) parts.push(`+${fromSets} dai tris`);
-        breakdown = parts.join(' · ');
+        // solo se c'è altro oltre ai territori: "3 dai territori" da solo ripeterebbe il totale
+        if (parts.length > 1) breakdown = parts.join(' · ');
       }
       return {
         ...base,

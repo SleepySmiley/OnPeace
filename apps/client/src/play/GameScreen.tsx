@@ -4,7 +4,6 @@
  * Invio conferma, 1-3 dadi, 0 vista d'insieme.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { create } from 'zustand';
 import { useGameSounds } from '../audio/useGameSounds';
 import { BoardCanvas } from '../board/BoardCanvas';
 import type { BoardState } from '../board/common';
@@ -14,6 +13,7 @@ import { useSession } from '../store';
 import { GuideModal } from '../ui/GuideModal';
 import { ReportModal } from '../ui/ReportModal';
 import { ActionPanel } from './ActionPanel';
+import { CommandBar } from './CommandBar';
 import { describeEvent, isHighlight, namesFor } from './describe';
 import { GameOver } from './GameOver';
 import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
@@ -25,11 +25,9 @@ import { useGame } from './useGame';
 const INSETS: Record<Layout, Insets> = {
   plancia: { top: 56, right: 384, bottom: 0, left: 0 },
   comandi: { top: 112, right: 0, bottom: 210, left: 0 },
-  essenziale: { top: 56, right: 0, bottom: 0, left: 0 },
+  // la barra dei comandi in basso: la mappa si adatta sopra
+  essenziale: { top: 56, right: 0, bottom: 110, left: 0 },
 };
-
-/** Conta gli spostamenti della vista: chi sta attaccato a un territorio sullo schermo si riposiziona. */
-const useViewTick = create<{ n: number }>(() => ({ n: 0 }));
 
 /** Il tabellone con lo stato della partita, le scelte in corso e i lampi delle ultime battaglie. */
 function useBoardState(): BoardState {
@@ -112,62 +110,22 @@ function EventToasts() {
   );
 }
 
-/** Pannello della mossa vicino al territorio scelto (disposizione essenziale). */
-function AnchoredAction({ painter }: { painter: BoardPainter | null }) {
-  const { move } = useGame();
-  const tick = useViewTick((s) => s.n);
-  const draft = useSession((s) => s.draft);
-  const anchorId = move.kind === 'occupy' ? move.to : (draft.target ?? draft.selected);
-  const box = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  useEffect(() => {
-    const p = anchorId && painter ? painter.territoryOnScreen(anchorId) : null;
-    const el = box.current;
-    if (!p || !el) {
-      setPos(null);
-      return;
-    }
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    // a destra del territorio se c'è posto, altrimenti a sinistra; sempre dentro lo schermo
-    let left = p[0] + 34;
-    if (left + w > innerWidth - 12) left = p[0] - 34 - w;
-    const top = Math.min(innerHeight - h - 12, Math.max(64, p[1] - h / 2));
-    setPos({ left: Math.max(12, left), top });
-  }, [anchorId, painter, tick, move, draft]);
-  const mine = move.kind !== 'wait' && move.kind !== 'out' && move.kind !== 'over' && move.kind !== 'wait-setup';
-  return (
-    <div ref={box} className={`anchored${pos ? ' at' : ''}${mine ? '' : ' quiet'}`} style={pos ? { left: pos.left, top: pos.top } : undefined}>
-      <ActionPanel floating />
-    </div>
-  );
-}
-
 /** Il tabellone, a parte: spostare la vista o passare col mouse sui territori non ridisegna i pannelli. */
 function Board({ insets, onPainter }: { insets: Insets; onPainter: (p: BoardPainter | null) => void }) {
   const board = useSession((s) => s.board)!;
   const style = useLook((s) => s.style);
   const state = useBoardState();
-  const frame = useRef(0);
-  const onView = useCallback(() => {
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => useViewTick.setState((s) => ({ n: s.n + 1 })));
-  }, []);
   const onClick = useCallback((id: string | null, how: { shift: boolean; right: boolean }) => useSession.getState().clickTerritory(id, how), []);
   const onHover = useCallback((id: string | null) => useSession.getState().setHover(id), []);
-  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} onView={onView} painterRef={onPainter} />;
+  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
 }
 
 interface Props {
-  /** Disposizione essenziale: il pannello della mossa da usare al posto di quello vicino al territorio. */
-  command?: ReactNode;
-  /** Spazio coperto dai pannelli, se diverso da quello della disposizione. */
-  insets?: Insets;
-  /** In più nella barra in alto (pagine di prova). */
+  /** In più nella barra in alto (pagina di prova). */
   topbarExtra?: ReactNode;
 }
 
-export function GameScreen({ command, insets, topbarExtra }: Props = {}) {
+export function GameScreen({ topbarExtra }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
   const layout = useLook((s) => s.layout);
@@ -241,7 +199,7 @@ export function GameScreen({ command, insets, topbarExtra }: Props = {}) {
 
   return (
     <div className={`game layout-${layout}`}>
-      <Board insets={insets ?? INSETS[layout]} onPainter={setPainter} />
+      <Board insets={INSETS[layout]} onPainter={setPainter} />
       <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
         {topbarExtra}
       </TopBar>
@@ -281,7 +239,7 @@ export function GameScreen({ command, insets, topbarExtra }: Props = {}) {
           <div className="corner-players panel">
             <PlayersPanel compact />
           </div>
-          {move.kind !== 'briefing' && (command ?? <AnchoredAction painter={painter} />)}
+          {move.kind !== 'briefing' && <CommandBar />}
           <div className="corner-tools">
             <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
               Carte e obiettivo <span className="count">{cardCount}</span>

@@ -29,7 +29,7 @@ export function Stepper({ value, min, max, onChange, label }: { value: number; m
   );
 }
 
-export function ActionPanel({ floating = false }: { floating?: boolean }) {
+export function ActionPanel() {
   const game = useGame();
   const { view, lobby, board, me, move, colorOf, playerName, territory } = game;
   const draft = useSession((s) => s.draft);
@@ -350,7 +350,7 @@ export function ActionPanel({ floating = false }: { floating?: boolean }) {
   }
 
   return (
-    <section className={`action-panel${floating ? ' floating' : ''}${busy ? ' busy' : ''}`} aria-label="La tua mossa" aria-live="polite">
+    <section className={`action-panel${busy ? ' busy' : ''}`} aria-label="La tua mossa" aria-live="polite">
       {body}
     </section>
   );

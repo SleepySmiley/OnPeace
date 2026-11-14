@@ -14,7 +14,7 @@ export type Layout = 'plancia' | 'comandi' | 'essenziale';
 export const LAYOUTS: { id: Layout; name: string; tagline: string }[] = [
   { id: 'plancia', name: 'Plancia laterale', tagline: 'Tutto in una colonna a destra' },
   { id: 'comandi', name: 'Comandi in basso', tagline: 'Giocatori in alto, mosse e carte in basso' },
-  { id: 'essenziale', name: 'Essenziale', tagline: 'Solo il tabellone, i comandi vicino al territorio' },
+  { id: 'essenziale', name: 'Essenziale', tagline: 'Solo il tabellone, i comandi in una barra in basso' },
 ];
 
 const KEY = 'onpeace.aspetto';
