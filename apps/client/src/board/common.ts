@@ -30,6 +30,8 @@ export interface BoardState {
   pending?: ReadonlyMap<string, number>;
   /** Territori appena coinvolti in una battaglia o una conquista: si accendono per un attimo (id → ms dell'evento). */
   flashes?: ReadonlyMap<string, number>;
+  /** Territori senza pedina per un momento (la scena della battaglia ci mette i suoi carri). */
+  hidden?: ReadonlySet<string> | null;
   /** false: niente pedine (tabellone di sfondo, senza partita). */
   tokens?: boolean;
 }

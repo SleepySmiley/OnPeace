@@ -1,0 +1,1054 @@
+/*
+ * Scena della battaglia: strato sopra il tabellone, dadi in 3D, barre da cinema, camera sui due
+ * territori, carri armati che si sparano, versione piccola per chi guarda. Due temi: classico
+ * (carta, inchiostro, tavolo verde) e vetro (scuro, vetro). Le durate delle fasi arrivano in --ms.
+ */
+
+/* ------------------------------------------------------------------ strato */
+.bt-layer {
+  position: absolute;
+  inset: 52px 0 0;
+  z-index: 14;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bt-layer.bt-small {
+  inset: 62px 0 auto;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  cursor: default;
+  pointer-events: none;
+}
+
+}
+
+}
+
+}
+
+@keyframes bt-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes bt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ dado in 3D */
+.d3 {
+  --s: 64px;
+  position: relative;
+  flex: none;
+  width: var(--s);
+  height: var(--s);
+  perspective: calc(var(--s) * 8);
+  transition: transform 0.3s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+
+.d3.attack {
+  --d3-face: var(--die-attack);
+  --d3-pip: var(--die-attack-pip);
+  --d3-edge: color-mix(in srgb, var(--die-attack) 62%, #000);
+}
+
+.d3.defense {
+  --d3-face: var(--die-defense);
+  --d3-pip: var(--die-defense-pip);
+  --d3-edge: color-mix(in srgb, var(--die-defense) 74%, #000);
+}
+
+.d3-fly,
+.d3-cube {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.d3-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: calc(var(--s) * 0.13);
+  border-radius: calc(var(--s) * 0.2);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.32), transparent 58%),
+    var(--d3-face);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.14),
+    inset calc(var(--s) * -0.05) calc(var(--s) * -0.07) calc(var(--s) * 0.12) rgba(0, 0, 0, 0.24);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+
+/* dado perso: spento e grigio (::after toglie il colore, ::before scurisce) */
+.d3-face::before,
+.d3-face::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: inherit;
+  background: transparent;
+  transition: background 0.3s;
+}
+
+.d3-face::after {
+  mix-blend-mode: saturation;
+}
+
+.d3-face.f1 {
+  transform: translateZ(calc(var(--s) / 2));
+}
+.d3-face.f6 {
+  transform: rotateY(180deg) translateZ(calc(var(--s) / 2));
+}
+.d3-face.f2 {
+  transform: rotateY(90deg) translateZ(calc(var(--s) / 2));
+}
+.d3-face.f5 {
+  transform: rotateY(-90deg) translateZ(calc(var(--s) / 2));
+}
+.d3-face.f3 {
+  transform: rotateX(90deg) translateZ(calc(var(--s) / 2));
+}
+.d3-face.f4 {
+  transform: rotateX(-90deg) translateZ(calc(var(--s) / 2));
+}
+
+/* l'interno del cubo: riempie gli spigoli arrotondati */
+.d3-core {
+  position: absolute;
+  inset: 4%;
+  background: var(--d3-edge);
+}
+.d3-core.c2 {
+  transform: rotateY(90deg);
+}
+.d3-core.c3 {
+  transform: rotateX(90deg);
+}
+
+.d3-pip {
+  width: 74%;
+  height: 74%;
+  margin: auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 60% 65%, var(--d3-pip) 50%, color-mix(in srgb, var(--d3-pip) 60%, #000) 100%);
+  box-shadow: inset 0 calc(var(--s) * 0.02) calc(var(--s) * 0.03) rgba(0, 0, 0, 0.35);
+}
+
+.d3-shadow {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: -16%;
+  height: 30%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.6), transparent);
+  pointer-events: none;
+}
+
+.d3-mark {
+  position: absolute;
+  inset: -14%;
+  border-radius: 32%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+
+.d3.won {
+  transform: scale(1.06);
+}
+
+.d3.won .d3-mark {
+  opacity: 1;
+  box-shadow:
+    0 0 0 3px var(--bt-win),
+    0 0 26px var(--bt-win);
+}
+
+.d3.lost {
+  transform: scale(0.86) translateY(4px);
+}
+
+.d3.lost .d3-face::after {
+  background: #808080;
+}
+
+.d3.lost .d3-face::before {
+  background: rgba(14, 10, 8, 0.28);
+}
+
+.d3.spare .d3-face::before {
+  background: rgba(14, 10, 8, 0.32);
+}
+
+body[data-stile='classico'] {
+  --bt-win: #e3b94f;
+}
+
+body[data-stile='vetro'] {
+  --bt-win: #ffd60a;
+}
+
+/* ------------------------------------------------------------------ pezzi comuni */
+.bt-count {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+}
+
+.bt-count-n {
+  display: inline-block;
+  animation: bt-bump 420ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.bt-loss {
+  position: absolute;
+  top: 0;
+  font-size: 0.5em;
+  font-weight: 800;
+  color: #ff6a5a;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: bt-loss 1200ms ease-out both;
+}
+
+@keyframes bt-bump {
+  0% {
+    transform: scale(1.35);
+  }
+}
+
+.loss-right .bt-loss {
+  left: calc(100% + 0.15em);
+}
+
+.loss-left .bt-loss {
+  right: calc(100% + 0.15em);
+}
+
+@keyframes bt-loss {
+  0% {
+    opacity: 0;
+    transform: translateY(0.6em) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(0) scale(1.2);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-0.3em) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-0.7em) scale(1);
+  }
+}
+
+.bt-tally {
+  display: inline-flex;
+  gap: 16px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.bt-tally b {
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.bt-tally b.neg {
+  opacity: 1;
+  color: var(--bt-neg, var(--bad));
+}
+
+.bt-skip {
+  position: absolute;
+  right: 18px;
+  bottom: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.bt-skip.inline {
+  position: static;
+  color: var(--ink-dim);
+  text-shadow: none;
+}
+
+/* esito: un timbro sulla carta, un'etichetta di luce sul vetro */
+.bt-stamp {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  padding: 10px 24px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  --tone: var(--ink);
+}
+
+.bt-stamp.good {
+  --tone: var(--good);
+}
+.bt-stamp.bad {
+  --tone: var(--bad);
+}
+.bt-stamp.neutral {
+  --tone: var(--ink-dim);
+}
+
+body[data-stile='classico'] .bt-stamp {
+  font-family: var(--display);
+  font-size: 40px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tone);
+  background: rgba(243, 234, 210, 0.95);
+  border: 5px double var(--tone);
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  animation: bt-stamp-paper 520ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+body[data-stile='classico'] .bt-stamp.good {
+  --tone: #8a2a1f;
+}
+
+body[data-stile='vetro'] .bt-stamp {
+  font-family: var(--display);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+  background: rgba(20, 22, 28, 0.82);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid color-mix(in srgb, var(--tone) 70%, transparent);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 40px color-mix(in srgb, var(--tone) 45%, transparent),
+    0 20px 40px rgba(0, 0, 0, 0.5);
+  animation: bt-stamp-glass 460ms cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+
+body[data-stile='vetro'] .bt-stamp.neutral {
+  --tone: #8e8e93;
+}
+
+@keyframes bt-stamp-paper {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(2.2);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(-8deg) scale(1);
+  }
+}
+
+@keyframes bt-stamp-glass {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: none;
+  }
+}
+
+.st-outro .bt-stamp {
+  opacity: 0;
+  transition: opacity var(--ms);
+}
+
+/* ------------------------------------------------------------------ camera, dadi, barre */
+.mp-wrap {
+  position: fixed;
+  inset: 0;
+}
+
+.mp-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse var(--rx, 300px) var(--ry, 220px) at var(--mx, 50%) var(--my, 50%), transparent 55%, rgba(0, 0, 0, 0.62) 100%);
+  animation: bt-fade 700ms ease-out both;
+  pointer-events: none;
+}
+
+.st-outro .mp-light,
+.st-outro .mp-die,
+.st-outro .mp-clash {
+  opacity: 0;
+  transition: opacity calc(var(--ms) * 0.6);
+}
+
+.mp-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.mp-bar.top {
+  top: 52px;
+  height: 58px;
+  animation: mp-bar-top 600ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.mp-bar.bottom {
+  bottom: 0;
+  height: 96px;
+  animation: mp-bar-bottom 600ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.st-outro .mp-bar {
+  opacity: 0;
+  transition: opacity var(--ms);
+}
+
+.st-outro .mp-bar.top {
+  animation: mp-bar-top var(--ms) ease-in reverse both;
+}
+
+.st-outro .mp-bar.bottom {
+  animation: mp-bar-bottom var(--ms) ease-in reverse both;
+}
+
+@keyframes mp-bar-top {
+  from {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes mp-bar-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+body[data-stile='classico'] .mp-bar {
+  background: #1d150e;
+  color: #efe5cb;
+}
+
+body[data-stile='vetro'] .mp-bar {
+  background: #000;
+  color: #f5f5f7;
+}
+
+.mp-bar b {
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+body[data-stile='vetro'] .mp-bar b {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.mp-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.mp-bar .bt-tally {
+  --bt-neg: #ff8a7a;
+  opacity: 0.85;
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+}
+
+@keyframes mp-tag-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+.mp-die {
+  position: absolute;
+}
+
+.mp-tray {
+  position: absolute;
+  border-radius: 18px;
+  animation: bt-fade 300ms ease-out both;
+}
+
+body[data-stile='classico'] .mp-tray {
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1.6px) 0 0 / 5px 5px,
+    radial-gradient(ellipse at 50% 40%, #2c6646, #1a4430);
+  box-shadow:
+    inset 0 0 0 2px rgba(214, 178, 94, 0.55),
+    inset 0 0 24px rgba(0, 0, 0, 0.5),
+    0 0 0 6px #5b371f,
+    0 16px 34px rgba(0, 0, 0, 0.55);
+}
+
+body[data-stile='vetro'] .mp-tray {
+  background: rgba(16, 18, 23, 0.78);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+}
+
+.mp-sep {
+  position: absolute;
+  width: 0;
+  border-left: 2px dashed rgba(214, 178, 94, 0.5);
+}
+
+body[data-stile='vetro'] .mp-sep {
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.mp-clash {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  font-family: var(--num);
+  font-size: 34px;
+  font-weight: 800;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+  animation: bt-clash 380ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.mp-clash.a {
+  color: var(--die-attack);
+}
+
+.mp-clash.d {
+  color: #fff;
+}
+
+.mp-stamp {
+  z-index: 6;
+}
+
+.mp-wrap .bt-skip {
+  bottom: 106px;
+  z-index: 1;
+}
+
+/* ------------------------------------------------------------------ carri armati */
+body[data-stile='classico'] {
+  --tk-line: #2b2219;
+  --tk-track: #2f2820;
+}
+
+body[data-stile='vetro'] {
+  --tk-line: rgba(255, 255, 255, 0.8);
+  --tk-track: #15171c;
+}
+
+/* sopra i carri (che si ordinano tra loro con z-index = y) */
+.tk-wrap .mp-bar {
+  z-index: 3000;
+}
+.tk-wrap .mp-tray,
+.tk-wrap .mp-sep {
+  z-index: 2500;
+}
+.tk-wrap .mp-die,
+.tk-wrap .mp-clash {
+  z-index: 2600;
+}
+.tk-wrap .bt-stamp {
+  z-index: 3100;
+}
+.tk-wrap .bt-skip {
+  z-index: 3200;
+}
+
+.tk {
+  position: absolute;
+  translate: -50% -50%;
+  transition:
+    left 0.7s cubic-bezier(0.3, 0.7, 0.3, 1),
+    top 0.7s cubic-bezier(0.3, 0.7, 0.3, 1);
+  animation: tk-enter 650ms var(--enter, 0ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  pointer-events: none;
+}
+
+.tk.moving {
+  transition-duration: 1.2s;
+}
+
+.tk-alto {
+  width: 58px;
+  height: 42px;
+}
+
+.tk-lato {
+  width: 76px;
+  height: 49px;
+}
+
+@keyframes tk-enter {
+  from {
+    opacity: 0;
+    transform: translate(var(--back));
+  }
+}
+
+.st-outro .tk,
+.st-outro .tk-plate {
+  opacity: 0;
+  transition: opacity calc(var(--ms) * 0.6);
+}
+
+.tk-body {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--hull)) scaleX(var(--flip));
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.55));
+}
+
+body[data-stile='vetro'] .tk-body {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 65%, transparent)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6));
+}
+
+.tk-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.tk-hull,
+.tk-dome {
+  fill: var(--c);
+  stroke: var(--tk-line);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.tk-deck {
+  fill: color-mix(in srgb, var(--c) 72%, #000);
+}
+
+.tk-hatch {
+  fill: color-mix(in srgb, var(--c) 68%, #000);
+  stroke: var(--tk-line);
+  stroke-width: 0.6;
+}
+
+.tk-barrel,
+.tk-brake {
+  fill: color-mix(in srgb, var(--c) 50%, #000);
+  stroke: var(--tk-line);
+  stroke-width: 0.8;
+}
+
+.tk-track {
+  fill: var(--tk-track);
+}
+
+.tk-tread {
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 2.4;
+}
+
+.tk-wheel {
+  fill: #77736c;
+  stroke: var(--tk-track);
+  stroke-width: 1.2;
+}
+
+.tk-turret {
+  transform: rotate(var(--aim));
+  transform-box: view-box;
+  transform-origin: 0 0;
+  transition: transform 260ms ease-out;
+}
+
+.tk-flash {
+  fill: #ffe08a;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tk.firing .tk-flash {
+  animation: tk-flash 260ms var(--fire) ease-out both;
+}
+
+@keyframes tk-flash {
+  0% {
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+.tk.firing .tk-svg {
+  animation: tk-recoil 420ms var(--fire) ease-out both;
+}
+
+@keyframes tk-recoil {
+  0% {
+    transform: none;
+  }
+  10% {
+    transform: translateX(-6px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.tk.hit .tk-body {
+  animation: tk-die 720ms var(--hit) both;
+}
+
+@keyframes tk-die {
+  4% {
+    filter: brightness(3);
+    transform: rotate(var(--hull)) scaleX(var(--flip)) translate(3px, -2px);
+  }
+  14% {
+    transform: rotate(var(--hull)) scaleX(var(--flip)) translate(-3px, 2px);
+  }
+  35% {
+    opacity: 1;
+    filter: brightness(0.3) sepia(0.4);
+    transform: rotate(var(--hull)) scaleX(var(--flip)) scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(0.2);
+    transform: rotate(var(--hull)) scaleX(var(--flip)) scale(0.75);
+  }
+}
+
+/* proiettile: si muove dal cannone al bersaglio; di lato fa una parabola */
+.tk-shell {
+  position: absolute;
+  z-index: 2000;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  animation: tk-shell var(--flight) linear var(--fire) both;
+}
+
+@keyframes tk-shell {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  3% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy));
+  }
+}
+
+.tk-shell i {
+  position: absolute;
+  left: -11px;
+  top: -2.5px;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, #ffc65c 45%, #fffbe8);
+  box-shadow: 0 0 10px 3px rgba(255, 170, 60, 0.75);
+  rotate: var(--rot);
+}
+
+.tk-shell.arc i {
+  animation: tk-arc var(--flight) var(--fire) both;
+}
+
+@keyframes tk-arc {
+  0% {
+    translate: 0 0;
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.6, 1);
+  }
+  50% {
+    translate: 0 var(--arc);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.4);
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+/* esplosione: palla di fuoco, onda d'urto, fumo */
+.tk-boom {
+  position: absolute;
+  z-index: 2001;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.tk-boom i {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.tk-fire {
+  left: -38px;
+  top: -38px;
+  width: 76px;
+  height: 76px;
+  background: radial-gradient(circle, #fffbe6 0 16%, #ffd060 30%, #ff7a1a 52%, rgba(190, 40, 0, 0) 72%);
+  animation: tk-fire 560ms var(--hit) ease-out both;
+}
+
+@keyframes tk-fire {
+  0% {
+    opacity: 0;
+  }
+  3% {
+    opacity: 1;
+    transform: scale(0.25);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+.tk-ring {
+  left: -44px;
+  top: -44px;
+  width: 88px;
+  height: 88px;
+  border: 3px solid rgba(255, 224, 160, 0.9);
+  animation: tk-ring 480ms var(--hit) ease-out both;
+}
+
+@keyframes tk-ring {
+  0% {
+    opacity: 0;
+  }
+  3% {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+.tk-smoke {
+  left: -18px;
+  top: -18px;
+  width: 36px;
+  height: 36px;
+  background: radial-gradient(circle, rgba(58, 52, 46, 0.8), rgba(58, 52, 46, 0) 70%);
+  animation: tk-smoke 760ms calc(var(--hit) + 80ms) ease-out both;
+}
+
+.tk-smoke.s1 {
+  --sx: -20px;
+  --sy: -34px;
+}
+.tk-smoke.s2 {
+  --sx: 16px;
+  --sy: -42px;
+}
+.tk-smoke.s3 {
+  --sx: 2px;
+  --sy: -20px;
+}
+
+@keyframes tk-smoke {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--sx), var(--sy)) scale(2.3);
+  }
+}
+
+/* targa con nome e armate, dietro la formazione */
+.tk-plate {
+  position: absolute;
+  z-index: 1500;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--panel-solid);
+  border: 2px solid var(--c);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  animation: mp-tag-in 420ms 900ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  transition:
+    left 0.7s,
+    top 0.7s;
+}
+
+.tk-plate-new {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+
+.tk-plate .bt-count {
+  font-family: var(--num);
+  font-size: 24px;
+  padding-left: 4px;
+}
+
+/* ------------------------------------------------------------------ chi guarda, in piccolo */
+.sm-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px;
+  font-size: 15px;
+  white-space: nowrap;
+  animation: sm-in 220ms ease-out both;
+}
+
+.st-outro .sm-card {
+  animation: sm-out var(--ms) ease-in both;
+}
+
+@keyframes sm-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes sm-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.sm-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sm-side .bt-count {
+  font-family: var(--num);
+  font-size: 22px;
+  font-weight: 700;
+  min-width: 1.2em;
+  text-align: center;
+}
+
+.sm-dice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sm-dice .dice {
+  gap: 3px;
+}
+
+.sm-dice.rolling .die {
+  animation: tumble 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.sm-result {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel-solid);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  animation: bt-fade 200ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-layer *,
+  .bt-layer *::before,
+  .bt-layer *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}

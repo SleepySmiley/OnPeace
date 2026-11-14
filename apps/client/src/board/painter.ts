@@ -132,6 +132,11 @@ export class BoardPainter {
     return t ? [t.anchor[0] * view.scale + view.x, t.anchor[1] * view.scale + view.y] : null;
   }
 
+  /** Ridisegna le pedine (cambiato qualcosa che lo stato non dice, come la forma delle pedine). */
+  redraw(): void {
+    this.requestFrame();
+  }
+
   /** La vista in questo momento. */
   currentView(): BoardView {
     return { ...this.view };

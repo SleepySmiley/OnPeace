@@ -3,6 +3,7 @@
  * zero. Continenti in tinte da atlante, mare chiaro con le increspature incise, nomi in
  * maiuscoletto antico, pedine dei giocatori come dischi di plastica impilati.
  */
+import { drawTankToken, tankTokens, type TankTheme } from '../tanks';
 import {
   clamp,
   dimmed,
@@ -28,6 +29,17 @@ import { geometryAt } from '../geometry';
 
 const SERIF = '"IM Fell English SC", Georgia, serif';
 const INK = '#2b2219';
+
+/** Carri sulla carta: contorno d'inchiostro, cingoli scuri, ombra sotto. */
+const TANK_THEME: TankTheme = {
+  line: INK,
+  track: '#3a3026',
+  wheel: '#8a7f6e',
+  glow: false,
+  font: 'Georgia, serif',
+  plate: '#f3ead2',
+  plateInk: INK,
+};
 /** Tinte dei continenti (nostre, da atlante): anche la carta dell'obiettivo le usa. */
 export const CONTINENT: Record<string, string> = {
   nordamerica: '#93ad7e',
@@ -412,14 +424,23 @@ export const classico: BoardStyle = {
       ctx.restore();
     }
 
-    // pedine: dischi di plastica impilati (più armate, pila più alta)
+    // pedine: dischi di plastica impilati (più armate, pila più alta), o carri armati
     const taken: Rect[] = [];
+    const tanks = tankTokens() !== 'pedine';
     for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
+      if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
       const [x, y] = screenOf(env, t.anchor);
       const color = colorOf(t.id);
       const armies = state.armies.get(t.id) ?? 0;
       const active = t.id === state.selected || t.id === state.hover;
+      if (tanks) {
+        const box = drawTankToken(env, t.id, armies, color, r, active, TANK_THEME);
+        taken.push(box);
+        const add = state.pending?.get(t.id);
+        if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
+        continue;
+      }
       const discs = clamp(Math.ceil(armies / 4), 1, 4);
       const th = r * 0.32; // spessore di un disco
       const ry = r * 0.55;
@@ -475,7 +496,7 @@ export const classico: BoardStyle = {
     placeLabels(env, taken, {
       font: `400 ${fs}px ${SERIF}`,
       size: fs,
-      offsetY: r + 6,
+      offsetY: tanks ? r * 1.55 + 6 : r + 6,
       draw: (text, x, y) => {
         ctx.lineJoin = 'round';
         ctx.lineWidth = 3;

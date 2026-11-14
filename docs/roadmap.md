@@ -17,26 +17,23 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.5 — carta dell'obiettivo (proposta C).** La mappa accende i continenti da prendere, oppure cadono le pedine da contare o il bersaglio finisce nel mirino; sotto, la frase e i numeri. Il server manda l'obiettivo con i suoi dati, non solo la frase. La stessa carta, piccola e ferma, sta tra le carte. Pagina di prova: `carta.html`.
 - **M12.6 — barra dei comandi in basso (proposta A).** Nell'essenziale il pannello che si attaccava al territorio cliccato non c'è più: una barra fissa in basso al centro dice cosa fare, mostra il contatore o chi contro chi, dadi e armate, con Conferma e Ricomincia sempre lì. La mappa le lascia spazio, i bottoni e gli avvisi in basso stanno sopra. Esc nei rinforzi toglie le armate non confermate.
 - **M12.7 — una sola disposizione.** Tolte "plancia laterale" e "comandi in basso": resta l'essenziale, e il menu Aspetto sceglie solo il tema. Via anche il vecchio pannello della mossa e le versioni dei pannelli che servivano solo a quelle due.
+- **M12.8 — scena della battaglia coi carri armati (proposta E).** Su cinque proposte (tavolo, duello, mappa, riquadro, carri) hai scelto i carri: la camera vola sui due territori, su ciascuno i carri schierati (uno per armata, al massimo 8, le retrovie avanzano), i dadi 3D rotolano in primo piano, poi i carri si sparano: per ogni coppia di dadi spara chi la vince e il carro colpito esplode. Alla conquista tre carri entrano nel territorio preso. Clic salta, Esc chiude, Invio tira ancora; i comandi restano nella barra in basso. Chi guarda una battaglia degli altri la vede in piccolo in alto. Suoni nuovi (dadi, colpo d'aria, cannonata). Corretto anche un bug dei suoni: il volume delle battaglie degli altri veniva preso come ritardo.
 
 ## Da fare
 
-### 1. Scena della battaglia
+### 1. Carri sulla mappa e ultime scelte della battaglia
 
-Hai chiesto: quando si combatte, una schermata dedicata con una transizione d'ingresso e i dadi messi in scena, molto più strutturata e "figa", sempre con i dadi.
+Hai chiesto: al posto del numero di armate sui territori, i carri armati. Pagina di prova: `battaglia.html`, pannello in alto a destra, voce "Mappa". Quattro modi, da confrontare con i dischi di oggi:
+- **A · Carro con la targa**: un carro di lato, il numero su una targhetta sotto;
+- **B · Squadra e bandierina**: più armate, più carri (fino a 4), il numero su una bandierina;
+- **C · Carro dall'alto**: visto dall'alto, il numero sulla torretta, il cannone verso il nemico più vicino;
+- **D · Numero sulla fiancata**: un carro di lato più grosso, il numero dipinto sullo scafo.
 
-**Da decidere con le proposte:**
-- a tutto schermo o in un grande riquadro sopra la mappa;
-- "fino in fondo" (tanti tiri di fila): scena veloce con il conto delle perdite che scorre, oppure tiro per tiro;
-- cosa vedono chi difende e chi guarda;
-- quanto dura: non deve rallentare la partita, quindi si salta con un clic e i tiri successivi vanno più veloci;
-- i suoni.
+I carri crescono avvicinandosi alla mappa (a mappa intera sono più piccoli, se no l'Europa si accavalla).
 
-Idee di partenza:
-- il tavolo dei dadi visto dall'alto;
-- il duello tra le due pedine;
-- la mappa che zooma sui due territori, con i dadi in primo piano.
+**Da scegliere ancora per la battaglia** (stessa pagina): carri di lato o dall'alto; "fino in fondo" tiro per tiro o col conto veloce; chi non combatte vede la battaglia in piccolo, intera o niente. Oggi: di lato, tiro per tiro, in piccolo.
 
-**Pagina di prova: `battaglia.html`** (14/11). La partita vera in locale, con la scena in cinque proposte da confrontare giocando: A tavolo, B duello con le sagome dei territori, C mappa che zooma, D riquadro, E **carri armati** (la tua idea: zoom sui due stati, si tirano i dadi e i carri si sparano; carri visti di lato o dall'alto). Dal pannello in alto a destra si scelgono anche "fino in fondo" (tiro per tiro o conto veloce) e cosa vedono gli altri (in piccolo, scena intera, niente), e si possono far partire battaglie finte. Dadi in 3D veri, suoni nuovi (dadi, colpo d'aria, cannonata).
+**Da sistemare dopo la scelta:** il tempo del turno continua a scorrere durante la scena.
 
 ### 2. Pesca della carta a fine turno
 
@@ -50,7 +47,7 @@ Servono 2-3 proposte: il mazzo, il gesto della pesca, la carta che si gira e vol
 
 Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
 
-Servono 3-4 proposte su: forma e dimensione delle pedine e dei numeri, colori dei giocatori, territori attivi o spenti, confini tra continenti.
+Le pedine le decide il punto 1 (i carri). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
 
 ### 4. "Cosa devo fare adesso" e il resto dell'interfaccia
 

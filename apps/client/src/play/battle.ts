@@ -1,8 +1,8 @@
 /**
- * Regista della scena della battaglia (pagina di prova): raccoglie i tiri che arrivano dal gioco
- * (o dalle battaglie finte di prova), li raggruppa per scontro (stesso attacco ripetuto o "fino
- * in fondo") e decide i tempi di ogni momento: ingresso, lancio, confronto, attesa, esito, uscita.
- * Le quattro proposte disegnano la stessa sequenza in modi diversi.
+ * Regista della scena della battaglia: raccoglie i tiri che arrivano dal gioco, li raggruppa per
+ * scontro (stesso attacco ripetuto o "fino in fondo") e decide i tempi di ogni momento: ingresso
+ * (la camera vola sui due territori), lancio dei dadi, sparatoria dei carri, attesa, esito, uscita.
+ * Chi guarda una battaglia degli altri la vede in piccolo (o intera, o niente: è un'opzione).
  */
 import { create } from 'zustand';
 import type { GameView } from '@onpeace/conquista';
@@ -11,18 +11,9 @@ import { sfx, type SoundName } from '../audio/sfx';
 import { styleColor, useLook } from '../look';
 import { setBlitzStep, territoryName, useSession } from '../store';
 
-export type Proposal = 'tavolo' | 'duello' | 'mappa' | 'riquadro' | 'carri';
-export const PROPOSALS: { id: Proposal; letter: string; name: string; tip: string }[] = [
-  { id: 'carri', letter: 'E', name: 'Carri', tip: 'La mappa zooma sui due stati, ci sono i carri armati: si tirano i dadi e i carri si sparano' },
-  { id: 'tavolo', letter: 'A', name: 'Tavolo', tip: 'Tutto lo schermo: il tavolo visto dall’alto, i dadi lanciati dai due lati' },
-  { id: 'duello', letter: 'B', name: 'Duello', tip: 'Tutto lo schermo: le due pedine una contro l’altra, i dadi in mezzo' },
-  { id: 'mappa', letter: 'C', name: 'Mappa', tip: 'La mappa vola sui due territori, i dadi in primo piano sopra il confine' },
-  { id: 'riquadro', letter: 'D', name: 'Riquadro', tip: 'Un riquadro al centro sopra la mappa: il più veloce da leggere' },
-];
-
 /** "Fino in fondo": ogni tiro con i suoi dadi, oppure il conto delle perdite che scorre. */
 export type BlitzMode = 'tiri' | 'conto';
-/** Come sono disegnati i carri armati della proposta E. */
+/** Come sono disegnati i carri armati: di lato o visti dall'alto. */
 export type TankLook = 'alto' | 'lato';
 /** Che cosa vede chi non combatte. */
 export type Watch = 'piccola' | 'intera' | 'niente';
@@ -96,15 +87,16 @@ export function pairs(r: Roll): boolean[] {
 
 // ---------------------------------------------------------------- tempi
 
-const INTRO: Record<Proposal, number> = { tavolo: 620, duello: 760, mappa: 820, riquadro: 300, carri: 1100 };
-const OUTRO: Record<Proposal, number> = { tavolo: 380, duello: 420, mappa: 600, riquadro: 260, carri: 600 };
+/** Ingresso (la camera vola sui territori) e uscita (torna indietro). */
+const INTRO_MS = 1100;
+const OUTRO_MS = 600;
 
 function throwMs(k: number, quick: boolean) {
   return quick ? 280 : k === 0 ? 900 : 620;
 }
-function resolveMs(k: number, quick: boolean, proposal: Proposal, shots: number) {
+function resolveMs(k: number, quick: boolean, tanks: boolean, shots: number) {
   // coi carri il confronto è la sparatoria: un colpo per coppia di dadi, uno dopo l'altro
-  if (proposal === 'carri') return quick ? 520 : (k === 0 ? 700 : 560) + shots * (k === 0 ? 520 : 420);
+  if (tanks) return quick ? 520 : (k === 0 ? 700 : 560) + shots * (k === 0 ? 520 : 420);
   return quick ? 180 : k === 0 ? 760 : 520;
 }
 
@@ -129,43 +121,28 @@ const BLITZ_STEP: Record<BlitzMode, number> = { tiri: 1000, conto: 380 };
 // ---------------------------------------------------------------- stato
 
 interface BattleState {
-  proposal: Proposal;
   tankLook: TankLook;
   blitzMode: BlitzMode;
   watch: Watch;
   playing: Playing | null;
   queue: Engagement[];
-  setOptions(patch: Partial<Pick<BattleState, 'proposal' | 'tankLook' | 'blitzMode' | 'watch'>>): void;
+  setOptions(patch: Partial<Pick<BattleState, 'tankLook' | 'blitzMode' | 'watch'>>): void;
   /** Clic sulla scena: salta al risultato, o chiude. */
   skip(): void;
   /** Esc: chiude subito. */
   close(): void;
-  /** Battaglie finte per vedere la scena senza giocare. */
-  demo(kind: DemoKind): void;
 }
 
-export type DemoKind = 'attacco' | 'fino' | 'difesa' | 'altri' | 'perso';
-
-const q = new URLSearchParams(location.search);
-const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
-
 export const useBattle = create<BattleState>((set, get) => ({
-  proposal: pick(q.get('proposta'), ['tavolo', 'duello', 'mappa', 'riquadro', 'carri'] as const, 'carri'),
-  tankLook: pick(q.get('carro'), ['alto', 'lato'] as const, 'lato'),
-  blitzMode: pick(q.get('fino'), ['tiri', 'conto'] as const, 'tiri'),
-  watch: pick(q.get('altri'), ['piccola', 'intera', 'niente'] as const, 'piccola'),
+  tankLook: 'lato',
+  blitzMode: 'tiri',
+  watch: 'piccola',
   playing: null,
   queue: [],
   setOptions(patch) {
     set(patch);
     const s = get();
     setBlitzStep(BLITZ_STEP[s.blitzMode]);
-    const url = new URLSearchParams(location.search);
-    url.set('proposta', s.proposal);
-    url.set('carro', s.tankLook);
-    url.set('fino', s.blitzMode);
-    url.set('altri', s.watch);
-    history.replaceState(null, '', `?${url}`);
   },
   skip() {
     const p = get().playing;
@@ -180,9 +157,6 @@ export const useBattle = create<BattleState>((set, get) => ({
   close() {
     const p = get().playing;
     if (p && p.stage !== 'outro') outro();
-  },
-  demo(kind) {
-    if (!startDemo(kind)) useSession.getState().setNotice('Nessuna coppia di territori adatta a questa prova in questo momento.');
   },
 }));
 
@@ -237,7 +211,7 @@ function start(eng: Engagement) {
   const s = useBattle.getState();
   const small = eng.role === 'spectator' && s.watch === 'piccola';
   const quick = false;
-  const intro = small ? 120 : Math.round(INTRO[s.proposal] * (eng.again ? 0.45 : 1));
+  const intro = small ? 120 : Math.round(INTRO_MS * (eng.again ? 0.45 : 1));
   useBattle.setState({ playing: { eng, shown: -1, stage: 'intro', ms: intro, small, quick, tick: 0 } });
   if (!small && !eng.again) play('whoosh');
   schedule(intro, nextRoll);
@@ -263,10 +237,9 @@ function resolve() {
   if (!p) return;
   const roll = p.eng.rolls[p.shown]!;
   const speed = p.small ? 0.55 : 1;
-  const proposal = useBattle.getState().proposal;
   const shots = pairs(roll).length;
-  const tanks = proposal === 'carri' && !p.small;
-  const ms = Math.round(resolveMs(p.shown, p.quick, tanks ? 'carri' : proposal, shots) * speed);
+  const tanks = !p.small;
+  const ms = Math.round(resolveMs(p.shown, p.quick, tanks, shots) * speed);
   put({ stage: 'resolve', ms });
   if (tanks) {
     // cannonata alla partenza, esplosione all'arrivo
@@ -317,7 +290,7 @@ function outro() {
   const s = useBattle.getState();
   const p = s.playing;
   if (!p) return;
-  const ms = p.small ? 200 : OUTRO[s.proposal];
+  const ms = p.small ? 200 : OUTRO_MS;
   put({ stage: 'outro', ms });
   schedule(ms, finish);
 }
@@ -331,7 +304,7 @@ function finish() {
 }
 
 /** Un tiro nuovo: si aggiunge allo scontro in corso sugli stessi territori, o ne apre uno. */
-function addRoll(base: Omit<Engagement, 'id' | 'rolls' | 'over' | 'again'>, roll: Roll, aAfter: number) {
+export function feedRoll(base: Omit<Engagement, 'id' | 'rolls' | 'over' | 'again'>, roll: Roll, aAfter: number) {
   const s = useBattle.getState();
   const key = `${base.a.territory}>${base.d.territory}`;
   const over = roll.conquered || aAfter < 2;
@@ -378,7 +351,7 @@ function withArmiesBefore(view: GameView, events: LoggedEvent[]) {
   return out;
 }
 
-function fighter(view: GameView, player: string, territory: string, armies: number): Fighter {
+export function fighter(view: GameView, player: string, territory: string, armies: number): Fighter {
   const board = useSession.getState().board!;
   const p = view.players.find((x) => x.id === player);
   return {
@@ -407,81 +380,7 @@ export function connectBattleFeed(): () => void {
       const role = roleOf(me, e);
       if (role === 'spectator' && useBattle.getState().watch === 'niente') continue;
       const roll: Roll = { attack: e.attack, defense: e.defense, aLoss: e.attackerLosses, dLoss: e.defenderLosses, conquered: e.conquered };
-      addRoll({ role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null }, roll, a - e.attackerLosses);
+      feedRoll({ role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null }, roll, a - e.attackerLosses);
     }
   });
-}
-
-// ---------------------------------------------------------------- battaglie di prova
-
-function rollDice(n: number) {
-  return Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 6)).sort((x, y) => y - x);
-}
-
-function fight(a: number, d: number): Roll {
-  const attack = rollDice(Math.min(3, a - 1));
-  const defense = rollDice(Math.min(3, d));
-  let aLoss = 0;
-  let dLoss = 0;
-  for (let i = 0; i < Math.min(attack.length, defense.length); i++) {
-    if (attack[i]! > defense[i]!) dLoss++;
-    else aLoss++;
-  }
-  return { attack, defense, aLoss, dLoss, conquered: d - dLoss === 0 };
-}
-
-/** Una battaglia finta tra territori veri della partita: i tiri arrivano uno alla volta, come dal server. */
-function startDemo(kind: DemoKind): boolean {
-  const s = useSession.getState();
-  const view = s.view;
-  const board = s.board;
-  const me = s.online.me;
-  if (!view || !board || !me) return false;
-  // una coppia di territori confinanti con i padroni giusti per il tipo di prova
-  const wantA = (o: string) => (kind === 'difesa' || kind === 'altri' ? o !== me : o === me);
-  const wantD = (o: string, a: string) => (kind === 'difesa' ? o === me : kind === 'altri' ? o !== me && o !== a : o !== me);
-  const ids = Object.keys(view.territories).sort(() => Math.random() - 0.5);
-  let pair: [string, string] | null = null;
-  for (const from of ids) {
-    const fo = view.territories[from]!.owner;
-    if (!wantA(fo)) continue;
-    const to = (board.geo.neighbours.get(from) ?? []).find((n) => wantD(view.territories[n]!.owner, fo));
-    if (to) {
-      pair = [from, to];
-      break;
-    }
-  }
-  if (!pair) return false;
-  const [from, to] = pair;
-  const start = { attacco: [7, 3], fino: [11, 6], difesa: [6, 4], altri: [5, 3], perso: [4, 7] }[kind];
-  let [a, d] = start as [number, number];
-  const rolls: Roll[] = [];
-  const many = kind === 'fino' || kind === 'perso';
-  do {
-    const r = fight(a, d);
-    rolls.push(r);
-    a -= r.aLoss;
-    d -= r.dLoss;
-  } while (many && d > 0 && a > 1);
-  if (kind === 'difesa' && d > 0 && a > 1) rolls.push(fight(a, d));
-  const eng: Engagement = {
-    id: nextId++,
-    role: kind === 'difesa' ? 'defender' : kind === 'altri' ? 'spectator' : 'attacker',
-    a: fighter(view, view.territories[from]!.owner, from, start[0]!),
-    d: fighter(view, view.territories[to]!.owner, to, start[1]!),
-    rolls: [],
-    over: false,
-    again: false,
-    demo: { blitz: many },
-  };
-  const base = { role: eng.role, a: eng.a, d: eng.d, demo: eng.demo };
-  let left = eng.a.armies;
-  rolls.forEach((r, i) => {
-    setTimeout(() => {
-      left -= r.aLoss;
-      if (i === rolls.length - 1 && eng.demo) eng.demo.blitz = false;
-      addRoll(base, r, left);
-    }, i === 0 ? 0 : 60 + i * BLITZ_STEP[useBattle.getState().blitzMode]);
-  });
-  return true;
 }

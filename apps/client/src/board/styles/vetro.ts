@@ -3,6 +3,7 @@
  * rilievo sul mare grafite, terreno appena accennato, pedine rotonde con ombra morbida,
  * messa a fuoco del territorio selezionato (il resto si spegne).
  */
+import { drawTankToken, tankTokens, type TankTheme } from '../tanks';
 import {
   clamp,
   dimmed,
@@ -25,6 +26,17 @@ import {
 } from '../common';
 
 const FONT = '"Geist", system-ui, sans-serif';
+
+/** Carri sul vetro: contorno chiaro, cingoli quasi neri, alone del colore del giocatore. */
+const TANK_THEME: TankTheme = {
+  line: 'rgba(255, 255, 255, 0.85)',
+  track: '#15171c',
+  wheel: '#5d6068',
+  glow: true,
+  font: FONT,
+  plate: 'rgba(20, 22, 28, 0.92)',
+  plateInk: '#ffffff',
+};
 
 export const vetro: BoardStyle = {
   id: 'vetro',
@@ -229,13 +241,22 @@ export const vetro: BoardStyle = {
       ctx.restore();
     }
 
-    // pedine rotonde
+    // pedine rotonde, o carri armati
     const taken: Rect[] = [];
+    const tanks = tankTokens() !== 'pedine';
     for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
+      if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
       const [x, y] = screenOf(env, t.anchor);
       const color = colorOf(t.id);
       const active = t.id === state.selected || t.id === state.hover;
+      if (tanks) {
+        const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, color, r, active, TANK_THEME);
+        taken.push(box);
+        const add = state.pending?.get(t.id);
+        if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
+        continue;
+      }
       const rr = active ? r + 1.5 : r;
       taken.push([x - rr - 2, y - rr - 2, x + rr + 2, y + rr + 2]);
       ctx.save();
@@ -268,7 +289,7 @@ export const vetro: BoardStyle = {
     placeLabels(env, taken, {
       font: `600 ${fs}px ${FONT}`,
       size: fs,
-      offsetY: r + 5,
+      offsetY: tanks ? r * 1.55 + 5 : r + 5,
       letterSpacing: -0.1,
       draw: (text, x, y, active) => {
         ctx.save();

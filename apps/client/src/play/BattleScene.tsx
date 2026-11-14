@@ -1,15 +1,17 @@
 /**
- * La scena della battaglia nelle cinque proposte (pagina di prova): stessa sequenza del regista
- * (ingresso, lancio, confronto, attesa, esito, uscita), cinque modi di metterla in scena.
- * I dadi sono cubi veri in 3D che rotolano e si fermano sulla faccia uscita.
- * Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
+ * La scena della battaglia, sopra il tabellone: la camera vola sui due territori, i carri armati
+ * sono schierati su ciascuno, i dadi rotolano in primo piano, poi i carri si sparano (un colpo per
+ * coppia di dadi: chi vince la coppia spara, il carro colpito esplode) e alla conquista entrano nel
+ * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita. Chi guarda una battaglia
+ * degli altri la vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { BoardView } from '../board/common';
 import type { BoardPainter } from '../board/painter';
-import { Chip, Die } from '../play/bits';
+import { Chip, Die } from './bits';
 import { useSession } from '../store';
-import { armiesAfter, pairs, shotTimes, useBattle, type Engagement, type Playing, type TankLook } from './battaglia-feed';
+import { armiesAfter, pairs, shotTimes, useBattle, type Engagement, type Playing, type TankLook } from './battle';
+import './battle.css';
 
 type Vars = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -114,43 +116,6 @@ export function Die3D({
   );
 }
 
-// ---------------------------------------------------------------- sagoma di un territorio
-
-/** La forma vera del territorio, grande quanto il suo riquadro; colori da --sil-fill e --sil-line. */
-function Silhouette({ id, className }: { id: string; className: string }) {
-  const board = useSession((s) => s.board);
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    const path = board?.geo.paths.get(id);
-    const b = board?.geo.boxes.get(id);
-    if (!canvas || !path || !b) return;
-    const draw = () => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      if (w === 0 || h === 0) return;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      const ctx = canvas.getContext('2d')!;
-      const css = getComputedStyle(canvas);
-      const k = Math.min((w * 0.9) / (b[2] - b[0]), (h * 0.9) / (b[3] - b[1]));
-      ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (w / 2 - ((b[0] + b[2]) / 2) * k), dpr * (h / 2 - ((b[1] + b[3]) / 2) * k));
-      ctx.fillStyle = css.getPropertyValue('--sil-fill') || 'rgba(0,0,0,.2)';
-      ctx.fill(path, 'evenodd');
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 2.5 / k;
-      ctx.strokeStyle = css.getPropertyValue('--sil-line') || 'rgba(0,0,0,.5)';
-      ctx.stroke(path);
-    };
-    draw();
-    const ro = new ResizeObserver(draw);
-    ro.observe(canvas);
-    return () => ro.disconnect();
-  }, [id, board]);
-  return <canvas ref={ref} className={className} aria-hidden />;
-}
-
 // ---------------------------------------------------------------- quello che si vede in ogni momento
 
 interface Moment {
@@ -249,150 +214,7 @@ function SkipHint({ m }: { m: Moment }) {
   return <span className="bt-skip">{open ? 'Invio tira ancora · clic chiude' : 'Clic per saltare · Esc chiude'}</span>;
 }
 
-// ---------------------------------------------------------------- A · tavolo
-
-function Table({ m }: { m: Moment }) {
-  const { eng, roll, p } = m;
-  const size = 74;
-  const gap = 22;
-  const lossA = m.resolved && roll ? roll.aLoss : 0;
-  const lossD = m.resolved && roll ? roll.dLoss : 0;
-  return (
-    <div className="tv-wrap">
-      <div className="tv-table">
-        <div className="tv-felt" />
-        <header className="tv-head">
-          <span className="tv-kicker">{eng.role === 'defender' ? 'Ti attaccano' : eng.role === 'attacker' ? 'Attacco' : 'Battaglia'}</span>
-          <h2>{headline(m)}</h2>
-        </header>
-        <aside className="tv-side att" style={{ '--c': eng.a.color } as Vars}>
-          <span className="tv-who">
-            <Chip color={eng.a.color} /> {nameOf(m, 'a')}
-          </span>
-          <span className="tv-place">{eng.a.place}</span>
-          <Count value={m.armies.a} loss={lossA} k={m.rollKey} className="tv-armies" />
-          <span className="tv-role">attacca</span>
-        </aside>
-        <aside className="tv-side def" style={{ '--c': eng.d.color } as Vars}>
-          <span className="tv-who">
-            <Chip color={eng.d.color} /> {nameOf(m, 'd')}
-          </span>
-          <span className="tv-place">{eng.d.place}</span>
-          <Count value={m.armies.d} loss={lossD} k={m.rollKey} className="tv-armies" side="left" />
-          <span className="tv-role">difende</span>
-        </aside>
-        <div className="tv-line" />
-        {roll && (
-          <div className="tv-dice" style={{ '--size': `${size}px`, '--gap': `${gap}px` } as Vars}>
-            {[0, 1, 2].map((i) => {
-              const a = roll.attack[i];
-              const d = roll.defense[i];
-              if (a === undefined && d === undefined) return null;
-              const paired = i < m.wins.length;
-              return (
-                <div key={i} className={`tv-row${paired && m.resolved ? (m.wins[i] ? ' a-won' : ' d-won') : ''}`}>
-                  <span className="tv-slot">
-                    {a !== undefined && (
-                      <Die3D value={a} side="attack" size={size} roll={m.rollKey} ms={p.ms} from={[-360 - i * 40, 120 - i * 90]} delay={i * 40} state={dieState(m, 'attack', i)} />
-                    )}
-                  </span>
-                  <span className="tv-clash" aria-hidden>
-                    {paired && m.resolved && <span key={m.rollKey}>{m.wins[i] ? '›' : '‹'}</span>}
-                  </span>
-                  <span className="tv-slot">
-                    {d !== undefined && (
-                      <Die3D value={d} side="defense" size={size} roll={m.rollKey} ms={p.ms} from={[360 + i * 40, 120 - i * 90]} delay={60 + i * 40} state={dieState(m, 'defense', i)} />
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <footer className="tv-foot">
-          <Tally m={m} />
-        </footer>
-        {m.result && (
-          <div className={`bt-stamp tv-stamp ${m.result.tone}`} key={m.eng.id}>
-            {m.result.text}
-          </div>
-        )}
-      </div>
-      <SkipHint m={m} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- B · duello
-
-function Token({ color, value, loss, k, hit }: { color: string; value: number; loss: number; k: string; hit: boolean }) {
-  return (
-    <span className={`du-token${hit ? ' hit' : ''}`} style={{ '--c': color } as Vars} key={hit ? k : 'calm'}>
-      <Count value={value} loss={loss} k={k} />
-    </span>
-  );
-}
-
-function Duel({ m }: { m: Moment }) {
-  const { eng, roll, p } = m;
-  const lossA = m.resolved && roll ? roll.aLoss : 0;
-  const lossD = m.resolved && roll ? roll.dLoss : 0;
-  const size = 60;
-  return (
-    <div className={`du-wrap${m.result?.conquered ? ' taken' : ''}${m.result && !m.result.conquered ? ' held' : ''}`}>
-      <section className="du-panel att" style={{ '--c': eng.a.color } as Vars}>
-        <Silhouette id={eng.a.territory} className="du-shape" />
-        <div className="du-inner">
-          <span className="du-kicker">{nameOf(m, 'a')} · attacca</span>
-          <h2 className="du-place">{eng.a.place}</h2>
-          <Token color={eng.a.color} value={m.armies.a} loss={lossA} k={m.rollKey} hit={lossA > 0} />
-        </div>
-      </section>
-      <section className="du-panel def" style={{ '--c': eng.d.color, '--ca': eng.a.color } as Vars}>
-        <Silhouette id={eng.d.territory} className="du-shape" />
-        <div className="du-inner">
-          <span className="du-kicker">{nameOf(m, 'd')} · difende</span>
-          <h2 className="du-place">{eng.d.place}</h2>
-          <Token color={eng.d.color} value={m.armies.d} loss={lossD} k={m.rollKey} hit={lossD > 0} />
-        </div>
-      </section>
-      <div className="du-seam" />
-      <div className="du-center">
-        <span className="du-vs">contro</span>
-        {roll && (
-          <div className="du-dice">
-            {[0, 1, 2].map((i) => {
-              const a = roll.attack[i];
-              const d = roll.defense[i];
-              if (a === undefined && d === undefined) return null;
-              const paired = i < m.wins.length;
-              return (
-                <div key={i} className={`du-row${paired && m.resolved ? (m.wins[i] ? ' a-won' : ' d-won') : ''}`} style={{ '--i': i } as Vars}>
-                  <span className="du-slot">
-                    {a !== undefined && <Die3D value={a} side="attack" size={size} roll={m.rollKey} ms={p.ms} from={[-220, -260 - i * 40]} delay={i * 70} state={dieState(m, 'attack', i)} />}
-                  </span>
-                  <span className="du-hit" aria-hidden />
-                  <span className="du-slot">
-                    {d !== undefined && <Die3D value={d} side="defense" size={size} roll={m.rollKey} ms={p.ms} from={[220, -260 - i * 40]} delay={40 + i * 70} state={dieState(m, 'defense', i)} />}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <Tally m={m} />
-      </div>
-      {m.result && (
-        <div className={`bt-stamp du-stamp ${m.result.tone}`} key={m.eng.id}>
-          {m.result.text}
-        </div>
-      )}
-      <SkipHint m={m} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- C · mappa
+// ---------------------------------------------------------------- camera, dadi, barre
 
 const TOPBAR = 52;
 const LETTERBOX = 58;
@@ -402,14 +224,6 @@ const TRAY_BOTTOM = 132;
 interface Spots {
   a: [number, number];
   d: [number, number];
-}
-
-/** Da che parte del suo territorio sta l'etichetta: dal lato opposto all'altro territorio, così non si toccano. */
-function tagSide(s: Spots, who: 'a' | 'd'): 'n' | 's' | 'e' | 'w' {
-  const [x, y] = s[who];
-  const [ox, oy] = s[who === 'a' ? 'd' : 'a'];
-  if (Math.abs(x - ox) >= Math.abs(y - oy) * 0.6) return x <= ox ? 'w' : 'e';
-  return y <= oy ? 'n' : 's';
 }
 
 /** Vista di prima della prima battaglia di fila: ci si torna quando non ce ne sono altre in coda. */
@@ -531,42 +345,7 @@ function CinemaBars({ m }: { m: Moment }) {
   );
 }
 
-function MapStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) {
-  const { eng, roll, p } = m;
-  const spots = useCamera(painter, p, { side: 120, top: TOPBAR + LETTERBOX + 80, bottom: TRAY_BOTTOM + 110 }, 4.2);
-  const lossA = m.resolved && roll ? roll.aLoss : 0;
-  const lossD = m.resolved && roll ? roll.dLoss : 0;
-  const size = 56;
-  return (
-    <div className="mp-wrap" style={spotlight(spots)}>
-      <div className="mp-light" />
-      <CinemaBars m={m} />
-      {spots && (
-        <>
-          <span className={`mp-tag att at-${tagSide(spots, 'a')}`} style={{ left: spots.a[0], top: spots.a[1], '--c': eng.a.color } as Vars}>
-            <Chip color={eng.a.color} />
-            <span className="mp-tag-name">{eng.a.place}</span>
-            <Count value={m.armies.a} loss={lossA} k={m.rollKey} />
-          </span>
-          <span className={`mp-tag def at-${tagSide(spots, 'd')}`} style={{ left: spots.d[0], top: spots.d[1], '--c': eng.d.color } as Vars}>
-            <Chip color={eng.d.color} />
-            <span className="mp-tag-name">{eng.d.place}</span>
-            <Count value={m.armies.d} loss={lossD} k={m.rollKey} />
-          </span>
-          <DiceTray m={m} spots={spots} size={size} />
-        </>
-      )}
-      {m.result && (
-        <div className={`bt-stamp mp-stamp ${m.result.tone}`} key={m.eng.id} style={{ top: trayTop(size) }}>
-          {m.result.text}
-        </div>
-      )}
-      <SkipHint m={m} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- E · carri armati
+// ---------------------------------------------------------------- carri armati
 
 /** Carri visibili per parte al massimo: con più armate, chi cade viene rimpiazzato dalle retrovie. */
 const TANKS_MAX = 8;
@@ -818,72 +597,6 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
   );
 }
 
-// ---------------------------------------------------------------- D · riquadro
-
-function Box({ m }: { m: Moment }) {
-  const { eng, roll, p } = m;
-  const lossA = m.resolved && roll ? roll.aLoss : 0;
-  const lossD = m.resolved && roll ? roll.dLoss : 0;
-  const size = 46;
-  const shownRolls = eng.rolls.slice(0, m.resolved ? p.shown + 1 : p.shown);
-  return (
-    <div className="rq-wrap">
-      <section className="rq-card panel">
-        <header className="rq-head">
-          <span className="rq-kicker">{eng.role === 'defender' ? 'Ti attaccano' : eng.role === 'attacker' ? 'Attacco' : 'Battaglia'}</span>
-          <Tally m={m} />
-        </header>
-        <div className="rq-grid">
-          <div className="rq-side att" style={{ '--c': eng.a.color } as Vars}>
-            <span className="rq-who">
-              <Chip color={eng.a.color} /> {nameOf(m, 'a')}
-            </span>
-            <span className="rq-place">{eng.a.place}</span>
-            <Count value={m.armies.a} loss={lossA} k={m.rollKey} className="rq-armies" />
-          </div>
-          <div className="rq-dice">
-            {roll &&
-              [0, 1, 2].map((i) => {
-                const a = roll.attack[i];
-                const d = roll.defense[i];
-                if (a === undefined && d === undefined) return null;
-                const paired = i < m.wins.length;
-                return (
-                  <div key={i} className={`rq-row${paired && m.resolved ? (m.wins[i] ? ' a-won' : ' d-won') : ''}`}>
-                    <span className="rq-slot">
-                      {a !== undefined && <Die3D value={a} side="attack" size={size} roll={m.rollKey} ms={p.ms} from={[-90, -30]} delay={i * 30} state={dieState(m, 'attack', i)} />}
-                    </span>
-                    <span className="rq-vs" aria-hidden>
-                      {paired && m.resolved ? (m.wins[i] ? '›' : '‹') : '·'}
-                    </span>
-                    <span className="rq-slot">
-                      {d !== undefined && <Die3D value={d} side="defense" size={size} roll={m.rollKey} ms={p.ms} from={[90, -30]} delay={30 + i * 30} state={dieState(m, 'defense', i)} />}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-          <div className="rq-side def" style={{ '--c': eng.d.color } as Vars}>
-            <span className="rq-who">
-              <Chip color={eng.d.color} /> {nameOf(m, 'd')}
-            </span>
-            <span className="rq-place">{eng.d.place}</span>
-            <Count value={m.armies.d} loss={lossD} k={m.rollKey} className="rq-armies" side="left" />
-          </div>
-        </div>
-        <footer className="rq-foot">
-          <ol className="rq-history" aria-label="Tiri">
-            {shownRolls.map((r, i) => (
-              <li key={i} className={r.dLoss > r.aLoss ? 'good' : r.aLoss > r.dLoss ? 'bad' : 'even'} title={`−${r.aLoss} / −${r.dLoss}`} />
-            ))}
-          </ol>
-          {m.result ? <b className={`rq-result ${m.result.tone}`}>{m.result.text}</b> : <span className="bt-skip inline">{m.p.stage === 'hold' && eng.role === 'attacker' ? 'Invio tira ancora' : 'Clic per saltare'}</span>}
-        </footer>
-      </section>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- chi guarda, in piccolo
 
 function Small({ m }: { m: Moment }) {
@@ -927,9 +640,8 @@ function Small({ m }: { m: Moment }) {
 // ---------------------------------------------------------------- lo strato sopra il tabellone
 
 export function BattleLayer({ painter }: { painter: BoardPainter | null }) {
-  const playing = useBattle((s) => s.playing);
-  const proposal = useBattle((s) => s.proposal);
-  const me = useSession((s) => s.online.me);
+  const playing = useBattle((st) => st.playing);
+  const me = useSession((st) => st.online.me);
   const m = useMemo(() => (playing ? moment(playing, me) : null), [playing, me]);
 
   useEffect(() => {
@@ -942,34 +654,15 @@ export function BattleLayer({ painter }: { painter: BoardPainter | null }) {
 
   if (!m) return null;
   const small = m.p.small;
-  const kind = small ? 'small' : proposal;
   const style = { '--ms': `${m.p.ms}ms` } as Vars;
   return (
     <div
-      className={`bt-layer bt-${kind} st-${m.p.stage}${m.p.quick ? ' quick' : ''} role-${m.eng.role}`}
+      className={`bt-layer bt-${small ? 'small' : 'carri'} st-${m.p.stage}${m.p.quick ? ' quick' : ''} role-${m.eng.role}`}
       style={style}
       onClick={small ? undefined : () => useBattle.getState().skip()}
       aria-live="polite"
     >
-      {small ? (
-        <Small m={m} />
-      ) : proposal === 'tavolo' ? (
-        <>
-          <div className="bt-veil" />
-          <Table m={m} />
-        </>
-      ) : proposal === 'duello' ? (
-        <Duel m={m} />
-      ) : proposal === 'mappa' ? (
-        <MapStage m={m} painter={painter} />
-      ) : proposal === 'carri' ? (
-        <TankStage m={m} painter={painter} />
-      ) : (
-        <>
-          <div className="bt-veil light" />
-          <Box m={m} />
-        </>
-      )}
+      {small ? <Small m={m} /> : <TankStage m={m} painter={painter} />}
     </div>
   );
 }

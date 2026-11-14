@@ -1,19 +1,18 @@
 /**
- * Pagina di prova della scena della battaglia (/battaglia.html in sviluppo): la partita vera che
- * gira nel browser contro quattro avversari automatici, con la scena in quattro proposte da
- * confrontare giocando. A tavolo dei dadi · B duello tra le pedine · C la mappa che zooma sui
- * due territori · D riquadro al centro · E la mappa zooma sui due stati e i carri armati si sparano. Dalla barra in alto: come va "fino in fondo", che cosa
- * vede chi non combatte, e battaglie finte per vedere la scena senza giocare.
+ * Pagina di prova della battaglia (/battaglia.html in sviluppo): la partita vera che gira nel
+ * browser contro quattro avversari automatici, con la scena dei carri armati com'è nel gioco. Dal
+ * pannello in alto a destra si provano le scelte ancora aperte: le pedine sulla mappa (i dischi di
+ * oggi o i carri, in quattro modi), i carri di lato o dall'alto, "fino in fondo" tiro per tiro o col
+ * conto veloce, che cosa vede chi non combatte; e si fanno partire battaglie finte senza giocare.
  */
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
-import { setBattleSoundsByScene } from '../audio/useGameSounds';
 import type { BoardPainter } from '../board/painter';
+import { setTankTokens, tankTokens, type TankTokens } from '../board/tanks';
+import { feedRoll, fighter, useBattle, type BlitzMode, type Role, type Roll, type TankLook, type Watch } from '../play/battle';
 import { GameScreen } from '../play/GameScreen';
 import { setLinkFactory, useSession } from '../store';
-import { connectBattleFeed, PROPOSALS, useBattle, type BlitzMode, type DemoKind, type Proposal, type TankLook, type Watch } from './battaglia-feed';
-import { BattleLayer } from './battaglia-scene';
 import { LocalGame, localBoard, type Start } from './locale';
 import '../styles.css';
 import './prova.css';
@@ -30,13 +29,41 @@ Storage.prototype.removeItem = function (key: string) {
   if (key !== SESSION_KEY) removeItem.call(this, key);
 };
 
-// i suoni delle battaglie li fa la scena, a tempo coi dadi
-setBattleSoundsByScene(true);
-connectBattleFeed();
-// per le prove automatiche dalla console
-if (import.meta.env.DEV) Object.assign(window, { __battaglia: useBattle });
-
 const params = new URLSearchParams(location.search);
+const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
+
+/** Pedine sulla mappa: i dischi di oggi o i carri armati, in quattro modi. */
+const TOKENS: { id: TankTokens; name: string }[] = [
+  { id: 'pedine', name: 'Pedine di oggi (dischi)' },
+  { id: 'targa', name: 'A · Carro con la targa' },
+  { id: 'squadra', name: 'B · Squadra e bandierina' },
+  { id: 'alto', name: "C · Carro dall'alto" },
+  { id: 'scafo', name: 'D · Numero sulla fiancata' },
+];
+setTankTokens(
+  pick(
+    params.get('pedine'),
+    TOKENS.map((t) => t.id),
+    'targa',
+  ),
+);
+useBattle.getState().setOptions({
+  tankLook: pick(params.get('carro'), ['lato', 'alto'] as const, 'lato'),
+  blitzMode: pick(params.get('fino'), ['tiri', 'conto'] as const, 'tiri'),
+  watch: pick(params.get('altri'), ['piccola', 'intera', 'niente'] as const, 'piccola'),
+});
+
+/** Le scelte restano nell'indirizzo: ricaricando la pagina si ritrovano. */
+function saveChoices() {
+  const s = useBattle.getState();
+  const url = new URLSearchParams(location.search);
+  url.set('pedine', tankTokens());
+  url.set('carro', s.tankLook);
+  url.set('fino', s.blitzMode);
+  url.set('altri', s.watch);
+  history.replaceState(null, '', `?${url}`);
+}
+saveChoices();
 
 let game: LocalGame | null = null;
 function boot(start: Start) {
@@ -47,6 +74,10 @@ function boot(start: Start) {
   useSession.getState().create('Andrea', PLAYER_COLORS[0]!, {});
 }
 
+// ---------------------------------------------------------------- battaglie finte
+
+type DemoKind = 'attacco' | 'fino' | 'difesa' | 'altri' | 'perso';
+
 const DEMOS: { id: DemoKind; name: string }[] = [
   { id: 'attacco', name: 'Attacchi tu, un tiro' },
   { id: 'fino', name: 'Attacchi tu, fino in fondo' },
@@ -55,65 +86,129 @@ const DEMOS: { id: DemoKind; name: string }[] = [
   { id: 'altri', name: 'Due avversari tra loro' },
 ];
 
-function Controls() {
-  const proposal = useBattle((s) => s.proposal);
+function rollDice(n: number) {
+  return Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 6)).sort((x, y) => y - x);
+}
+
+function fight(a: number, d: number): Roll {
+  const attack = rollDice(Math.min(3, a - 1));
+  const defense = rollDice(Math.min(3, d));
+  let aLoss = 0;
+  let dLoss = 0;
+  for (let i = 0; i < Math.min(attack.length, defense.length); i++) {
+    if (attack[i]! > defense[i]!) dLoss++;
+    else aLoss++;
+  }
+  return { attack, defense, aLoss, dLoss, conquered: d - dLoss === 0 };
+}
+
+/** Una battaglia finta tra territori veri della partita: i tiri arrivano uno alla volta, come dal server. */
+function startDemo(kind: DemoKind): boolean {
+  const s = useSession.getState();
+  const view = s.view;
+  const board = s.board;
+  const me = s.online.me;
+  if (!view || !board || !me) return false;
+  // una coppia di territori confinanti con i padroni giusti per il tipo di prova
+  const wantA = (o: string) => (kind === 'difesa' || kind === 'altri' ? o !== me : o === me);
+  const wantD = (o: string, a: string) => (kind === 'difesa' ? o === me : kind === 'altri' ? o !== me && o !== a : o !== me);
+  const ids = Object.keys(view.territories).sort(() => Math.random() - 0.5);
+  let pair: [string, string] | null = null;
+  for (const from of ids) {
+    const fo = view.territories[from]!.owner;
+    if (!wantA(fo)) continue;
+    const to = (board.geo.neighbours.get(from) ?? []).find((n) => wantD(view.territories[n]!.owner, fo));
+    if (to) {
+      pair = [from, to];
+      break;
+    }
+  }
+  if (!pair) return false;
+  const [from, to] = pair;
+  const start = { attacco: [7, 3], fino: [11, 6], difesa: [6, 4], altri: [5, 3], perso: [4, 7] }[kind] as [number, number];
+  let [a, d] = start;
+  const rolls: Roll[] = [];
+  const many = kind === 'fino' || kind === 'perso';
+  do {
+    const r = fight(a, d);
+    rolls.push(r);
+    a -= r.aLoss;
+    d -= r.dLoss;
+  } while (many && d > 0 && a > 1);
+  if (kind === 'difesa' && d > 0 && a > 1) rolls.push(fight(a, d));
+  const role: Role = kind === 'difesa' ? 'defender' : kind === 'altri' ? 'spectator' : 'attacker';
+  const demo = { blitz: many };
+  const base = {
+    role,
+    a: fighter(view, view.territories[from]!.owner, from, start[0]),
+    d: fighter(view, view.territories[to]!.owner, to, start[1]),
+    demo,
+  };
+  const step = useBattle.getState().blitzMode === 'conto' ? 380 : 1000;
+  let left = start[0];
+  rolls.forEach((r, i) => {
+    setTimeout(
+      () => {
+        left -= r.aLoss;
+        if (i === rolls.length - 1) demo.blitz = false;
+        feedRoll(base, r, left);
+      },
+      i === 0 ? 0 : 60 + i * step,
+    );
+  });
+  return true;
+}
+
+// per le prove automatiche dalla console
+if (import.meta.env.DEV) Object.assign(window, { __battaglia: useBattle, __pedine: setTankTokens, __demo: startDemo });
+
+// ---------------------------------------------------------------- pannello delle scelte
+
+function Controls({ painter }: { painter: BoardPainter | null }) {
   const tankLook = useBattle((s) => s.tankLook);
   const blitzMode = useBattle((s) => s.blitzMode);
   const watch = useBattle((s) => s.watch);
   const setOptions = useBattle((s) => s.setOptions);
-  const demo = useBattle((s) => s.demo);
+  const [tokens, setTokens] = useState<TankTokens>(tankTokens());
+  const choose = (patch: Parameters<typeof setOptions>[0]) => {
+    setOptions(patch);
+    saveChoices();
+  };
   return (
-    <aside className="bt-dock panel" aria-label="Prova della scena della battaglia">
+    <aside className="bt-dock panel" aria-label="Prova della battaglia">
       <span className="bt-dock-title">
-        <span className="mock-tag">Prova</span> Scena della battaglia
+        <span className="mock-tag">Prova</span> Battaglia e carri
       </span>
-      <div className="bt-seg" role="radiogroup" aria-label="Proposta della scena">
-        {PROPOSALS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            role="radio"
-            aria-checked={proposal === p.id}
-            title={p.tip}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              setOptions({ proposal: p.id as Proposal });
-            }}
-          >
-            <b>{p.letter}</b> {p.name}
-          </button>
-        ))}
-      </div>
-      {proposal === 'carri' && (
-        <select
-          className="mock-restart"
-          aria-label="Come sono i carri"
-          value={tankLook}
-          onChange={(e) => {
-            e.target.blur();
-            setOptions({ tankLook: e.target.value as TankLook });
-          }}
-        >
-          <option value="lato">Carri visti di lato</option>
-          <option value="alto">Carri visti dall'alto</option>
-        </select>
-      )}
       <select
         className="mock-restart"
-        aria-label="Guarda una battaglia di prova"
-        value=""
+        aria-label="Pedine sulla mappa"
+        value={tokens}
         onChange={(e) => {
-          const v = e.target.value as DemoKind | '';
           e.target.blur();
-          if (v) demo(v);
+          const v = e.target.value as TankTokens;
+          setTankTokens(v);
+          setTokens(v);
+          painter?.redraw();
+          saveChoices();
         }}
       >
-        <option value="">Guarda una battaglia…</option>
-        {DEMOS.map((d) => (
-          <option key={d.id} value={d.id}>
-            {d.name}
+        {TOKENS.map((t) => (
+          <option key={t.id} value={t.id}>
+            Mappa: {t.name}
           </option>
         ))}
+      </select>
+      <select
+        className="mock-restart"
+        aria-label="Come sono i carri nella battaglia"
+        value={tankLook}
+        onChange={(e) => {
+          e.target.blur();
+          choose({ tankLook: e.target.value as TankLook });
+        }}
+      >
+        <option value="lato">Battaglia: carri di lato</option>
+        <option value="alto">Battaglia: carri dall'alto</option>
       </select>
       <select
         className="mock-restart"
@@ -122,7 +217,7 @@ function Controls() {
         value={blitzMode}
         onChange={(e) => {
           e.target.blur();
-          setOptions({ blitzMode: e.target.value as BlitzMode });
+          choose({ blitzMode: e.target.value as BlitzMode });
         }}
       >
         <option value="tiri">Fino in fondo: tiro per tiro</option>
@@ -135,12 +230,29 @@ function Controls() {
         value={watch}
         onChange={(e) => {
           e.target.blur();
-          setOptions({ watch: e.target.value as Watch });
+          choose({ watch: e.target.value as Watch });
         }}
       >
         <option value="piccola">Gli altri: in piccolo</option>
         <option value="intera">Gli altri: scena intera</option>
         <option value="niente">Gli altri: niente</option>
+      </select>
+      <select
+        className="mock-restart"
+        aria-label="Guarda una battaglia di prova"
+        value=""
+        onChange={(e) => {
+          const v = e.target.value as DemoKind | '';
+          e.target.blur();
+          if (v && !startDemo(v)) useSession.getState().setNotice('Nessuna coppia di territori adatta a questa prova in questo momento.');
+        }}
+      >
+        <option value="">Guarda una battaglia…</option>
+        {DEMOS.map((d) => (
+          <option key={d.id} value={d.id}>
+            {d.name}
+          </option>
+        ))}
       </select>
       <select
         className="mock-restart"
@@ -187,18 +299,7 @@ function Page() {
       </div>
     );
   }
-  return (
-    <GameScreen
-      onPainter={setPainter}
-      revealBattles={false}
-      scene={
-        <>
-          <BattleLayer painter={painter} />
-          <Controls />
-        </>
-      }
-    />
-  );
+  return <GameScreen onPainter={setPainter} extra={<Controls painter={painter} />} />;
 }
 
 createRoot(document.getElementById('root')!).render(

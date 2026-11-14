@@ -1,10 +1,10 @@
 /**
  * La schermata della partita: il tabellone a tutto schermo, i giocatori in alto a sinistra, la
- * barra dei comandi in basso, carte e registro in due cassetti. Tasti: Esc annulla (nei rinforzi
+ * barra dei comandi in basso, carte e registro in due cassetti, la scena delle battaglie sopra la mappa. Tasti: Esc annulla (nei rinforzi
  * toglie le armate non confermate), Invio conferma, 1-3 dadi, 0 vista d'insieme.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useGameSounds } from '../audio/useGameSounds';
+import { setBattleSoundsByScene, useGameSounds } from '../audio/useGameSounds';
 import { BoardCanvas } from '../board/BoardCanvas';
 import type { BoardState } from '../board/common';
 import type { BoardPainter, Insets } from '../board/painter';
@@ -17,6 +17,8 @@ import { describeEvent, isHighlight, namesFor } from './describe';
 import { GameOver } from './GameOver';
 import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
 import { ObjectiveCard } from './ObjectiveCard';
+import { connectBattleFeed, useBattle } from './battle';
+import { BattleLayer } from './BattleScene';
 import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
 import { TopBar } from './TopBar';
 import { useGame } from './useGame';
@@ -30,6 +32,8 @@ function useBoardState(): BoardState {
   const draft = useSession((s) => s.draft);
   const hover = useSession((s) => s.hover);
   const fresh = useSession((s) => s.fresh);
+  // durante la scena della battaglia i due territori non hanno la pedina: ci sono i carri della scena
+  const fighting = useBattle((s) => (s.playing && !s.playing.small && s.playing.stage !== 'outro' ? `${s.playing.eng.a.territory}|${s.playing.eng.d.territory}` : ''));
   return useMemo(() => {
     const owners = new Map<string, string>();
     const armies = new Map<string, number>();
@@ -71,8 +75,9 @@ function useBoardState(): BoardState {
       target = move.to;
       arrows = { to: [move.to], kind: 'move' };
     }
-    return { owners, armies, hover, selected, target, arrows, active, pending, flashes };
-  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh]);
+    const hidden = fighting ? new Set(fighting.split('|')) : null;
+    return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden };
+  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting]);
 }
 
 /** Eventi importanti appena successi, in basso a destra per qualche secondo. */
@@ -120,13 +125,11 @@ interface Props {
   topbarExtra?: ReactNode;
   /** Per chi sta sopra il tabellone e deve muoverne la vista (pagina di prova). */
   onPainter?: (p: BoardPainter | null) => void;
-  /** Una scena sopra il tabellone, sotto la barra dei comandi (pagina di prova). */
-  scene?: ReactNode;
-  /** false: la vista non va da sola sul territorio attaccato (ci pensa la scena). */
-  revealBattles?: boolean;
+  /** In più sopra il tabellone (pagina di prova). */
+  extra?: ReactNode;
 }
 
-export function GameScreen({ topbarExtra, onPainter, scene, revealBattles = true }: Props = {}) {
+export function GameScreen({ topbarExtra, onPainter, extra }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
   const online = useSession((s) => s.online);
@@ -156,12 +159,15 @@ export function GameScreen({ topbarExtra, onPainter, scene, revealBattles = true
     };
   }, [mine]);
 
-  // nuovo turno mio: il territorio conquistato o perso di recente resta in vista
+  // le battaglie: la scena le riceve dalla partita e ne fa anche i suoni (a tempo coi dadi e coi colpi)
   useEffect(() => {
-    if (!revealBattles) return;
-    const battle = fresh?.events.findLast((e) => e.event.type === 'battle');
-    if (battle && battle.event.type === 'battle' && battle.event.defender === me) painter?.reveal(battle.event.to);
-  }, [fresh, me, painter, revealBattles]);
+    setBattleSoundsByScene(true);
+    const off = connectBattleFeed();
+    return () => {
+      off();
+      setBattleSoundsByScene(false);
+    };
+  }, []);
 
   useEffect(() => onPainter?.(painter), [painter, onPainter]);
 
@@ -210,7 +216,8 @@ export function GameScreen({ topbarExtra, onPainter, scene, revealBattles = true
       <div className="corner-players panel">
         <PlayersPanel />
       </div>
-      {scene}
+      <BattleLayer painter={painter} />
+      {extra}
       {move.kind !== 'briefing' && <CommandBar />}
       <div className="corner-tools">
         <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
