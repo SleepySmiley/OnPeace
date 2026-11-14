@@ -5,7 +5,10 @@
  */
 import {
   clamp,
+  dimmed,
+  flashLevel,
   luminance,
+  pendingBadge,
   placeLabels,
   rgba,
   routePath,
@@ -140,11 +143,33 @@ export const vetro: BoardStyle = {
     const colorOf = (id: string) => state.owners.get(id) ?? '#3a3d44';
 
     toMap(env);
+    // messa a fuoco: si spegne quello su cui adesso non si può agire
+    // (nella pagina di prova, col territorio scelto: tutto tranne lui e i suoi confinanti)
+    const focus = state.selected && state.arrows === undefined ? new Set([state.selected, ...(geo.neighbours.get(state.selected) ?? [])]) : null;
+    const dim = focus ? new Set(geo.board.territories.map((t) => t.id).filter((id) => !focus.has(id))) : dimmed(state, geo.board.territories);
+    ctx.fillStyle = 'rgba(6, 7, 10, 0.5)';
+    for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    const now = performance.now();
+    for (const id of state.flashes?.keys() ?? []) {
+      const k = flashLevel(state, id, now);
+      if (k <= 0) continue;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.42 * k})`;
+      ctx.fill(geo.paths.get(id)!, 'evenodd');
+      ctx.restore();
+    }
+    if (state.target && geo.paths.has(state.target)) {
+      ctx.save();
+      ctx.shadowColor = rgba(colorOf(state.selected ?? state.target), 0.9);
+      ctx.shadowBlur = 16 * dpr;
+      ctx.lineWidth = 2 * px;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.setLineDash([6 * px, 4 * px]);
+      ctx.stroke(geo.paths.get(state.target)!);
+      ctx.restore();
+    }
     if (state.selected) {
-      // messa a fuoco: si spegne tutto tranne il territorio e i suoi confinanti
-      const focus = new Set([state.selected, ...(geo.neighbours.get(state.selected) ?? [])]);
-      ctx.fillStyle = 'rgba(6, 7, 10, 0.5)';
-      for (const t of geo.board.territories) if (!focus.has(t.id)) ctx.fill(geo.paths.get(t.id)!, 'evenodd');
       ctx.save();
       ctx.shadowColor = rgba(colorOf(state.selected), 0.9);
       ctx.shadowBlur = 22 * dpr;
@@ -168,13 +193,15 @@ export const vetro: BoardStyle = {
     const r = clamp(11 + (z - 1) * 1.4, 11, 16);
     // frecce morbide
     const mine = state.selected ? colorOf(state.selected) : '#ffffff';
-    for (const { enemy, shape } of selectionArrows(env, r + 6, 0.2)) {
-      const head = enemy ? 11 : 8;
+    for (const { enemy, chosen, shape } of selectionArrows(env, r + 6, 0.2)) {
+      const head = enemy ? (chosen ? 13 : 11) : chosen ? 10 : 8;
       const base: [number, number] = [shape.to[0] - shape.dir[0] * head * 0.8, shape.to[1] - shape.dir[1] * head * 0.8];
       const body = new Path2D();
       body.moveTo(shape.from[0], shape.from[1]);
       body.quadraticCurveTo(shape.ctrl[0], shape.ctrl[1], base[0], base[1]);
       ctx.save();
+      // scelto il bersaglio, le altre frecce passano in secondo piano
+      if (state.target && !chosen) ctx.globalAlpha = 0.35;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
@@ -184,7 +211,7 @@ export const vetro: BoardStyle = {
         ctx.shadowColor = rgba(mine, 0.8);
         ctx.shadowBlur = 12;
       }
-      ctx.lineWidth = enemy ? 4 : 2;
+      ctx.lineWidth = enemy ? (chosen ? 5.5 : 4) : chosen ? 3 : 2;
       ctx.strokeStyle = g;
       ctx.stroke(body);
       const [hx, hy] = shape.dir;
@@ -203,7 +230,7 @@ export const vetro: BoardStyle = {
 
     // pedine rotonde
     const taken: Rect[] = [];
-    for (const t of visibleTerritories(env)) {
+    for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       const [x, y] = screenOf(env, t.anchor);
       const color = colorOf(t.id);
       const active = t.id === state.selected || t.id === state.hover;
@@ -231,6 +258,8 @@ export const vetro: BoardStyle = {
       ctx.textBaseline = 'middle';
       ctx.fillStyle = luminance(color) > 0.5 ? '#111214' : '#ffffff';
       ctx.fillText(String(state.armies.get(t.id) ?? 0), x, y + rr * 0.06);
+      const add = state.pending?.get(t.id);
+      if (add) pendingBadge(env, x + rr * 0.45, y - rr - 3, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
     }
 
     const fs = clamp(11 + (z - 1) * 0.9, 11, 14);

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { reportClientError } from '../game/store';
+import { reportClientError } from '../store';
 
 interface State {
   error: Error | null;
@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
           <div className="panel-kicker">Errore dell'interfaccia</div>
           <h1>Qualcosa si è rotto</h1>
           <p className="lead">
-            L'errore è stato segnalato. Ricarica la pagina: rientri nella partita e gli ordini già dati restano.
+            L'errore è stato segnalato. Ricarica la pagina: rientri nella partita e le mosse già fatte restano.
           </p>
           <p className="hint-text">{this.state.error.message}</p>
           <div className="button-row">

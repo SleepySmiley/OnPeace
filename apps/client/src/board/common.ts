@@ -17,6 +17,38 @@ export interface BoardState {
   armies: Map<string, number>;
   hover: string | null;
   selected: string | null;
+  /**
+   * Frecce dal territorio scelto: verso quali territori e di che tipo (attacco o spostamento).
+   * Assente: verso tutti i confinanti (pagina di prova); null: nessuna freccia.
+   */
+  arrows?: { to: readonly string[]; kind: 'attack' | 'move' } | null;
+  /** Bersaglio scelto tra le frecce: la sua è in evidenza. */
+  target?: string | null;
+  /** Territori su cui si può agire adesso: gli altri si spengono un po' (null: tutti accesi). */
+  active?: ReadonlySet<string> | null;
+  /** Armate aggiunte ma non ancora confermate (piazzamento, rinforzi): "+n" sulla pedina. */
+  pending?: ReadonlyMap<string, number>;
+  /** Territori appena coinvolti in una battaglia o una conquista: si accendono per un attimo (id → ms dell'evento). */
+  flashes?: ReadonlyMap<string, number>;
+  /** false: niente pedine (tabellone di sfondo, senza partita). */
+  tokens?: boolean;
+}
+
+/** Territori da spegnere: col territorio scelto e le sue frecce, tutto il resto; altrimenti chi non è attivo. */
+export function dimmed(state: BoardState, all: readonly { id: string }[]): Set<string> {
+  if (state.selected && state.arrows) {
+    const keep = new Set([state.selected, ...state.arrows.to]);
+    return new Set(all.map((t) => t.id).filter((id) => !keep.has(id)));
+  }
+  if (state.active) return new Set(all.map((t) => t.id).filter((id) => !state.active!.has(id)));
+  return new Set();
+}
+
+/** Lampo di un territorio: da 1 (appena successo) a 0 (dopo `ms`). */
+export function flashLevel(state: BoardState, id: string, now: number, ms = 1400): number {
+  const at = state.flashes?.get(id);
+  if (at === undefined) return 0;
+  return Math.max(0, 1 - (now - at) / ms);
 }
 
 /** Immagini della Terra già riproiettate (possono mancare finché si caricano). */
@@ -178,22 +210,54 @@ export function qPoint(s: ArrowShape, t: number): [number, number] {
   ];
 }
 
-/** Per ogni confinante del territorio selezionato: forma della freccia e se è nemico. */
+/**
+ * Frecce dal territorio selezionato: verso quelli indicati in `state.arrows` (o, se manca, verso
+ * tutti i confinanti), con la forma, se è un attacco e se è il bersaglio scelto.
+ */
 export function selectionArrows(env: PaintEnv, trim: number, bendK?: number) {
   const { geo, state, view } = env;
-  if (!state.selected) return [];
+  if (!state.selected || state.arrows === null) return [];
   const t = geo.board.territories.find((x) => x.id === state.selected)!;
   const a = screenOf(env, t.anchor);
   const mine = state.owners.get(t.id);
-  const out: { id: string; enemy: boolean; shape: ArrowShape }[] = [];
-  for (const n of geo.neighbours.get(t.id) ?? []) {
-    const other = geo.board.territories.find((x) => x.id === n)!;
+  const targets = state.arrows ? state.arrows.to : (geo.neighbours.get(t.id) ?? []);
+  const out: { id: string; enemy: boolean; chosen: boolean; shape: ArrowShape }[] = [];
+  for (const n of targets) {
+    const other = geo.board.territories.find((x) => x.id === n);
+    if (!other) continue;
     const b = screenOf(env, other.anchor);
     if (Math.abs(b[0] - a[0]) > (geo.width * view.scale) / 2) continue; // rotta che fa il giro del mondo
     const shape = arrowShape(a, b, trim, bendK);
-    if (shape) out.push({ id: n, enemy: state.owners.get(n) !== mine, shape });
+    const enemy = state.arrows ? state.arrows.kind === 'attack' : state.owners.get(n) !== mine;
+    if (shape) out.push({ id: n, enemy, chosen: n === state.target, shape });
   }
-  return out;
+  // il bersaglio scelto si disegna per ultimo, sopra gli altri
+  return out.sort((x, y) => Number(x.chosen) - Number(y.chosen));
+}
+
+/** Etichetta "+n" accanto alla pedina (armate non ancora confermate). */
+export function pendingBadge(env: PaintEnv, x: number, y: number, n: number, opts: { font: string; fill: string; ink: string; edge: string }) {
+  const { ctx } = env;
+  const text = `+${n}`;
+  ctx.font = opts.font;
+  const w = Math.max(18, ctx.measureText(text).width + 9);
+  const h = 17;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y - h / 2, w, h, h / 2);
+  ctx.fillStyle = opts.fill;
+  ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = opts.edge;
+  ctx.stroke();
+  ctx.fillStyle = opts.ink;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + 0.5);
 }
 
 /** Percorso delle rotte via mare (coordinate mappa). */

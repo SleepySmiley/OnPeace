@@ -5,11 +5,13 @@
  */
 import {
   clamp,
+  dimmed,
+  flashLevel,
   luminance,
   noiseTile,
+  pendingBadge,
   placeLabels,
   qPoint,
-
   routePath,
   screenOf,
   selectionArrows,
@@ -252,8 +254,19 @@ export const classico: BoardStyle = {
     const colorOf = (id: string) => state.owners.get(id) ?? '#888888';
 
     toMap(env);
+    // fuori gioco adesso: un velo d'inchiostro
+    const dim = dimmed(state, geo.board.territories);
+    ctx.fillStyle = 'rgba(43, 34, 25, 0.34)';
+    for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    const now = performance.now();
+    for (const id of state.flashes?.keys() ?? []) {
+      const k = flashLevel(state, id, now);
+      if (k <= 0) continue;
+      ctx.fillStyle = `rgba(255, 244, 214, ${0.6 * k})`;
+      ctx.fill(geo.paths.get(id)!, 'evenodd');
+    }
     if (state.selected) {
-      for (const n of geo.neighbours.get(state.selected) ?? []) {
+      for (const n of state.arrows ? state.arrows.to : (geo.neighbours.get(state.selected) ?? [])) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
         ctx.fill(geo.paths.get(n)!, 'evenodd');
       }
@@ -262,6 +275,15 @@ export const classico: BoardStyle = {
       ctx.lineWidth = 3.2 * px;
       ctx.strokeStyle = INK;
       ctx.stroke(geo.paths.get(state.selected)!);
+    }
+    if (state.target && geo.paths.has(state.target)) {
+      ctx.fillStyle = 'rgba(255, 250, 230, 0.3)';
+      ctx.fill(geo.paths.get(state.target)!, 'evenodd');
+      ctx.setLineDash([7 * px, 4 * px]);
+      ctx.lineWidth = 2.6 * px;
+      ctx.strokeStyle = INK;
+      ctx.stroke(geo.paths.get(state.target)!);
+      ctx.setLineDash([]);
     }
     if (state.hover && state.hover !== state.selected) {
       ctx.fillStyle = 'rgba(255, 250, 230, 0.22)';
@@ -272,7 +294,7 @@ export const classico: BoardStyle = {
     const r = clamp(11 + (z - 1) * 1.5, 11, 17);
     // frecce piene col colore di chi attacca
     const mine = state.selected ? colorOf(state.selected) : INK;
-    for (const { enemy, shape } of selectionArrows(env, r + 4, 0.2)) {
+    for (const { enemy, chosen, shape } of selectionArrows(env, r + 4, 0.2)) {
       const head = 15;
       const tEnd = 1 - head / Math.max(1, shape.length);
       const pts: [number, number][] = [];
@@ -288,9 +310,11 @@ export const classico: BoardStyle = {
       tip.lineTo(base[0] + hy * 10, base[1] - hx * 10);
       tip.closePath();
       ctx.save();
+      // scelto il bersaglio, le altre frecce passano in secondo piano
+      if (state.target && !chosen) ctx.globalAlpha = 0.38;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.lineWidth = enemy ? 9 : 6;
+      ctx.lineWidth = enemy ? (chosen ? 11 : 9) : chosen ? 8 : 6;
       ctx.strokeStyle = INK;
       if (!enemy) ctx.setLineDash([8, 6]);
       ctx.stroke(body);
@@ -311,7 +335,7 @@ export const classico: BoardStyle = {
 
     // pedine: dischi di plastica impilati (più armate, pila più alta)
     const taken: Rect[] = [];
-    for (const t of visibleTerritories(env)) {
+    for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       const [x, y] = screenOf(env, t.anchor);
       const color = colorOf(t.id);
       const armies = state.armies.get(t.id) ?? 0;
@@ -363,6 +387,8 @@ export const classico: BoardStyle = {
       ctx.textBaseline = 'middle';
       ctx.fillStyle = luminance(color) > 0.4 ? '#1b1510' : '#ffffff';
       ctx.fillText(String(armies), x, topY + 0.5);
+      const add = state.pending?.get(t.id);
+      if (add) pendingBadge(env, x + r * 0.55, topY - ry - 4, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
     }
 
     const fs = clamp(11 + (z - 1) * 1, 11, 15);

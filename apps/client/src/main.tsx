@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { sfx } from './audio/sfx';
-import { reportClientError } from './game/store';
+import { reportClientError } from './store';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import './styles.css';
 

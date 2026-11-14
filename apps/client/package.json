@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@onpeace/conquista": "*",
     "@onpeace/engine": "*",
     "@onpeace/protocol": "*",
-    "pixi.js": "^8.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.1.0"

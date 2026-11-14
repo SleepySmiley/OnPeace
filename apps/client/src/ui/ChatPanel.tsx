@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSession } from '../game/store';
+import { useSession } from '../store';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 

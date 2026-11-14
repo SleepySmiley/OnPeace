@@ -117,7 +117,7 @@ export class BoardLibrary implements BoardProvider {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
     if (path === '/tabelloni' || path === '/tabelloni/') {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' });
-      res.end(JSON.stringify(this.summaries()));
+      res.end(JSON.stringify(this.summaries().map((b) => ({ ...b, hash: this.hash(b.id) }))));
       return true;
     }
     const m = /^\/tabelloni\/([a-z][a-z0-9_]*)\.json$/.exec(path);

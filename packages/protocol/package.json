@@ -4,15 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./atwar": "./src/atwar.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
     "@onpeace/conquista": "*",
-    "@onpeace/engine": "*",
     "zod": "^4.1.0"
   }
 }
