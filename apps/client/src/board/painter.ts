@@ -4,10 +4,9 @@
  * fotogramma, selezione, frecce, pedine e nomi. Si trascina per spostarsi, la rotella ingrandisce.
  */
 import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from './common';
-import { flashLevel } from './common';
+import { actionable, flashLevel } from './common';
 import { geometryAt, type BoardGeometry } from './geometry';
 import { loadRelief } from './imagery';
-import { onMapLook, ownersInStatic, pulsing } from './maplook';
 
 export interface PainterEvents {
   onHover(id: string | null): void;
@@ -47,6 +46,7 @@ export class BoardPainter {
   private destroyed = false;
   private readonly off: (() => void)[] = [];
   private flight = 0;
+  private pulseTimer = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -60,7 +60,6 @@ export class BoardPainter {
     this.listen();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
-    this.off.push(onMapLook(() => this.renderStatic()));
     this.resize();
     const id = geo.board.id;
     if (!reliefs.has(id)) reliefs.set(id, loadRelief(geo.board).catch(() => null));
@@ -76,6 +75,7 @@ export class BoardPainter {
     this.resizeObserver.disconnect();
     for (const f of this.off) f();
     window.clearTimeout(this.idleTimer);
+    window.clearTimeout(this.pulseTimer);
     cancelAnimationFrame(this.flight);
   }
 
@@ -87,7 +87,7 @@ export class BoardPainter {
     const owners = key !== this.ownersKey;
     this.ownersKey = key;
     // lo strato fisso di alcuni stili è colorato coi padroni (Vetro): solo lì va rifatto se cambiano
-    if (owners && (this.style.ownersInStatic || ownersInStatic())) this.renderStatic();
+    if (owners && this.style.ownersInStatic) this.renderStatic();
     else this.requestFrame();
   }
 
@@ -279,8 +279,11 @@ export class BoardPainter {
     // lampi delle battaglie: si continua a disegnare finché non si sono spenti
     const now = performance.now();
     if ([...(this.state.flashes?.keys() ?? [])].some((id) => flashLevel(this.state, id, now) > 0)) this.requestFrame();
-    // contorno che pulsa sui territori su cui si può agire
-    else if (pulsing() && (this.state.active || (this.state.selected && this.state.arrows))) this.requestFrame();
+    else if (actionable(this.state).length > 0) {
+      // il contorno dei territori su cui si può agire pulsa piano: basta un disegno ogni 40 ms
+      window.clearTimeout(this.pulseTimer);
+      this.pulseTimer = window.setTimeout(() => this.requestFrame(), 40);
+    }
   }
 
   private requestFrame(): void {

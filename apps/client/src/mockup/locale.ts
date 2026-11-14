@@ -64,8 +64,6 @@ export class LocalGame {
   private botAttacks = 0;
   private botTurn = -1;
   private closed = false;
-  /** Avversari fermi (pagine di prova: per guardare la mappa con calma). */
-  private hold = false;
 
   constructor(start: Start, seed = Date.now() % 1_000_000) {
     const rules = structuredClone(rulesJson) as typeof rulesJson;
@@ -104,12 +102,6 @@ export class LocalGame {
   stop(): void {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
-  }
-
-  /** Ferma gli avversari (finché non si rimettono a giocare) o li fa ripartire. */
-  setHold(on: boolean): void {
-    this.hold = on;
-    this.schedule();
   }
 
   private handle(msg: ClientMsg): void {
@@ -211,7 +203,7 @@ export class LocalGame {
   private schedule(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    if (this.state.phase === 'over' || this.hold || this.closed) return;
+    if (this.state.phase === 'over') return;
     const due = playersToAct(this.ctx, this.state).filter((id) => id !== ME);
     if (due.length === 0) return;
     const phase = this.state.phase;

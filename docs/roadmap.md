@@ -21,20 +21,17 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.9 — carri armati al posto dei numeri (proposta D).** Su quattro modi (targa, squadra con bandierina, dall'alto, numero sulla fiancata) hai scelto la fiancata: ogni territorio ha un carro di lato nel colore del padrone col numero dipinto sullo scafo, girato verso il nemico confinante più vicino. A mappa intera i carri sono più piccoli e crescono avvicinandosi; sul vetro un'ombra scura li stacca dal territorio dello stesso colore. Via i dischi.
 - **M12.10 — battaglia: carri dall'alto e tempo restituito.** I carri della scena sono visti dall'alto (la torretta gira verso il bersaglio). Ogni tiro di dadi ridà 3 secondi a chi attacca, fino a 60 per turno (regole: `timers.battleSeconds`, `timers.battleMaxSeconds`), anche a tempo fermato: guardare la battaglia non mangia il turno. Restano com'erano "fino in fondo" tiro per tiro e la battaglia degli altri in piccolo (si possono ancora cambiare nella pagina di prova `battaglia.html`).
 - **M12.11 — pesca della carta a fine turno (proposta A).** Su tre proposte (al centro, ventaglio, nell'angolo) hai scelto il centro: se hai conquistato, a fine turno la mappa si scurisce, il mazzo cade al centro, lo tocchi (o Invio) e la prima carta sale, si gira grande e vola su "Carte e obiettivo", che conta la carta solo quando arriva. È solo scena: la carta la decide il server come prima e, se non tocchi, parte da sola dopo 6 secondi. Carta nuova nei due temi: retro con la rosa dei venti, fronte con il pezzo di mappa del territorio, il simbolo e di chi è ("Tuo: +2 nel tris"); il territorio lampeggia anche sulla mappa. Suoni nuovi (mazzo, carta che si gira). La pesca aspetta che finisca la tua battaglia; se ti attaccano mentre il mazzo aspetta, si toglie di mezzo e torna dopo. Pagina di prova: `pesca.html` (pescate finte, anche insieme alle battaglie).
+- **M12.12 — mappa più leggibile.** Su una pagina di prova con tre domande (di chi è un territorio, dove puoi agire, dove finisce un continente) e varie risposte per ognuna, hai scelto di cambiare solo la seconda: niente più velo scuro sui territori su cui non puoi agire, che rendeva mezza mappa color fango; quelli su cui puoi agire adesso (i tuoi nei rinforzi, quelli liberi nella scelta, i bersagli delle frecce) hanno un contorno chiaro che pulsa piano. Colori e confini restano com'erano. Col tema vetro, durante la scelta a turno, i territori liberi hanno la tinta scura del loro continente invece del grigio: i continenti si distinguono.
 
 ## Da fare
 
-### 1. Mappa più leggibile
-
-Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
-
-Le pedine ormai sono i carri (M12.9). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
-
-### 2. "Cosa devo fare adesso" e il resto dell'interfaccia
+### 1. "Cosa devo fare adesso" e il resto dell'interfaccia
 
 Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni, avvisi. Nell'essenziale vanno sistemati anche i cassetti "Carte e obiettivo" e "Registro e chat".
 
-### 3. Pulizia e chiusura di M12
+Visto in prova: col tema vetro le frecce d'attacco hanno il colore di chi attacca, e sul suo territorio (dello stesso colore) quasi non si vedono.
+
+### 2. Pulizia e chiusura di M12
 
 - Togliere quello che resta del vecchio gioco in stile atWar:
   - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;
