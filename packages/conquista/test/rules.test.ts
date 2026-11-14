@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { RuleError } from '@onpeace/engine';
+import { BoardDef, RuleError } from '@onpeace/engine';
 import {
   applyAction,
   buildDeck,
+  createContext,
+  describeObjective,
   eventsFor,
   objectiveMet,
   ownedBy,
@@ -13,7 +15,7 @@ import {
   type Card,
   type GameState,
 } from '../src';
-import { newGame, setTerritories, skipSetup, worldContext } from './helpers';
+import { data, newGame, setTerritories, skipSetup, worldContext } from './helpers';
 
 const ctx = worldContext();
 
@@ -63,6 +65,26 @@ describe('nuova partita', () => {
 
   it('rifiuta un numero di giocatori fuori dalle regole', () => {
     expect(() => newGame(1)).toThrow(RuleError);
+  });
+
+  it('seme da 128 bit: quattro numeri casuali veri, o un numero solo allargato (test e prove)', () => {
+    const s = newGame(3, 'objectives', [1, 2, 3, 4]);
+    expect(s.seed).toHaveLength(4);
+    expect(newGame(3, 'objectives', 7)).toEqual(newGame(3, 'objectives', 7));
+    expect(newGame(3, 'objectives', 7).seed).not.toEqual(newGame(3, 'objectives', 8).seed);
+  });
+
+  it('il tabellone deve avere almeno un territorio per giocatore', () => {
+    const big = BoardDef.parse(data('territori/mondo.json'));
+    const ids = new Set(big.territories.filter((t) => t.continent === 'oceania').map((t) => t.id));
+    const small = {
+      ...big,
+      continents: big.continents.filter((c) => c.id === 'oceania'),
+      territories: big.territories.filter((t) => ids.has(t.id)),
+      links: big.links.filter((l) => ids.has(l.a) && ids.has(l.b)),
+    };
+    const objectives = { board: 'mondo', objectives: [{ id: 't3', kind: 'territories', count: 3, text: 'x' }] };
+    expect(() => createContext(small, data('conquista/regole.json'), objectives)).toThrow(/solo 4 territori/);
   });
 
   it('con gli obiettivi segreti servono almeno 3 giocatori (in 2 si vincerebbe senza combattere)', () => {
@@ -216,6 +238,8 @@ describe('attacchi', () => {
       if (e.type !== 'battle') throw new Error();
       expect(e.attack).toHaveLength(3);
       expect(e.defense).toHaveLength(3);
+      expect(e.attack).toEqual([...e.attack].sort((x, y) => y - x));
+      expect(e.defense).toEqual([...e.defense].sort((x, y) => y - x));
       let al = 0;
       let dl = 0;
       for (let i = 0; i < 3; i++) {
@@ -277,6 +301,8 @@ describe('attacchi', () => {
       const r = applyAction(ctx, s, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 });
       if (!r.state.turn!.occupation) continue;
       expect(r.events.some((e) => e.type === 'eliminated' && e.player === b && e.cardsTaken === 2)).toBe(true);
+      expect(r.state.players.find((p) => p.id === a)!.cards).toHaveLength(2);
+      expect(r.state.players.find((p) => p.id === b)!.cards).toHaveLength(0);
       const o = applyAction(ctx, r.state, a, { kind: 'occupy', armies: 3 });
       expect(o.state.winner).toBe(a);
       expect(o.events.at(-1)).toMatchObject({ type: 'victory', reason: 'conquest' });
@@ -322,6 +348,31 @@ describe('obiettivi', () => {
     expect(r.events.at(-1)).toMatchObject({ type: 'victory', reason: 'objective' });
   });
 
+  it('vince subito anche chi completa l’obiettivo con lo spostamento di fine turno', () => {
+    let s = skipSetup(ctx, newGame(3, 'objectives', 5));
+    const me = s.turn!.player;
+    const other = s.order.find((p) => p !== me)!;
+    s.players.find((p) => p.id === me)!.objective = { id: 'territori_20_presidiati' };
+    const mine = ctx.board.territories.map((t) => t.id).filter((t) => t !== 'italia' && t !== 'francia').slice(0, 18);
+    const changes: Record<string, [string, number]> = {};
+    for (const t of ctx.board.territories) changes[t.id] = [other, 1];
+    for (const t of mine) changes[t] = [me, 2];
+    changes.italia = [me, 1];
+    changes.francia = [me, 5];
+    s = setTerritories(s, changes);
+    s.phase = 'attack';
+    expect(objectiveMet(ctx, s, me)).toBe(false);
+    const r = applyAction(ctx, s, me, { kind: 'fortify', from: 'francia', to: 'italia', armies: 1 });
+    expect(r.state.winner).toBe(me);
+    expect(r.events.at(-1)).toMatchObject({ type: 'victory', player: me, reason: 'objective' });
+  });
+
+  it('il nome del bersaglio entra nel testo così com’è, anche con simboli come $&', () => {
+    const s = newGame(3, 'objectives', 5);
+    s.players[1]!.name = '$&$`';
+    expect(describeObjective(ctx, s, { id: 'elimina', target: s.players[1]!.id })).toMatch(/^Elimina \$&\$`\./);
+  });
+
   it('elimina: se il bersaglio lo elimina un altro si passa alla riserva', () => {
     for (let seed = 1; seed < 400; seed++) {
       let s = afterProtection(skipSetup(ctx, newGame(3, 'objectives', seed)));
@@ -364,6 +415,25 @@ describe('spostamento e fine turno', () => {
     expect(r.state.turn!.player).not.toBe(first);
     const placed = Object.values(r.state.territories).reduce((n, t) => n + t.armies, 0);
     expect(placed).toBe(Object.values(s.territories).reduce((n, t) => n + t.armies, 0) + 3);
+    // a metà occupazione: entrano le armate minime, poi il turno passa
+    let occupied = false;
+    for (let seed = 1; seed < 400 && !occupied; seed++) {
+      let d = skipSetup(ctx, newGame(3, 'conquest', seed));
+      const [p0, p1] = d.order as [string, string];
+      d = setTerritories(d, { italia: [p0, 8], balcani: [p1, 1], anatolia: [p1, 1] });
+      d.phase = 'attack';
+      const a = applyAction(ctx, d, p0, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 });
+      if (!a.state.turn!.occupation) continue;
+      const t = timeout(ctx, a.state);
+      expect(t.state.territories.balcani!.armies).toBe(3);
+      expect(t.state.turn!.player).not.toBe(p0);
+      occupied = true;
+    }
+    expect(occupied).toBe(true);
+    // nella fase dello spostamento: il turno passa
+    const f = structuredClone(s);
+    f.phase = 'fortify';
+    expect(timeout(ctx, f).state.turn!.player).not.toBe(first);
   });
 });
 

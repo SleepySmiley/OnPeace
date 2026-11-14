@@ -1,6 +1,6 @@
 /**
- * Partite intere giocate a caso (ma sempre in modo legale) fino alla vittoria: il motore non deve
- * mai rompere le regole né perdere armate o carte per strada.
+ * Partite intere giocate a caso (ma sempre in modo legale, con qualche tempo scaduto in ogni fase)
+ * fino alla vittoria: il motore non deve mai rompere le regole né perdere armate o carte per strada.
  */
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@onpeace/engine';
@@ -19,7 +19,8 @@ function checkInvariants(s: GameState, cards: number) {
 
 /** Una mossa a caso tra quelle legali per chi deve giocare. */
 function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: string; action: Action } | null {
-  if (s.phase === 'setup') return null;
+  // null = lascia scadere il tempo (sempre in preparazione, ogni tanto nelle altre fasi)
+  if (s.phase === 'setup' || rng.next() < 0.03) return null;
   const me = s.turn!.player;
   const turn = s.turn!;
   const mine = ownedBy(s, me);
@@ -64,19 +65,33 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
   return { player: me, action: { kind: 'end-turn' } };
 }
 
+const armiesOnBoard = (s: GameState) => Object.values(s.territories).reduce((n, t) => n + t.armies, 0);
+
 function play(players: number, mode: GameMode, seed: number) {
   let s = newGame(players, mode, seed);
   while (s.phase === 'setup') s = timeout(ctx, s).state;
   const cards = cardTotal(s);
   const rng = createRng(seed * 7 + 1);
+  const seen = { fortify: 0, timeouts: 0 };
+  // armate attese: cambiano solo con i rinforzi (più) e con le battaglie (meno)
+  let armies = armiesOnBoard(s);
   let steps = 0;
   while (s.phase !== 'over' && steps < 60_000) {
     steps++;
     const move = randomMove(s, rng);
-    s = move ? applyAction(ctx, s, move.player, move.action).state : timeout(ctx, s).state;
+    const r = move ? applyAction(ctx, s, move.player, move.action) : timeout(ctx, s);
+    if (!move) seen.timeouts++;
+    s = r.state;
+    for (const e of r.events) {
+      if (e.type === 'reinforce') armies += Object.values(e.placements).reduce((n, x) => n + x, 0);
+      if (e.type === 'battle') armies -= e.attackerLosses + e.defenderLosses;
+      if (e.type === 'fortify') seen.fortify++;
+    }
+    expect(armiesOnBoard(s)).toBe(armies);
     if (steps % 50 === 0) checkInvariants(s, cards);
   }
-  return { s, steps };
+  checkInvariants(s, cards);
+  return { s, steps, seen };
 }
 
 describe('partite casuali fino alla fine', () => {
@@ -88,8 +103,10 @@ describe('partite casuali fino alla fine', () => {
       [6, 44],
     ] as const) {
       it(`${mode}, ${players} giocatori (seme ${seed})`, () => {
-        const { s } = play(players, mode, seed);
+        const { s, seen } = play(players, mode, seed);
         expect(s.phase).toBe('over');
+        expect(seen.fortify).toBeGreaterThan(0);
+        expect(seen.timeouts).toBeGreaterThan(0);
         expect(s.winner).not.toBeNull();
         if (mode === 'conquest') expect(new Set(Object.values(s.territories).map((t) => t.owner)).size).toBe(1);
       });

@@ -3,9 +3,10 @@
  * spostamento), carte, eliminazioni e vittoria. Funzioni pure: ricevono uno stato e ne
  * restituiscono uno nuovo con gli eventi prodotti; il caso passa dal seme salvato nello stato.
  */
-import { RuleError, assertRule, createRng, type Rng } from '@onpeace/engine';
+import { RuleError, assertRule } from '@onpeace/engine';
 import { buildDeck, setValue, shuffle } from './cards';
 import { continentsHeld, dealObjectives, objectiveDef, objectiveMet } from './objectives';
+import { createGameRng, expandSeed, type GameRng } from './random';
 import type { GameMode } from './schema';
 import type { Action, ActionResult, Card, GameContext, GameEvent, GameState, PlayerState } from './state';
 
@@ -30,8 +31,8 @@ export function ownedBy(state: GameState, id: string): string[] {
     .map(([tid]) => tid);
 }
 
-function withRng<T>(state: GameState, fn: (rng: Rng) => T): T {
-  const rng = createRng(state.seed);
+function withRng<T>(state: GameState, fn: (rng: GameRng) => T): T {
+  const rng = createGameRng(state.seed);
   const out = fn(rng);
   state.seed = rng.state();
   return out;
@@ -60,7 +61,8 @@ function checkPlacements(ctx: GameContext, state: GameState, id: string, placeme
 }
 
 // ---------------------------------------------------------------- nuova partita
-export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMode, seed: number): GameState {
+/** `seed`: per le partite vere quattro numeri casuali veri (es. da randomBytes(16)); un numero solo per test e prove. */
+export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMode, seed: number | readonly number[]): GameState {
   const { rules, board } = ctx;
   if (players.length < rules.players.min || players.length > rules.players.max) {
     throw new RuleError(`Servono da ${rules.players.min} a ${rules.players.max} giocatori.`);
@@ -73,7 +75,7 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
   const state: GameState = {
     board: board.id,
     mode,
-    seed: seed >>> 0,
+    seed: expandSeed(seed),
     players: players.map((p) => ({ ...p, alive: true, cards: [], objective: null, setupLeft: 0, setupDone: false })),
     order: [],
     territories: {},
@@ -383,6 +385,9 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
       to.armies += action.armies;
       turn.fortifyLeft--;
       events.push({ type: 'fortify', player: id, from: action.from, to: action.to, armies: action.armies });
+      // lo spostamento può completare l'obiettivo (es. armate minime): si controlla prima di passare il turno
+      checkVictory(ctx, state, events);
+      if (state.winner) break;
       if (turn.fortifyLeft === 0) endTurn(ctx, state, events);
       else state.phase = 'fortify';
       break;

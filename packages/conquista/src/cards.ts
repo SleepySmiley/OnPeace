@@ -12,7 +12,7 @@ export function buildDeck(ctx: GameContext): Card[] {
   return cards;
 }
 
-export function shuffle<T>(items: T[], rng: Rng): T[] {
+export function shuffle<T>(items: T[], rng: Pick<Rng, 'int'>): T[] {
   const a = [...items];
   for (let i = a.length - 1; i > 0; i--) {
     const j = rng.int(0, i);

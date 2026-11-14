@@ -1,6 +1,7 @@
 /** Stato di una partita di conquista, azioni dei giocatori ed eventi prodotti dal motore. */
 import { z } from 'zod';
 import type { BoardDef } from '@onpeace/engine';
+import type { Seed } from './random';
 import type { CardSymbol, ConquestRules, GameMode, ObjectiveDef } from './schema';
 
 export interface Card {
@@ -61,7 +62,7 @@ export interface GameState {
   board: string;
   mode: GameMode;
   /** Stato del generatore casuale (dadi, carte): partita riproducibile. */
-  seed: number;
+  seed: Seed;
   players: PlayerState[];
   /** Ordine di gioco (id dei giocatori). */
   order: string[];

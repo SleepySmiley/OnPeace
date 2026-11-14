@@ -5,7 +5,7 @@ import type { ObjectiveDef } from './schema';
 import type { GameContext, GameState, PlayerObjective } from './state';
 
 /** Distribuisce un obiettivo diverso a ogni giocatore; "elimina" può uscire una volta per bersaglio. */
-export function dealObjectives(ctx: GameContext, playerIds: string[], rng: Rng): Map<string, PlayerObjective> {
+export function dealObjectives(ctx: GameContext, playerIds: string[], rng: Pick<Rng, 'int'>): Map<string, PlayerObjective> {
   const pool: PlayerObjective[] = [];
   for (const o of ctx.objectives) {
     if (o.kind === 'eliminate') for (const target of playerIds) pool.push({ id: o.id, target });
@@ -62,5 +62,6 @@ export function describeObjective(ctx: GameContext, state: GameState, objective:
   const def = objectiveDef(ctx, objective.id);
   if (def.kind !== 'eliminate') return def.text;
   const target = state.players.find((p) => p.id === objective.target);
-  return def.text.replace('{giocatore}', target?.name ?? 'il bersaglio');
+  // con una funzione: un nome come "$&" altrimenti verrebbe interpretato da replace
+  return def.text.replace('{giocatore}', () => target?.name ?? 'il bersaglio');
 }

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { BoardDef } from '@onpeace/engine';
 import { createContext, createGame, type GameContext, type GameMode, type GameState } from '../src';
 
-const data = (path: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../../data/${path}`, import.meta.url)), 'utf8'));
+export const data = (path: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../../data/${path}`, import.meta.url)), 'utf8'));
 
 let cached: GameContext | null = null;
 /** Contesto vero: tabellone del mondo, regole e obiettivi da data/ (con eventuali regole cambiate). */

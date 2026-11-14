@@ -11,6 +11,9 @@ export function createContext(board: BoardDef, rulesData: unknown, objectivesDat
   if (objectives.board !== board.id) throw new Error(`obiettivi per "${objectives.board}", tabellone "${board.id}"`);
   const problems = checkObjectives(board, objectives);
   if (problems.length > 0) throw new Error(`obiettivi non validi: ${problems.join('; ')}`);
+  if (board.territories.length < rules.players.max) {
+    throw new Error(`regole: ${rules.players.max} giocatori ma solo ${board.territories.length} territori`);
+  }
   for (let n = rules.players.min; n <= rules.players.max; n++) {
     if (!rules.initialArmies[String(n)]) throw new Error(`regole: mancano le armate iniziali per ${n} giocatori`);
     if (rules.initialArmies[String(n)]! < Math.ceil(board.territories.length / n)) {
