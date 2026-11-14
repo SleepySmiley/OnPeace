@@ -27,6 +27,8 @@ Proposte da preparare (3-4), con questi vincoli: non copre dove clicchi, si vede
 - contatore piccolo vicino al cursore, con la conferma in un punto fisso;
 - pannello stretto sul bordo, che si può chiudere.
 
+**A che punto è (14/11).** Le quattro proposte sono pronte nella pagina di prova `comandi.html`: una partita vera che gira nel browser contro quattro avversari automatici (senza server), così si provano giocando. Si cambia proposta dalla barra in alto (A barra, B striscia, C cursore, D bordo) e si può ripartire dal primo turno o dall'inizio vero. Esc nei rinforzi ora toglie le armate non confermate, anche nel gioco. Manca la scelta.
+
 **Da decidere dopo.** Se togliere i layout "plancia laterale" e "comandi in basso". Prima di toglierli si chiede.
 
 ### 2. Scena della battaglia

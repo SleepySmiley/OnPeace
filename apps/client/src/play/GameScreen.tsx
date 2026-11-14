@@ -3,7 +3,7 @@
  * disposizione scelta (plancia laterale, comandi in basso, essenziale). Tasti: Esc annulla,
  * Invio conferma, 1-3 dadi, 0 vista d'insieme.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import { useGameSounds } from '../audio/useGameSounds';
 import { BoardCanvas } from '../board/BoardCanvas';
@@ -144,7 +144,7 @@ function AnchoredAction({ painter }: { painter: BoardPainter | null }) {
 }
 
 /** Il tabellone, a parte: spostare la vista o passare col mouse sui territori non ridisegna i pannelli. */
-function Board({ layout, onPainter }: { layout: Layout; onPainter: (p: BoardPainter | null) => void }) {
+function Board({ insets, onPainter }: { insets: Insets; onPainter: (p: BoardPainter | null) => void }) {
   const board = useSession((s) => s.board)!;
   const style = useLook((s) => s.style);
   const state = useBoardState();
@@ -155,10 +155,19 @@ function Board({ layout, onPainter }: { layout: Layout; onPainter: (p: BoardPain
   }, []);
   const onClick = useCallback((id: string | null, how: { shift: boolean; right: boolean }) => useSession.getState().clickTerritory(id, how), []);
   const onHover = useCallback((id: string | null) => useSession.getState().setHover(id), []);
-  return <BoardCanvas geo={board.geo} style={style} state={state} insets={INSETS[layout]} onClick={onClick} onHover={onHover} onView={onView} painterRef={onPainter} />;
+  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} onView={onView} painterRef={onPainter} />;
 }
 
-export function GameScreen() {
+interface Props {
+  /** Disposizione essenziale: il pannello della mossa da usare al posto di quello vicino al territorio. */
+  command?: ReactNode;
+  /** Spazio coperto dai pannelli, se diverso da quello della disposizione. */
+  insets?: Insets;
+  /** In più nella barra in alto (pagine di prova). */
+  topbarExtra?: ReactNode;
+}
+
+export function GameScreen({ command, insets, topbarExtra }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
   const layout = useLook((s) => s.layout);
@@ -206,7 +215,11 @@ export function GameScreen() {
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, select') || overlay) return;
       const s = useSession.getState();
-      if (e.key === 'Escape') s.patchDraft({ selected: null, target: null, blitz: false });
+      if (e.key === 'Escape') {
+        // nei rinforzi il territorio scelto è solo l'ultimo cliccato: Esc toglie le armate non ancora confermate
+        if (move.kind === 'place') s.resetPlacements();
+        s.patchDraft({ selected: null, target: null, blitz: false });
+      }
       else if (e.key === '0') painter?.resetView();
       else if (e.key === 'Enter') {
         if (move.kind === 'briefing') s.ready();
@@ -228,8 +241,10 @@ export function GameScreen() {
 
   return (
     <div className={`game layout-${layout}`}>
-      <Board layout={layout} onPainter={setPainter} />
-      <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')} />
+      <Board insets={insets ?? INSETS[layout]} onPainter={setPainter} />
+      <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
+        {topbarExtra}
+      </TopBar>
 
       {layout === 'plancia' && (
         <aside className="side panel">
@@ -266,7 +281,7 @@ export function GameScreen() {
           <div className="corner-players panel">
             <PlayersPanel compact />
           </div>
-          {move.kind !== 'briefing' && <AnchoredAction painter={painter} />}
+          {move.kind !== 'briefing' && (command ?? <AnchoredAction painter={painter} />)}
           <div className="corner-tools">
             <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
               Carte e obiettivo <span className="count">{cardCount}</span>

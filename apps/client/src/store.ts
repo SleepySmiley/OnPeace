@@ -113,7 +113,22 @@ const SEND_TIMEOUT_MS = 8000;
 /** Pausa tra un tiro e l'altro dell'attacco continuo: il tempo di vedere i dadi. */
 const BLITZ_STEP_MS = 420;
 
-let net: Net | null = null;
+/** Il collegamento col server: il WebSocket vero, o un server finto nelle pagine di prova. */
+export interface Link {
+  send(msg: ClientMsg): void;
+  close(): void;
+}
+
+export type LinkFactory = (onMessage: (msg: ServerMsg) => void, onStatus: (connected: boolean) => void, greeting: () => ClientMsg | null) => Link;
+
+let openLink: LinkFactory = (onMessage, onStatus, greeting) => new Net(onMessage, onStatus, greeting);
+
+/** Pagine di prova: la partita gira nel browser invece che sul server. */
+export function setLinkFactory(factory: LinkFactory): void {
+  openLink = factory;
+}
+
+let net: Link | null = null;
 let token: string | null = null;
 let actCounter = 0;
 let sendTimer: ReturnType<typeof setTimeout> | null = null;
@@ -216,7 +231,7 @@ export const useSession = create<Session>((set, get) => {
   function connect() {
     net?.close();
     // contano solo i messaggi della connessione in uso: quella lasciata può ancora rispondere per un attimo
-    const conn: Net = new Net(
+    const conn: Link = openLink(
       (msg) => net === conn && onServer(msg),
       (connected) => net === conn && patchOnline({ connected }),
       () => (token ? { t: 'hello', token } : null),

@@ -12,7 +12,7 @@ import { useGame } from './useGame';
 const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
 
 /** Numero con − e + (e il cursore se l'intervallo è ampio). */
-function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
+export function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
   return (
     <div className="stepper" role="group" aria-label={label}>
       <button type="button" className="ghost" aria-label="Meno" disabled={value <= min} onClick={() => onChange(value - 1)}>

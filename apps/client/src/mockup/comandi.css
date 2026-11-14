@@ -1,0 +1,748 @@
+/*
+ * Pagina di prova del pannello comandi dell'essenziale: quattro proposte (body[data-proposta]).
+ * Tutto usa le variabili dei due stili (styles.css); qui solo forma e posizione.
+ */
+
+/* ------------------------------------------------------------------ selettore nella barra in alto */
+.mock-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mock-tag {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mock-seg {
+  margin: 0;
+  padding: 3px;
+  grid-auto-columns: auto;
+  gap: 2px;
+}
+
+.mock-seg button {
+  padding: 4px 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.mock-seg .num {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.mock-restart {
+  min-height: 30px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--panel-2);
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--radius-sm);
+}
+
+.mock-out {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 18px 22px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ pezzi comuni */
+.kbd {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  opacity: 0.62;
+}
+
+.cmd {
+  color: var(--ink);
+}
+
+.cmd.busy {
+  cursor: progress;
+}
+
+.cmd-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+body[data-stile='vetro'] .cmd-phase {
+  color: #64d2ff;
+}
+
+.cmd.idle .cmd-phase {
+  color: var(--ink-dim);
+}
+
+.cmd-title {
+  font-family: var(--display);
+  font-size: 17px;
+  line-height: 1.15;
+  font-weight: 400;
+}
+
+body[data-stile='vetro'] .cmd-title {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.cmd-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-dim);
+}
+
+.cmd-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cmd-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--edge-soft);
+}
+
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.who-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.who-armies {
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--edge-soft);
+  background: var(--panel-2);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pair-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* pannelli stretti: attaccante sopra, bersaglio sotto */
+.c-mid .pair,
+.d-body .pair {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.pair-arrow {
+  color: var(--die-attack);
+  font-weight: 700;
+}
+
+.cmd-dice {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cmd-dice button {
+  width: 30px;
+  height: 30px;
+}
+
+.cmd .stepper {
+  margin: 0;
+  min-width: 200px;
+}
+
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.targets button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 10px 2px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.targets button:not(:disabled):hover {
+  border-color: var(--die-attack);
+  background: var(--panel-2);
+}
+
+.count-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count-n {
+  font-weight: 700;
+  line-height: 1;
+}
+
+.count-block.big .count-n {
+  font-size: 32px;
+}
+
+.count-block.huge .count-n {
+  font-size: 46px;
+}
+
+.count-text {
+  display: grid;
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* superficie dei pannelli: carta incorniciata o vetro */
+.cmd-a,
+.cmd-c,
+.cmd-d {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+body[data-stile='classico'] .cmd-a.mine,
+body[data-stile='classico'] .cmd-c.mine {
+  box-shadow:
+    inset 0 0 0 3px var(--panel-solid),
+    inset 0 0 0 4px var(--accent),
+    var(--shadow);
+}
+
+body[data-stile='vetro'] .cmd-a.mine,
+body[data-stile='vetro'] .cmd-c.mine {
+  border-color: rgba(100, 210, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(100, 210, 255, 0.18),
+    var(--shadow);
+}
+
+/* ------------------------------------------------------------------ A: barra in basso al centro */
+.cmd-a {
+  position: absolute;
+  z-index: 15;
+  /* centrata su tutta la larghezza: con left 50% avrebbe solo mezzo schermo e si schiaccerebbe */
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  width: fit-content;
+  margin: 0 auto;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 12px 10px 18px;
+  border-radius: var(--radius);
+}
+
+body[data-stile='vetro'] .cmd-a {
+  border-radius: 20px;
+}
+
+.cmd-a.idle {
+  opacity: 0.94;
+}
+
+.a-head {
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 370px;
+}
+
+.cmd-a .cmd-title {
+  white-space: nowrap;
+}
+
+.cmd-a .cmd-hint {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.a-mid {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-left: 18px;
+  border-left: 1px solid var(--edge-soft);
+}
+
+.cmd-a .cmd-actions {
+  padding-left: 4px;
+}
+
+.a-mid .pair,
+.a-mid .who,
+.b-mid .pair,
+.b-mid .who {
+  flex: none;
+}
+
+.a-mid .targets,
+.b-mid .targets {
+  flex-wrap: nowrap;
+}
+
+/* gli angoli in basso salgono sopra la barra */
+body[data-proposta='a'] .layout-essenziale .corner-tools {
+  bottom: 116px;
+}
+
+body[data-proposta='a'] .layout-essenziale .drawer {
+  bottom: 160px;
+  max-height: calc(100vh - 230px);
+}
+
+body[data-proposta='a'] .layout-essenziale .event-toasts {
+  bottom: 116px;
+}
+
+/* ------------------------------------------------------------------ B: striscia sotto la barra in alto */
+.cmd-b {
+  position: absolute;
+  z-index: 29;
+  top: 52px;
+  left: 0;
+  right: 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px 0 0;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--edge);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  white-space: nowrap;
+}
+
+.b-phase {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--btn-primary);
+  color: var(--btn-primary-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cmd-b.mine .b-phase {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.cmd-b.idle .b-phase {
+  background: var(--panel-2);
+  color: var(--ink-dim);
+}
+
+.b-text {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.b-text .cmd-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.b-mid {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.b-mid:empty {
+  display: none;
+}
+
+.cmd-b .count-block.big .count-n {
+  font-size: 24px;
+}
+
+.cmd-b .count-text {
+  display: flex;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.cmd-b .primary,
+.cmd-b .ghost {
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+body[data-proposta='b'] .layout-essenziale .corner-players {
+  top: 108px;
+}
+
+body[data-proposta='b'] .layout-essenziale .territory-info {
+  top: 110px;
+}
+
+/* ------------------------------------------------------------------ C: accanto al cursore + conferma fissa */
+.cursor-tag {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--panel-solid);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.cursor-tag.on {
+  opacity: 1;
+}
+
+.cursor-tag.ok {
+  border-color: var(--good);
+}
+
+.cursor-tag.attack {
+  background: var(--die-attack);
+  border-color: var(--die-attack);
+  color: var(--die-attack-pip);
+}
+
+.cursor-tag.no {
+  color: var(--ink-dim);
+  font-weight: 500;
+}
+
+.cmd-c {
+  position: absolute;
+  z-index: 15;
+  right: 14px;
+  bottom: 14px;
+  width: 340px;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+}
+
+.c-head {
+  display: grid;
+  gap: 2px;
+}
+
+.c-mid {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.c-mid:empty {
+  display: none;
+}
+
+.cmd-c .cmd-actions {
+  flex-wrap: wrap;
+}
+
+.cmd-c .cmd-actions > button {
+  flex: 1;
+}
+
+/* il bottone principale sempre sotto, largo: è il punto fisso dove si conferma */
+.cmd-c .cmd-actions .primary {
+  order: 3;
+  flex-basis: 100%;
+  min-height: 40px;
+}
+
+.cmd-c .cmd-sep {
+  display: none;
+}
+
+.cmd-c .cmd .stepper,
+.cmd-c .stepper {
+  width: 100%;
+}
+
+body[data-proposta='c'] .layout-essenziale .event-toasts {
+  top: 64px;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: 380px;
+}
+
+/* ------------------------------------------------------------------ D: bordo destro, si chiude */
+.cmd-d {
+  position: absolute;
+  z-index: 15;
+  top: 52px;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  box-shadow: -10px 0 26px rgba(0, 0, 0, 0.28);
+}
+
+.cmd-d.mine {
+  border-left-color: var(--accent);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    -10px 0 26px rgba(0, 0, 0, 0.28);
+}
+
+body[data-stile='vetro'] .cmd-d.mine {
+  border-left-color: rgba(100, 210, 255, 0.55);
+  box-shadow:
+    inset 3px 0 0 #64d2ff,
+    -10px 0 26px rgba(0, 0, 0, 0.28);
+}
+
+.d-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.d-toggle {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--edge-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.d-toggle:hover {
+  background: var(--panel-2);
+}
+
+.cmd-d h3.cmd-title {
+  margin: 0;
+  font-size: 21px;
+}
+
+body[data-stile='vetro'] .cmd-d h3.cmd-title {
+  font-size: 18px;
+}
+
+.d-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  justify-items: start;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 4px;
+}
+
+.d-body .stepper {
+  width: 100%;
+  min-width: 0;
+}
+
+.d-breakdown {
+  margin: -6px 0 0;
+}
+
+.d-placements {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  gap: 2px;
+}
+
+.d-placements li {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-size: 13px;
+}
+
+.d-placements .num {
+  font-weight: 700;
+}
+
+.d-foot {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.d-foot .primary {
+  min-height: 42px;
+  font-size: 15px;
+}
+
+.d-foot-row {
+  display: flex;
+  gap: 8px;
+}
+
+.d-foot-row > * {
+  flex: 1;
+}
+
+.d-foot-row:empty {
+  display: none;
+}
+
+.cmd-d.closed {
+  width: 58px;
+  padding: 10px 8px 12px;
+  align-items: center;
+  gap: 12px;
+}
+
+.d-mini-count {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.d-vertical {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.cmd-d.closed.mine .d-vertical {
+  color: var(--accent);
+}
+
+.d-mini-go {
+  margin-top: auto;
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  padding: 0;
+  font-size: 18px;
+}
+
+body[data-proposta='d'] .layout-essenziale .event-toasts,
+body[data-proposta='d'] .layout-essenziale .territory-info {
+  right: 312px;
+}
+
+body[data-proposta='d'] .layout-essenziale .drawer-right {
+  right: 312px;
+}
+
+body[data-proposta='d'] .layout-essenziale:has(.cmd-d.closed) :is(.event-toasts, .territory-info, .drawer-right) {
+  right: 70px;
+}
+
+/* schermi da portatile: nel selettore restano solo le lettere (il nome è nel suggerimento) */
+@media (max-width: 1600px) {
+  .mock-seg .mock-name,
+  .mock-tag {
+    display: none;
+  }
+  .mock-seg button {
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .a-head {
+    max-width: 240px;
+  }
+}
