@@ -3,6 +3,7 @@
  * coppia di territori, coste e rotte via mare. Si calcola una volta quando si carica il tabellone.
  */
 import type { BoardDef, Point } from '@onpeace/engine';
+import { simplifyLine, simplifyRing } from './simplify';
 
 export type Box = [number, number, number, number];
 
@@ -40,6 +41,40 @@ export interface BoardGeometry {
   routes: SeaRoute[];
 }
 
+/** Punti di partenza, per rifare i percorsi con meno dettaglio (vedi geometryAt). */
+interface Source {
+  /** Anelli di ogni territorio; `fixed`: vertici dove cambia il vicino, da tenere sempre. */
+  rings: Map<string, { pts: Point[]; fixed: Uint8Array }[]>;
+  borderLines: Map<Border, Point[][]>;
+  coastLines: Point[][];
+}
+const sources = new WeakMap<BoardGeometry, Source>();
+/** Versioni semplificate già fatte, per tolleranza; e da ogni versione il tabellone di partenza. */
+const levels = new WeakMap<BoardGeometry, Map<number, BoardGeometry>>();
+const roots = new WeakMap<BoardGeometry, BoardGeometry>();
+
+function linesPath(lines: readonly Point[][]): Path2D {
+  const path = new Path2D();
+  for (const line of lines)
+    line.forEach(([x, y], i) => {
+      if (i === 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+    });
+  return path;
+}
+
+function ringsPath(rings: readonly Point[][]): Path2D {
+  const path = new Path2D();
+  for (const ring of rings) {
+    ring.forEach(([x, y], i) => {
+      if (i === 0) path.moveTo(x, y);
+      else path.lineTo(x, y);
+    });
+    path.closePath();
+  }
+  return path;
+}
+
 const key = (p: Point) => `${p[0]},${p[1]}`;
 const edgeKey = (a: Point, b: Point) => {
   const ka = key(a);
@@ -57,36 +92,47 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
 
   // chi possiede ogni lato: un lato in comune tra due territori è un confine, altrimenti è costa
   const owners = new Map<string, string[]>();
+  const rings: Source['rings'] = new Map();
   for (const t of board.territories) {
-    const path = new Path2D();
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    const list: Point[][] = [];
     for (const poly of t.shape) {
       for (const ring of poly) {
-        ring.forEach(([x, y], i) => {
-          if (i === 0) path.moveTo(x, y);
-          else path.lineTo(x, y);
+        list.push(ring);
+        for (const [x, y] of ring) {
           x0 = Math.min(x0, x);
           y0 = Math.min(y0, y);
           x1 = Math.max(x1, x);
           y1 = Math.max(y1, y);
-        });
-        path.closePath();
+        }
         for (let i = 0; i < ring.length; i++) {
           const k = edgeKey(ring[i]!, ring[(i + 1) % ring.length]!);
-          const list = owners.get(k);
-          if (!list) owners.set(k, [t.id]);
-          else if (!list.includes(t.id)) list.push(t.id);
+          const who = owners.get(k);
+          if (!who) owners.set(k, [t.id]);
+          else if (!who.includes(t.id)) who.push(t.id);
         }
       }
     }
+    const path = ringsPath(list);
     paths.set(t.id, path);
     boxes.set(t.id, [x0, y0, x1, y1]);
     land.addPath(path);
+    rings.set(t.id, list.map((pts) => ({ pts, fixed: new Uint8Array(pts.length) })));
   }
+  // vertici dove il lato prima e quello dopo hanno vicini diversi: lì il contorno resta com'è
+  const sides = (a: Point, b: Point) => owners.get(edgeKey(a, b))!.slice().sort().join('|');
+  for (const list of rings.values())
+    for (const { pts, fixed } of list)
+      for (let i = 0; i < pts.length; i++) {
+        const prev = pts[(i - 1 + pts.length) % pts.length]!;
+        const next = pts[(i + 1) % pts.length]!;
+        if (sides(prev, pts[i]!) !== sides(pts[i]!, next)) fixed[i] = 1;
+      }
 
   // lati consecutivi della stessa specie uniti in linee spezzate
-  const coast = new Path2D();
+  const coastLines: Point[][] = [];
   const pairs = new Map<string, Border>();
+  const borderLines = new Map<Border, Point[][]>();
   const eps = 0.6;
   const onFrame = (a: Point, b: Point) =>
     (Math.abs(a[0]) < eps && Math.abs(b[0]) < eps) ||
@@ -94,29 +140,30 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     (Math.abs(a[1]) < eps && Math.abs(b[1]) < eps) ||
     (Math.abs(a[1] - H) < eps && Math.abs(b[1] - H) < eps);
   /** Tracciato del confine tra due territori; ogni confine lo disegna solo il territorio con l'id minore. */
-  const borderPath = (t: string, other: string): Path2D | null => {
+  const borderPath = (t: string, other: string): Point[][] | null => {
     if (t > other) return null;
     const k = `${t}|${other}`;
     let border = pairs.get(k);
     if (!border) {
       border = { a: t, b: other, path: new Path2D(), frontier: continentOf.get(other) !== continentOf.get(t) };
       pairs.set(k, border);
+      borderLines.set(border, []);
     }
-    return border.path;
+    return borderLines.get(border)!;
   };
   const alongside = edgesNear(board, NEAR);
   for (const t of board.territories) {
     for (const poly of t.shape) {
       for (const ring of poly) {
-        let current: Path2D | null = null;
+        let current: Point[][] | null = null;
         let last: Point | null = null;
-        const emit = (a: Point, b: Point, target: Path2D | null) => {
+        const emit = (a: Point, b: Point, target: Point[][] | null) => {
           if (!target) {
             current = null;
             return;
           }
-          if (target !== current || !last || last[0] !== a[0] || last[1] !== a[1]) target.moveTo(a[0], a[1]);
-          target.lineTo(b[0], b[1]);
+          if (target !== current || !last || last[0] !== a[0] || last[1] !== a[1]) target.push([a]);
+          target[target.length - 1]!.push(b);
           current = target;
           last = b;
         };
@@ -139,7 +186,7 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
           for (let k = 1; k <= n; k++) {
             const q: Point = k === n ? b : [a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n];
             const near = alongside([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], t.id);
-            emit(p, q, near ? borderPath(t.id, near) : coast);
+            emit(p, q, near ? borderPath(t.id, near) : coastLines);
             p = q;
           }
         }
@@ -153,7 +200,9 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     neighbours.get(l.b)?.push(l.a);
   }
 
-  return {
+  for (const [border, lines] of borderLines) border.path = linesPath(lines);
+
+  const geo: BoardGeometry = {
     board,
     width: W,
     height: H,
@@ -163,9 +212,42 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     neighbours,
     land,
     borders: [...pairs.values()],
-    coast,
+    coast: linesPath(coastLines),
     routes: buildRoutes(board),
   };
+  sources.set(geo, { rings, borderLines, coastLines });
+  return geo;
+}
+
+/**
+ * Il tabellone con il dettaglio che serve a questa scala (pixel CSS per unità mappa): i contorni
+ * si scostano da quelli veri meno di mezzo pixel. Le versioni si fanno una volta e si riusano;
+ * `board`, vicini e riquadri restano quelli di partenza (per i clic si usa sempre il dettaglio pieno).
+ */
+export function geometryAt(geo: BoardGeometry, scale: number): BoardGeometry {
+  const root = roots.get(geo) ?? geo;
+  const src = sources.get(root);
+  const wanted = 0.5 / scale;
+  if (!src || !(wanted >= 0.25)) return root;
+  const tol = 2 ** Math.min(5, Math.floor(Math.log2(wanted)));
+  let byTol = levels.get(root);
+  if (!byTol) levels.set(root, (byTol = new Map()));
+  let g = byTol.get(tol);
+  if (!g) {
+    const paths = new Map<string, Path2D>();
+    const land = new Path2D();
+    for (const [id, list] of src.rings) {
+      const path = ringsPath(list.map(({ pts, fixed }) => simplifyRing(pts, tol, fixed)));
+      paths.set(id, path);
+      land.addPath(path);
+    }
+    const borders = root.borders.map((b) => ({ ...b, path: linesPath(src.borderLines.get(b)!.map((l) => simplifyLine(l, tol))) }));
+    const coast = linesPath(src.coastLines.map((l) => simplifyLine(l, tol)));
+    g = { ...root, paths, land, borders, coast };
+    byTol.set(tol, g);
+    roots.set(g, root);
+  }
+  return g;
 }
 
 // ---------------------------------------------------------------- lati vicini

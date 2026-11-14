@@ -24,6 +24,7 @@ import {
   type PaintEnv,
   type Rect,
 } from '../common';
+import { geometryAt } from '../geometry';
 
 const SERIF = '"IM Fell English SC", Georgia, serif';
 const INK = '#2b2219';
@@ -63,6 +64,100 @@ function waveTile(): HTMLCanvasElement {
   return waves;
 }
 
+/**
+ * Increspature attorno alle coste: quattro bande larghe e trasparenti, la parte più costosa del
+ * tabellone da tracciare (centinaia di millisecondi). Si disegnano una volta per livello di zoom
+ * su un'immagine in coordinate mappa e poi si riusano.
+ */
+const ripples = new Map<string, HTMLCanvasElement>();
+/** Livelli di zoom delle increspature: 1, 2, 4 o 8 volte la vista d'insieme. */
+const BANDS = [1, 2, 4, 8];
+const rippleBand = (z: number) => 2 ** clamp(Math.round(Math.log2(Math.max(1, z))), 0, 3);
+function rippleImage(env: Pick<PaintEnv, 'geo' | 'fit' | 'dpr'>, band: number): HTMLCanvasElement {
+  const { geo, fit, dpr } = env;
+  const { width: W, height: H } = geo;
+  const k = `${geo.board.id}|${band}|${fit.toFixed(6)}|${dpr}`;
+  const done = ripples.get(k);
+  if (done) return done;
+  // metà della risoluzione dello schermo a quello zoom (sono bande sfumate), al massimo 2,5 milioni di pixel
+  const res = Math.min((fit * band * dpr) / 2, Math.sqrt(2.5e6 / (W * H)));
+  const img = document.createElement('canvas');
+  img.width = Math.ceil(W * res);
+  img.height = Math.ceil(H * res);
+  const g = img.getContext('2d')!;
+  g.setTransform(res, 0, 0, res, 0, 0);
+  g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(32, 78, 98, 0.13)';
+  // bande larghe e sfumate: bastano contorni precisi a un pixel e mezzo dell'immagine
+  const land = geometryAt(geo, res / 3).land;
+  for (const w of [46, 32, 20, 10]) {
+    g.lineWidth = (w * Math.min(2, Math.sqrt(band))) / (fit * band);
+    g.stroke(land);
+  }
+  if (ripples.size >= BANDS.length) ripples.delete(ripples.keys().next().value!);
+  ripples.set(k, img);
+  return img;
+}
+
+/** Prepara gli altri livelli quando il browser non ha niente da fare, così il primo zoom non si ferma. */
+let warming = '';
+function warmRipples(env: PaintEnv) {
+  const { geo, fit, dpr } = env;
+  const k = `${geo.board.id}|${fit.toFixed(6)}|${dpr}`;
+  if (warming === k) return;
+  warming = k;
+  const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 200));
+  const next = (i: number) => {
+    if (i >= BANDS.length || warming !== k) return;
+    idle(() => {
+      rippleImage({ geo, fit, dpr }, BANDS[i]!);
+      next(i + 1);
+    });
+  };
+  next(0);
+}
+
+/**
+ * Grana "multiply" rifatta come velo nero normale: moltiplicare per un grigio v con opacità a
+ * è lo stesso che coprire di nero con opacità a·(1 − v), ma costa molto meno da disegnare.
+ */
+const veils = new Map<string, HTMLCanvasElement>();
+function grainVeil(tile: HTMLCanvasElement, alpha: number, key: string): HTMLCanvasElement {
+  const done = veils.get(key);
+  if (done) return done;
+  const veil = document.createElement('canvas');
+  veil.width = tile.width;
+  veil.height = tile.height;
+  const src = tile.getContext('2d')!.getImageData(0, 0, tile.width, tile.height);
+  const g = veil.getContext('2d')!;
+  const out = g.createImageData(tile.width, tile.height);
+  for (let i = 0; i < src.data.length; i += 4) out.data[i + 3] = Math.round(255 * alpha * (1 - src.data[i]! / 255));
+  g.putImageData(out, 0, 0);
+  veils.set(key, veil);
+  return veil;
+}
+
+/** Panno verde del tavolo con la sua grana: dipende solo dalla misura dello schermo. */
+let felt: HTMLCanvasElement | null = null;
+function feltImage(cw: number, ch: number, dpr: number): HTMLCanvasElement {
+  if (felt && felt.width === cw && felt.height === ch) return felt;
+  felt = document.createElement('canvas');
+  felt.width = cw;
+  felt.height = ch;
+  const g = felt.getContext('2d')!;
+  const grad = g.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
+  grad.addColorStop(0, '#1f4232');
+  grad.addColorStop(1, '#0f231a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, cw, ch);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.globalAlpha = 0.12;
+  g.globalCompositeOperation = 'overlay';
+  g.fillStyle = g.createPattern(noiseTile(200, 110, 'panno'), 'repeat')!;
+  g.fillRect(0, 0, cw / dpr, ch / dpr);
+  return felt;
+}
+
 export const classico: BoardStyle = {
   id: 'classico',
   name: 'Tavolo classico',
@@ -80,18 +175,7 @@ export const classico: BoardStyle = {
 
     // panno verde del tavolo
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const felt = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
-    felt.addColorStop(0, '#1f4232');
-    felt.addColorStop(1, '#0f231a');
-    ctx.fillStyle = felt;
-    ctx.fillRect(0, 0, cw, ch);
-    toScreen(env);
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.fillStyle = ctx.createPattern(noiseTile(200, 110, 'panno'), 'repeat')!;
-    ctx.fillRect(0, 0, cw / dpr, ch / dpr);
-    ctx.restore();
+    ctx.drawImage(feltImage(cw, ch, dpr), 0, 0);
 
     // plancia: bordo color crema con filo scuro
     toMap(env);
@@ -126,12 +210,9 @@ export const classico: BoardStyle = {
     ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1;
     // increspature attorno alle coste
+    ctx.drawImage(rippleImage(env, rippleBand(z)), 0, 0, W, H);
+    warmRipples(env);
     ctx.lineJoin = 'round';
-    for (const w of [46, 32, 20, 10]) {
-      ctx.lineWidth = w * px * Math.min(2, Math.sqrt(z));
-      ctx.strokeStyle = 'rgba(32, 78, 98, 0.13)';
-      ctx.stroke(geo.land);
-    }
     ctx.fillStyle = '#93bccb';
     ctx.fill(geo.land, 'evenodd');
 
@@ -240,9 +321,7 @@ export const classico: BoardStyle = {
     ctx.rect(-m, -m, W + 2 * m, H + 2 * m);
     ctx.clip();
     toScreen(env);
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = ctx.createPattern(noiseTile(220, 80, 'stampa'), 'repeat')!;
+    ctx.fillStyle = ctx.createPattern(grainVeil(noiseTile(220, 80, 'stampa'), 0.1, 'stampa'), 'repeat')!;
     ctx.fillRect(0, 0, cw / dpr, ch / dpr);
     ctx.restore();
   },

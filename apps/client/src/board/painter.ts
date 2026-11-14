@@ -5,7 +5,7 @@
  */
 import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from './common';
 import { flashLevel } from './common';
-import type { BoardGeometry } from './geometry';
+import { geometryAt, type BoardGeometry } from './geometry';
 import { loadRelief } from './imagery';
 
 export interface PainterEvents {
@@ -80,13 +80,11 @@ export class BoardPainter {
   setState(state: BoardState): void {
     this.state = state;
     const key = this.keyOf(state);
-    // lo strato fisso di alcuni stili è colorato coi padroni (Vetro): va rifatto se cambiano
-    if (key !== this.ownersKey) {
-      this.ownersKey = key;
-      this.renderStatic();
-    } else {
-      this.requestFrame();
-    }
+    const owners = key !== this.ownersKey;
+    this.ownersKey = key;
+    // lo strato fisso di alcuni stili è colorato coi padroni (Vetro): solo lì va rifatto se cambiano
+    if (owners && this.style.ownersInStatic) this.renderStatic();
+    else this.requestFrame();
   }
 
   async setStyle(style: BoardStyle): Promise<void> {
@@ -146,8 +144,9 @@ export class BoardPainter {
     return [p[0] * this.view.scale + this.view.x, p[1] * this.view.scale + this.view.y];
   }
 
+  /** Per disegnare: contorni col dettaglio che lo schermo mostra a questa scala (i clic usano quelli pieni). */
   private env(target: CanvasRenderingContext2D): PaintEnv {
-    return { ctx: target, geo: this.geo, view: this.view, state: this.state, dpr: this.dpr, fit: this.fitScale, assets: this.assets };
+    return { ctx: target, geo: geometryAt(this.geo, this.view.scale), view: this.view, state: this.state, dpr: this.dpr, fit: this.fitScale, assets: this.assets };
   }
 
   private fitView(): BoardView {

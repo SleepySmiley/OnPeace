@@ -77,7 +77,9 @@ export interface BoardStyle {
   playerColors: string[];
   /** Caratteri da caricare prima di disegnare (sintassi di document.fonts.load). */
   fonts: string[];
-  /** Strato fisso: cambia solo con la vista o i padroni. */
+  /** Lo strato fisso è colorato coi padroni: va rifatto quando un territorio cambia mano. */
+  ownersInStatic?: boolean;
+  /** Strato fisso: cambia solo con la vista (e con i padroni, se `ownersInStatic`). */
   paintStatic(env: PaintEnv): void;
   /** Strato mobile: selezione, frecce, pedine, nomi. */
   paintOverlay(env: PaintEnv): void;

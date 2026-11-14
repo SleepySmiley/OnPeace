@@ -32,6 +32,7 @@ export const vetro: BoardStyle = {
   tagline: 'Pulito, scuro, qualità da prodotto',
   playerColors: ['#0a84ff', '#ff453a', '#30d158', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ff375f'],
   fonts: [`700 16px ${FONT}`, `600 16px ${FONT}`, `500 16px ${FONT}`],
+  ownersInStatic: true,
 
   paintStatic(env: PaintEnv) {
     const { ctx, geo, view, state, dpr, assets } = env;
