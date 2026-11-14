@@ -168,10 +168,14 @@ function endTurn(ctx: GameContext, state: GameState, events: GameEvent[]) {
 function finishSetupIfReady(ctx: GameContext, state: GameState, events: GameEvent[]) {
   if (!state.players.every((p) => p.setupDone)) return;
   // piazzamento tutti insieme: le armate coperte si scoprono adesso, tutte nello stesso momento
+  const revealed: Record<string, Record<string, number>> = {};
   for (const p of state.players) {
-    for (const [tid, n] of Object.entries(p.pending ?? {})) state.territories[tid]!.armies += n;
+    if (!p.pending) continue;
+    for (const [tid, n] of Object.entries(p.pending)) state.territories[tid]!.armies += n;
+    revealed[p.id] = p.pending;
     delete p.pending;
   }
+  if (Object.keys(revealed).length > 0) events.push({ type: 'setup-reveal', placements: revealed });
   state.setupPlayer = null;
   startTurn(ctx, state, state.order[0]!, events);
 }

@@ -34,12 +34,15 @@ function setup() {
     loadAll: () => [...saved.values()],
     remove: (id) => saved.delete(id),
   };
+  const disconnected: string[] = [];
+  let connected = true;
   const transport = {
     send(room: string, player: PlayerId, msg: ServerMsg) {
       const k = `${room}:${player}`;
       inbox.set(k, [...(inbox.get(k) ?? []), msg]);
     },
-    isConnected: () => true,
+    isConnected: () => connected,
+    disconnect: (room: string, player: PlayerId) => void disconnected.push(`${room}:${player}`),
   };
   const now = () => clock;
   const manager = new RoomManager(maps, store, transport, now, 0, logger.log);
@@ -54,6 +57,8 @@ function setup() {
     last,
     advance: (ms: number) => (clock += ms),
     now,
+    disconnected,
+    setConnected: (v: boolean) => (connected = v),
   };
 }
 
@@ -182,6 +187,7 @@ describe('stanza di gioco', () => {
     expect(room.state!.players.find((p) => p.id === guest.id)!.status).toBe('left');
     expect(t.last(room.id, guest.id, 'kicked')).toBeDefined();
     expect(t.manager.byToken(oldToken)).toBeNull(); // col vecchio token non si rientra
+    expect(t.disconnected).toContain(`${room.id}:${guest.id}`); // e il server gli chiude la connessione
   });
 
   it('scelta dei paesi: se esce chi deve scegliere per ultimo la partita comincia lo stesso', () => {
@@ -193,6 +199,20 @@ describe('stanza di gioco', () => {
     expect(room.handle(host.id, { t: 'pick', country: 'aa' })).toBeNull();
     expect(room.handle(guest.seat.id, { t: 'leave' })).toBeNull();
     expect(room.phase).toBe('playing');
+  });
+
+  it('al tetto di partite si fa posto togliendo la sala d’attesa abbandonata più vecchia', () => {
+    const t = setup();
+    const first = t.manager.create('Anna', '#e05a4f', {}).room;
+    t.advance(1000);
+    for (let i = 1; i < 200; i++) t.manager.create(`G${i}`, '#e05a4f', {});
+    expect(t.manager.rooms.size).toBe(200);
+    t.setConnected(true); // tutti collegati: non si toglie nessuno
+    expect(t.manager.canCreate()).toBe(false);
+    t.setConnected(false); // nessuno collegato: va via la più vecchia
+    expect(t.manager.canCreate()).toBe(true);
+    expect(t.manager.rooms.has(first.id)).toBe(false);
+    expect(t.manager.rooms.size).toBe(199);
   });
 
   it('sala d’attesa rimasta vuota: la partita e il suo file spariscono', async () => {

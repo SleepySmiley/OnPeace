@@ -11,6 +11,9 @@ export function createContext(board: BoardDef, rulesData: unknown, objectivesDat
   if (objectives.board !== board.id) throw new Error(`obiettivi per "${objectives.board}", tabellone "${board.id}"`);
   const problems = checkObjectives(board, objectives);
   if (problems.length > 0) throw new Error(`obiettivi non validi: ${problems.join('; ')}`);
+  if (rules.modes.includes('objectives') && rules.players.objectivesMin > rules.players.max) {
+    throw new Error(`regole: gli obiettivi segreti chiedono almeno ${rules.players.objectivesMin} giocatori, ma il massimo è ${rules.players.max}`);
+  }
   if (board.territories.length < rules.players.max) {
     throw new Error(`regole: ${rules.players.max} giocatori ma solo ${board.territories.length} territori`);
   }

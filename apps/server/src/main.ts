@@ -80,6 +80,9 @@ const manager = new RoomManager(
     isConnected(room, player) {
       return (byPlayer.get(key(room, player))?.size ?? 0) > 0;
     },
+    disconnect(room, player) {
+      for (const c of byPlayer.get(key(room, player)) ?? []) c.ws.close();
+    },
   },
   Date.now,
   400,
@@ -105,7 +108,7 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
     return;
   }
   if (msg.t === 'create') {
-    if (manager.full) return raw(conn, { t: 'error', message: 'Il server ha troppe partite aperte: riprova più tardi' });
+    if (!manager.canCreate()) return raw(conn, { t: 'error', message: 'Il server ha troppe partite aperte: riprova più tardi' });
     const { room, seat } = manager.create(msg.name, msg.color, msg.settings);
     attach(conn, room.id, seat.id);
     raw(conn, { t: 'welcome', token: seat.token, game: room.id, you: seat.id });

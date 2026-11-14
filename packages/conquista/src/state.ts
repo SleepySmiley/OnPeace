@@ -104,6 +104,8 @@ export type Action = z.infer<typeof ActionS>;
 
 export type GameEvent =
   | { type: 'setup-place'; player: string; placements: Record<string, number>; left: number; hidden?: boolean }
+  /** Piazzamento tutti insieme: le armate coperte di tutti, scoperte insieme (giocatore -> territorio -> armate). */
+  | { type: 'setup-reveal'; placements: Record<string, Record<string, number>> }
   | { type: 'turn'; player: string; number: number; reinforcements: number }
   | { type: 'set'; player: string; cards: Card[]; armies: number }
   | { type: 'reinforce'; player: string; placements: Record<string, number> }

@@ -264,7 +264,7 @@ class Bot {
 async function startServer(): Promise<{ url: string; logDir: string; proc: ChildProcess }> {
   const dir = mkdtempSync(join(tmpdir(), 'onpeace-prova-'));
   const port = 3399;
-  const busy = await fetch(`http://localhost:${port}`).then(
+  const busy = await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(2000) }).then(
     () => true,
     () => false,
   );

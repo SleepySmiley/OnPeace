@@ -155,6 +155,8 @@ describe('preparazione tutti insieme (variante)', () => {
     expect(r.state.phase).toBe('reinforce');
     expect(r.state.turn!.player).toBe(a);
     expect(r.state.territories[where]!.armies).toBe(1 + leftB);
+    const reveal = eventsFor(r.events, a).find((e) => e.type === 'setup-reveal');
+    expect(reveal).toMatchObject({ placements: { [b]: { [where]: leftB } } });
     for (const p of r.state.players) {
       const armies = ownedBy(r.state, p.id).reduce((n, t) => n + r.state.territories[t]!.armies, 0);
       expect(armies).toBe(quick.rules.initialArmies['2']);

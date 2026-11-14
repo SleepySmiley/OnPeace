@@ -79,6 +79,8 @@ export interface RoomDeps {
   /** Lo stato della stanza è cambiato: va salvato. */
   changed: (room: Room) => void;
   isConnected: (player: PlayerId) => boolean;
+  /** Chiude le connessioni del giocatore. */
+  disconnect: (player: PlayerId) => void;
   log: Logger;
 }
 
@@ -349,6 +351,7 @@ export class Room {
       seat.token = newToken(); // il vecchio token non fa più rientrare
     }
     this.deps.send(target, { t: 'kicked', reason: 'Sei stato espulso dalla partita' });
+    this.deps.disconnect(target); // non aspetta che sia il suo browser a chiudere
     this.deps.log.info(`Partita ${this.id}: espulso ${seat.name}`);
     this.touch();
     this.broadcastAll();

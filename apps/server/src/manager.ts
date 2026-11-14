@@ -12,8 +12,8 @@ const SAVE_RETRY_MS = 1500;
 const MAX_ROOMS = 200;
 /** Tetto agli stati di partita allegati alle segnalazioni, per avvio del server (il disco non è infinito). */
 const MAX_REPORT_DUMPS = 100;
-/** Le partite finite da più di così si cancellano al riavvio. */
-const ENDED_KEEP_MS = 7 * 24 * 3600 * 1000;
+/** Partite finite, o sale d'attesa mai partite, ferme da più di così: si cancellano al riavvio. */
+const STALE_MS = 7 * 24 * 3600 * 1000;
 
 export interface Persistence {
   save(snapshot: RoomSnapshot): void;
@@ -24,6 +24,8 @@ export interface Persistence {
 export interface Transport {
   send(room: string, player: PlayerId, msg: ServerMsg): void;
   isConnected(room: string, player: PlayerId): boolean;
+  /** Chiude le connessioni di un giocatore (es. espulso). */
+  disconnect(room: string, player: PlayerId): void;
 }
 
 /** Codici partita corti e leggibili (niente lettere ambigue). */
@@ -54,6 +56,7 @@ export class RoomManager {
       send: (player: PlayerId, msg: ServerMsg) => this.transport.send(id, player, msg),
       changed: (room: Room) => this.scheduleSave(room, this.saveDelayMs),
       isConnected: (player: PlayerId) => this.transport.isConnected(id, player),
+      disconnect: (player: PlayerId) => this.transport.disconnect(id, player),
       log: this.log,
     };
   }
@@ -61,8 +64,9 @@ export class RoomManager {
   /** Ricarica le partite salvate (dopo un riavvio del PC). */
   loadSaved(): number {
     for (const snap of this.store.loadAll()) {
-      // partite finite da tempo e sale d'attesa rimaste vuote: via anche il file
-      if ((snap.phase === 'ended' && this.now() - snap.updatedAt > ENDED_KEEP_MS) || snap.seats.length === 0) {
+      // partite finite o sale d'attesa ferme da tempo, sale rimaste vuote: via anche il file
+      const stale = (snap.phase === 'ended' || snap.phase === 'lobby') && this.now() - snap.updatedAt > STALE_MS;
+      if (stale || snap.seats.length === 0) {
         this.removeFile(snap.id);
         continue;
       }
@@ -73,9 +77,17 @@ export class RoomManager {
     return this.rooms.size;
   }
 
-  /** Il server ha già il massimo di partite: non se ne creano altre. */
-  get full(): boolean {
-    return this.rooms.size >= MAX_ROOMS;
+  /**
+   * Si può creare una partita? Al tetto si fa posto togliendo la sala d'attesa più vecchia senza
+   * nessuno collegato: così le sale abbandonate (o create a raffica) non bloccano il server per sempre.
+   */
+  canCreate(): boolean {
+    if (this.rooms.size < MAX_ROOMS) return true;
+    const idle = [...this.rooms.values()]
+      .filter((r) => r.phase === 'lobby' && r.seats.every((s) => !this.transport.isConnected(r.id, s.id)))
+      .sort((a, b) => a.snapshot().updatedAt - b.snapshot().updatedAt)[0];
+    if (idle) this.remove(idle);
+    return this.rooms.size < MAX_ROOMS;
   }
 
   create(name: string, color: string, settings: LobbySettings): { room: Room; seat: Seat } {
