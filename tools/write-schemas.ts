@@ -3,6 +3,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { BoardDef, BuildingsFile, GeneralFile, MapDef, RulesDefaults, StrategiesFile, UnitsFile } from '@onpeace/engine';
+import { ConquestRules, ObjectivesFile } from '@onpeace/conquista';
 import { dataDir } from './data-io';
 
 const outDir = join(dataDir, 'schema');
@@ -16,6 +17,8 @@ const schemas: Record<string, z.ZodType> = {
   'general.schema.json': GeneralFile,
   'map.schema.json': MapDef,
   'board.schema.json': BoardDef,
+  'conquista-regole.schema.json': ConquestRules,
+  'conquista-obiettivi.schema.json': ObjectivesFile,
 };
 
 for (const [file, schema] of Object.entries(schemas)) {

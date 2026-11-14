@@ -1,0 +1,21 @@
+{
+  "$schema": "../schema/conquista-regole.schema.json",
+  "players": { "min": 2, "max": 8 },
+  "initialArmies": { "2": 45, "3": 38, "4": 32, "5": 27, "6": 23, "7": 20, "8": 18 },
+  "reinforcements": { "divisor": 3, "minimum": 3 },
+  "dice": { "attackMax": 3, "defenseMax": 3, "tiesTo": "defender" },
+  "fortify": { "moves": 1, "reach": "adjacent" },
+  "cards": {
+    "jokers": 2,
+    "sets": {
+      "threeOfAKind": { "artillery": 4, "infantry": 6, "cavalry": 8 },
+      "oneOfEach": 10,
+      "jokerPlusPair": 12
+    },
+    "ownedTerritoryBonus": 2,
+    "maxHand": 7,
+    "inheritOnElimination": true
+  },
+  "timers": { "turnSeconds": 180, "setupSeconds": 240 },
+  "modes": ["objectives", "conquest"]
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "../../schema/conquista-obiettivi.schema.json",
+  "board": "mondo",
+  "objectives": [
+    { "id": "territori_26", "kind": "territories", "count": 26, "text": "Conquista 26 territori." },
+    {
+      "id": "territori_20_presidiati",
+      "kind": "territories",
+      "count": 20,
+      "minArmies": 2,
+      "text": "Conquista 20 territori e tieni almeno 2 armate in ciascuno."
+    },
+    { "id": "asia_sudamerica", "kind": "continents", "continents": ["asia", "sudamerica"], "text": "Conquista l'Asia e il Sud America." },
+    { "id": "asia_africa", "kind": "continents", "continents": ["asia", "africa"], "text": "Conquista l'Asia e l'Africa." },
+    {
+      "id": "nordamerica_africa",
+      "kind": "continents",
+      "continents": ["nordamerica", "africa"],
+      "text": "Conquista il Nord America e l'Africa."
+    },
+    {
+      "id": "americhe_oceania",
+      "kind": "continents",
+      "continents": ["nordamerica", "sudamerica", "oceania"],
+      "text": "Conquista il Nord America, il Sud America e l'Oceania."
+    },
+    { "id": "europa_africa", "kind": "continents", "continents": ["europa", "africa"], "text": "Conquista l'Europa e l'Africa." },
+    {
+      "id": "europa_sudamerica_altro",
+      "kind": "continents",
+      "continents": ["europa", "sudamerica"],
+      "plusAny": 1,
+      "text": "Conquista l'Europa, il Sud America e un terzo continente a tua scelta."
+    },
+    {
+      "id": "europa_oceania_altro",
+      "kind": "continents",
+      "continents": ["europa", "oceania"],
+      "plusAny": 1,
+      "text": "Conquista l'Europa, l'Oceania e un terzo continente a tua scelta."
+    },
+    {
+      "id": "elimina",
+      "kind": "eliminate",
+      "fallback": "territori_26",
+      "text": "Elimina {giocatore}. Se lo elimina qualcun altro prima di te, dovrai conquistare 26 territori."
+    }
+  ]
+}
