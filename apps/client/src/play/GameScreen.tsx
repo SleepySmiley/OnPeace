@@ -1,9 +1,11 @@
 /**
  * La schermata della partita: il tabellone a tutto schermo, i giocatori in alto a sinistra, la
- * barra dei comandi in basso, carte e registro in due cassetti, la scena delle battaglie sopra la mappa. Tasti: Esc annulla (nei rinforzi
- * toglie le armate non confermate), Invio conferma, 1-3 dadi, 0 vista d'insieme.
+ * barra dei comandi in basso, le carte in mano nell'angolo in basso a sinistra, registro e chat in
+ * un cassetto a destra, la scena delle battaglie sopra la mappa, le mosse degli altri scritte sulla
+ * mappa. Tasti: Esc annulla (nei rinforzi toglie le armate non confermate), Invio conferma, 1-3
+ * dadi, 0 vista d'insieme.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { setBattleSoundsByScene, useGameSounds } from '../audio/useGameSounds';
 import { BoardCanvas } from '../board/BoardCanvas';
 import type { BoardState } from '../board/common';
@@ -13,24 +15,22 @@ import { useSession } from '../store';
 import { GuideModal } from '../ui/GuideModal';
 import { ReportModal } from '../ui/ReportModal';
 import { CommandBar } from './CommandBar';
-import { describeEvent, isHighlight, namesFor } from './describe';
 import { GameOver } from './GameOver';
 import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
 import { ObjectiveCard } from './ObjectiveCard';
 import { connectBattleFeed, useBattle } from './battle';
 import { BattleLayer } from './BattleScene';
-import { cardsInScene, useDraw } from './draw';
+import { useDraw } from './draw';
 import { connectDrawFeed, DrawLayer } from './DrawScene';
-import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
-import { BottomSheet, HandFan, HandTable, MapCallouts, NewsToasts, SideColumn, TurnAnnounce, type ColumnTab } from './proposte';
+import { MapCallouts } from './callouts';
+import { HandFan, HandTable } from './hand';
+import { BattlePanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
 import { TopBar } from './TopBar';
-import { useUiLook } from './uilook';
+import { TurnAnnounce } from './TurnAnnounce';
 import { useGame } from './useGame';
 
 /** Spazio coperto da barra in alto e barra dei comandi: la mappa si adatta nel resto. */
 const INSETS: Insets = { top: 56, right: 0, bottom: 110, left: 0 };
-/** Proposta "colonna": larghezza della colonna a destra (con il suo margine). */
-const COLUMN = 384;
 
 /** Il tabellone con lo stato della partita, le scelte in corso e i lampi delle ultime battaglie. */
 function useBoardState(): BoardState {
@@ -42,7 +42,6 @@ function useBoardState(): BoardState {
   const fighting = useBattle((s) => (s.playing && !s.playing.small && s.playing.stage !== 'outro' ? `${s.playing.eng.a.territory}|${s.playing.eng.d.territory}` : ''));
   // la carta appena pescata: il suo territorio lampeggia
   const spot = useDraw((s) => s.spot);
-  const arrowLook = useUiLook((s) => s.frecce);
   return useMemo(() => {
     const owners = new Map<string, string>();
     const armies = new Map<string, number>();
@@ -86,48 +85,18 @@ function useBoardState(): BoardState {
       arrows = { to: [move.to], kind: 'move' };
     }
     const hidden = fighting ? new Set(fighting.split('|')) : null;
-    return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden, arrowLook };
-  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting, spot, arrowLook]);
-}
-
-/** Eventi importanti appena successi, in basso a destra per qualche secondo. */
-function EventToasts() {
-  const { view, territory, me } = useGame();
-  const fresh = useSession((s) => s.fresh);
-  const [items, setItems] = useState<{ seq: number; text: string; until: number }[]>([]);
-  const seen = useRef<typeof fresh>(null);
-  const names = useMemo(() => namesFor(view, territory), [view, territory]);
-  useEffect(() => {
-    if (!fresh || fresh === seen.current) return;
-    seen.current = fresh;
-    const until = Date.now() + 6000;
-    const add = fresh.events
-      .filter((e) => isHighlight(e.event) || e.event.type === 'turn')
-      .map((e) => ({ seq: e.seq, text: describeEvent(e.event, names, me), until }));
-    if (add.length > 0) setItems((cur) => [...cur, ...add].slice(-4));
-  }, [fresh, names, me]);
-  useEffect(() => {
-    if (items.length === 0) return;
-    const id = setInterval(() => setItems((cur) => (cur.some((x) => x.until <= Date.now()) ? cur.filter((x) => x.until > Date.now()) : cur)), 500);
-    return () => clearInterval(id);
-  }, [items]);
-  return (
-    <ol className="event-toasts" aria-live="polite">
-      {items.map((x) => (
-        <li key={x.seq}>{x.text}</li>
-      ))}
-    </ol>
-  );
+    return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden };
+  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting, spot]);
 }
 
 /** Il tabellone, a parte: spostare la vista o passare col mouse sui territori non ridisegna i pannelli. */
-function Board({ onPainter, insets }: { onPainter: (p: BoardPainter | null) => void; insets: Insets }) {
+function Board({ onPainter }: { onPainter: (p: BoardPainter | null) => void }) {
   const board = useSession((s) => s.board)!;
   const style = useLook((s) => s.style);
   const state = useBoardState();
   const onClick = useCallback((id: string | null, how: { shift: boolean; right: boolean }) => useSession.getState().clickTerritory(id, how), []);
   const onHover = useCallback((id: string | null) => useSession.getState().setHover(id), []);
-  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
+  return <BoardCanvas geo={board.geo} style={style} state={state} insets={INSETS} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
 }
 
 interface Props {
@@ -146,14 +115,8 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   const [painter, setPainter] = useState<BoardPainter | null>(null);
   const [overlay, setOverlay] = useState<'guide' | 'report' | null>(null);
   const [overClosed, setOverClosed] = useState(false);
-  const [cardsOpen, setCardsOpen] = useState(false);
+  const [handOpen, setHandOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const ui = useUiLook();
-  // proposte dei cassetti: colonna a destra (con la scheda aperta), pannello dal basso, mano aperta
-  const [column, setColumn] = useState<ColumnTab | null>(null);
-  const [sheet, setSheet] = useState<'log' | 'chat' | null>(null);
-  const [table, setTable] = useState(false);
-  const insets = useMemo<Insets>(() => (ui.cassetti === 'colonna' && column ? { ...INSETS, right: COLUMN } : INSETS), [ui.cassetti, column]);
 
   const mine = isMyMove(move);
   useGameSounds({ me, fresh, deadline: online.deadline, paused: Boolean(online.paused), myMove: mine, chat: online.chat });
@@ -219,85 +182,34 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   }, [move, painter, overlay]);
 
   const over = view.phase === 'over' || lobby.phase === 'ended';
-  // le carte ancora in scena si contano quando arrivano
-  const inScene = useDraw((s) => [...cardsInScene(s)].join('|'));
-  const landed = useDraw((s) => s.landed);
-  const mineView = view.players.find((p) => p.id === me);
-  const waiting = inScene ? (mineView?.cards ?? []).filter((c) => inScene.split('|').includes(c.id)).length : 0;
-  const cardCount = (mineView?.cardCount ?? 0) - waiting;
-
-  const pills = (
-    <div className="corner-tools">
-      {ui.cassetti !== 'mano' && (
-        <button
-          type="button"
-          className="pill panel"
-          data-hand-pill
-          aria-expanded={ui.cassetti === 'colonna' ? column === 'carte' : ui.cassetti === 'basso' ? sheet !== null : cardsOpen}
-          onClick={() => {
-            if (ui.cassetti === 'colonna') setColumn((c) => (c === 'carte' ? null : 'carte'));
-            else if (ui.cassetti === 'basso') setSheet((o) => (o ? null : 'log'));
-            else setCardsOpen((o) => !o);
-          }}
-        >
-          Carte e obiettivo{' '}
-          <span key={landed} className={`count${landed ? ' bump' : ''}`}>
-            {cardCount}
-          </span>
-        </button>
-      )}
-      <button
-        type="button"
-        className="pill panel"
-        aria-expanded={ui.cassetti === 'colonna' ? column === 'registro' || column === 'chat' : ui.cassetti === 'basso' ? sheet !== null : chatOpen}
-        onClick={() => {
-          if (ui.cassetti === 'colonna') setColumn((c) => (c === 'registro' || c === 'chat' ? null : online.unread > 0 ? 'chat' : 'registro'));
-          else if (ui.cassetti === 'basso') setSheet((o) => (o ? null : online.unread > 0 ? 'chat' : 'log'));
-          else setChatOpen((o) => !o);
-        }}
-      >
-        Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
-      </button>
-    </div>
-  );
-  // con il registro aperto gli avvisi in un angolo non servono
-  const logOpen = ui.cassetti === 'colonna' ? column === 'registro' : ui.cassetti === 'basso' ? sheet !== null : chatOpen;
-
   return (
-    <div className={`game ui-fasi-${ui.fasi} ui-cassetti-${ui.cassetti}${ui.cassetti === 'colonna' && column ? ' has-column' : ''}`}>
-      <Board onPainter={setPainter} insets={insets} />
+    <div className="game">
+      <Board onPainter={setPainter} />
       <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
         {topbarExtra}
       </TopBar>
 
-      {ui.fasi !== 'giro' && (
-        <div className="corner-players panel">
-          <PlayersPanel />
-        </div>
-      )}
+      <div className="corner-players panel">
+        <PlayersPanel />
+      </div>
+      <MapCallouts painter={painter} news={!chatOpen} />
       <BattleLayer painter={painter} />
       <DrawLayer />
       {extra}
       {move.kind !== 'briefing' && <CommandBar />}
-      {pills}
-      {ui.cassetti === 'mano' && <HandFan open={table} onOpen={() => setTable((o) => !o)} />}
-      {ui.cassetti === 'ora' && cardsOpen && (
-        <div className="drawer drawer-left panel">
-          <HandPanel />
-        </div>
-      )}
-      {(ui.cassetti === 'ora' || ui.cassetti === 'mano') && chatOpen && (
+      <HandFan open={handOpen} onOpen={() => setHandOpen((o) => !o)} />
+      <div className="corner-tools">
+        <button type="button" className="pill panel" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>
+          Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
+        </button>
+      </div>
+      {chatOpen && (
         <div className="drawer drawer-right panel">
           <BattlePanel />
           <LogChat />
         </div>
       )}
-      {ui.cassetti === 'colonna' && column && <SideColumn tab={column} onTab={setColumn} onClose={() => setColumn(null)} />}
-      {ui.cassetti === 'basso' && sheet && <BottomSheet initial={sheet} onClose={() => setSheet(null)} />}
-      {ui.cassetti === 'mano' && table && <HandTable onClose={() => setTable(false)} />}
-      {!logOpen && ui.avvisi === 'ora' && <EventToasts />}
-      {!logOpen && ui.avvisi === 'notizie' && <NewsToasts />}
-      {ui.avvisi === 'mappa' && <MapCallouts painter={painter} />}
+      {handOpen && <HandTable onClose={() => setHandOpen(false)} />}
       <TurnAnnounce />
 
       <TerritoryInfo />

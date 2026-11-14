@@ -1,7 +1,7 @@
 /**
  * Scena della pesca (i tempi e le fasi sono in draw.ts): sopra un velo il mazzo cade al centro,
- * la prima carta (quella vera, coperta) sale, si gira grande e vola sul bottone "Carte e
- * obiettivo" (data-hand-pill). Qui anche il collegamento col gioco: le carte pescate arrivano
+ * la prima carta (quella vera, coperta) sale, si gira grande e vola nelle carte in mano, in basso
+ * a sinistra (data-hand-pill). Qui anche il collegamento col gioco: le carte pescate arrivano
  * dalla partita, e la scena aspetta le battaglie proprie.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
@@ -227,7 +227,7 @@ type Delta = { x: number; y: number; s: number };
 
 const centerOf = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
 
-/** Da dove a dove vola la carta: dal centro di `slot` al bottone delle carte. */
+/** Da dove a dove vola la carta: dal centro di `slot` alle carte in mano. */
 function useFlyDelta(active: boolean, slot: RefObject<HTMLElement | null>): Delta | null {
   const [d, setD] = useState<Delta | null>(null);
   useLayoutEffect(() => {

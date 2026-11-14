@@ -219,9 +219,7 @@ export const vetro: BoardStyle = {
 
     toScreen(env);
     const r = clamp(11 + (z - 1) * 1.4, 11, 16);
-    // frecce morbide; in prova anche chiare col bordo scuro, o col colore di chi attacca e un bordo (senza, sul suo territorio quasi non si vedono)
-    const mine = state.selected ? colorOf(state.selected) : '#ffffff';
-    const look = state.arrowLook ?? 'ora';
+    // frecce: d'attacco chiare con un bordo scuro (col colore di chi attacca, sul suo territorio non si vedrebbero), di spostamento sottili
     for (const { enemy, chosen, shape } of selectionArrows(env, r + 6, 0.2)) {
       const head = enemy ? (chosen ? 13 : 11) : chosen ? 10 : 8;
       const base: [number, number] = [shape.to[0] - shape.dir[0] * head * 0.8, shape.to[1] - shape.dir[1] * head * 0.8];
@@ -240,58 +238,30 @@ export const vetro: BoardStyle = {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       const width = enemy ? (chosen ? 5.5 : 4) : chosen ? 3 : 2;
-      if (look === 'ora' || !enemy) {
-        const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
-        g.addColorStop(0, enemy ? rgba(mine, 0.15) : 'rgba(255, 255, 255, 0.1)');
-        g.addColorStop(1, enemy ? mine : 'rgba(255, 255, 255, 0.75)');
-        if (enemy) {
-          ctx.shadowColor = rgba(mine, 0.8);
-          ctx.shadowBlur = 12;
-        }
-        ctx.lineWidth = width;
-        ctx.strokeStyle = g;
-        ctx.stroke(body);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = enemy ? mine : 'rgba(255, 255, 255, 0.75)';
-        ctx.fillStyle = enemy ? mine : 'rgba(255, 255, 255, 0.75)';
-        ctx.fill(tip);
-        ctx.stroke(tip);
-      } else {
-        // un bordo scuro sotto (e uno bianco, se il corpo ha il colore di chi attacca), poi il corpo che si accende verso la punta
-        const core = look === 'bordate' ? mine : '#ffffff';
+      if (enemy) {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
         ctx.shadowBlur = 6;
-        ctx.lineWidth = width + (look === 'bordate' ? 5.5 : 3.5);
+        ctx.lineWidth = width + 3.5;
         ctx.strokeStyle = 'rgba(10, 11, 14, 0.72)';
         ctx.stroke(body);
         ctx.lineWidth = 5.5;
         ctx.stroke(tip);
         ctx.fillStyle = 'rgba(10, 11, 14, 0.72)';
         ctx.fill(tip);
-        ctx.shadowBlur = 0;
-        if (look === 'bordate') {
-          ctx.lineWidth = width + 2.6;
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.stroke(body);
-          ctx.lineWidth = 3;
-          ctx.stroke(tip);
-          ctx.fillStyle = '#ffffff';
-          ctx.fill(tip);
-        }
-        ctx.shadowColor = look === 'bordate' ? rgba(mine, 0.6) : 'rgba(255, 255, 255, 0.45)';
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
         ctx.shadowBlur = 10;
-        const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
-        g.addColorStop(0, rgba(core, 0.45));
-        g.addColorStop(1, core);
-        ctx.lineWidth = width;
-        ctx.strokeStyle = g;
-        ctx.stroke(body);
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = core;
-        ctx.fillStyle = core;
-        ctx.fill(tip);
-        ctx.stroke(tip);
       }
+      const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
+      g.addColorStop(0, enemy ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.1)');
+      g.addColorStop(1, enemy ? '#ffffff' : 'rgba(255, 255, 255, 0.75)');
+      ctx.lineWidth = width;
+      ctx.strokeStyle = g;
+      ctx.stroke(body);
+      ctx.lineWidth = enemy ? 1.5 : 2;
+      ctx.strokeStyle = enemy ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill(tip);
+      ctx.stroke(tip);
       ctx.restore();
     }
 

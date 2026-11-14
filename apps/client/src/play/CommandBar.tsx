@@ -7,8 +7,6 @@ import type { ReactNode } from 'react';
 import { useSession } from '../store';
 import { Chip } from './bits';
 import { useCommand, type Btn, type Command, type Side } from './command';
-import { CommandSteps } from './proposte';
-import { useUiLook } from './uilook';
 
 /** Numero con − e + (e il cursore se l'intervallo è ampio). */
 export function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
@@ -147,12 +145,10 @@ function Middle({ c }: { c: Command }) {
 
 export function CommandBar() {
   const c = useCommand();
-  const steps = useUiLook((s) => s.fasi === 'sotto');
-  // la fase si vede quando tocca a me, o di chi aspetto il turno (con la proposta "sotto" c'è la linguetta delle fasi)
-  const phase = !steps && (c.mine || c.kind === 'wait') ? c.phase : '';
+  // la fase si vede quando tocca a me, o di chi aspetto il turno
+  const phase = c.mine || c.kind === 'wait' ? c.phase : '';
   return (
-    <section className={`command-bar${c.mine ? ' mine' : ' idle'}${c.busy ? ' busy' : ''}${steps ? ' with-steps' : ''}`} aria-label="La tua mossa" aria-live="polite">
-      {steps && <CommandSteps />}
+    <section className={`command-bar${c.mine ? ' mine' : ' idle'}${c.busy ? ' busy' : ''}`} aria-label="La tua mossa" aria-live="polite">
       <div className="cb-head">
         {phase && <span className="cb-phase">{phase}</span>}
         <b className="cb-title">{c.title}</b>

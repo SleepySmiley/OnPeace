@@ -35,6 +35,9 @@ function boot(start: Start) {
   useSession.getState().create('Andrea', PLAYER_COLORS[0]!, {});
 }
 
+// per le prove automatiche dalla console: avversari fermi, carte in mano
+if (import.meta.env.DEV) Object.assign(window, { __prova: { hold: (on: boolean) => game?.setHold(on), cards: (n: number) => game?.giveCards(n) } });
+
 function Restart() {
   return (
     <div className="mock-switch">

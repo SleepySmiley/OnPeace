@@ -1,4 +1,7 @@
-/** Barra in alto: fase del turno, di chi è la mossa, tempo, pausa, aspetto, suoni, guida, uscita. */
+/**
+ * Barra in alto, su tre colonne: a sinistra marchio, giro e pausa; al centro di chi è la mossa, il
+ * percorso delle fasi (fatte, in corso, da fare) e il tempo; a destra aspetto, suoni, guida, uscita.
+ */
 import type { ReactNode } from 'react';
 import { useSession } from '../store';
 import { AppearanceMenu } from '../ui/Appearance';
@@ -7,12 +10,48 @@ import { SoundButton } from '../ui/SoundButton';
 import { Chip } from './bits';
 import { PHASES } from './describe';
 import { actingPlayer, isMyMove, roundOf } from './logic';
-import { RoundTag, TopCenter } from './proposte';
-import { useUiLook } from './uilook';
 import { useGame } from './useGame';
 
+const PRE = ['briefing', 'draft', 'setup'];
+const TURN = ['reinforce', 'attack', 'fortify'];
+
+/** Le tre fasi del momento (preparazione o turno), numerate: ✓ quelle fatte, piena nel colore di chi gioca quella in corso. */
+function PhasePath({ color }: { color: string }) {
+  const { view } = useGame();
+  const ids = PRE.includes(view.phase) ? PRE : TURN;
+  const at = ids.indexOf(view.phase);
+  const steps = PHASES.filter((p) => ids.includes(p.id));
+  return (
+    <ol className="phase-path" aria-label="Fasi" style={{ ['--pc' as string]: color }}>
+      {steps.map((p, i) => {
+        const state = i < at ? 'done' : i === at ? 'on' : 'next';
+        return (
+          <li key={p.id} className={state} aria-current={state === 'on' ? 'step' : undefined}>
+            <i aria-hidden>{state === 'done' ? '✓' : i + 1}</i>
+            <span>{p.label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Chi deve muoversi: "Tocca a te", il nome di chi gioca, o tutti insieme. */
+function Whose() {
+  const { view, move, colorOf, playerName } = useGame();
+  const acting = actingPlayer(view);
+  if (isMyMove(move)) return <b className="tb-mine">Tocca a te</b>;
+  if (acting)
+    return (
+      <span className="tb-whose">
+        <Chip color={colorOf(acting)} /> <b>{playerName(acting)}</b>
+      </span>
+    );
+  return <span className="tb-whose dim">{view.phase === 'briefing' ? 'Tutti leggono l’obiettivo' : 'Tutti piazzano'}</span>;
+}
+
 export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; onReport: () => void; children?: ReactNode }) {
-  const { view, lobby, me, move, colorOf, playerName } = useGame();
+  const { view, lobby, me, move, colorOf } = useGame();
   const online = useSession((s) => s.online);
   const send = useSession((s) => s.send);
   const leave = useSession((s) => s.leave);
@@ -21,94 +60,57 @@ export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; o
   const { round } = roundOf(view);
   const over = view.phase === 'over' || lobby.phase === 'ended';
   const mine = isMyMove(move);
-  // prima dei turni si vedono solo le fasi della preparazione, poi solo quelle del turno
-  const before = view.phase === 'briefing' || view.phase === 'draft' || view.phase === 'setup';
-  const phases = PHASES.filter((p) => (before ? ['briefing', 'draft', 'setup'] : ['reinforce', 'attack', 'fortify']).includes(p.id));
-  const fasi = useUiLook((s) => s.fasi);
-  const pause = isHost && !over && (
-    <button
-      type="button"
-      className="ghost tiny"
-      title={online.paused ? 'Fa ripartire il tempo' : 'Ferma il tempo per tutti (si può giocare lo stesso)'}
-      onClick={() => send({ t: 'pause', paused: !online.paused })}
-    >
-      {online.paused?.reason === 'error' ? 'Riprova' : online.paused ? 'Riprendi' : 'Pausa'}
-    </button>
-  );
-  const tools = (
-    <>
-      {children}
-      <AppearanceMenu />
-      <SoundButton />
-      <button type="button" className="ghost tiny" onClick={onGuide}>
-        Guida
-      </button>
-      <button type="button" className="ghost tiny" onClick={onReport}>
-        Segnala
-      </button>
-      <button
-        type="button"
-        className="ghost tiny"
-        onClick={() => {
-          if (over || confirm('Uscire dalla partita? Le tue armate restano sul tabellone e il server giocherà al posto tuo.')) leave();
-        }}
-      >
-        Esci
-      </button>
-    </>
-  );
-
-  // proposte (interfaccia.html): tre colonne, il turno al centro
-  if (fasi !== 'ora') {
-    return (
-      <header className={`topbar tb-grid tb-${fasi}${mine ? ' my-move' : ''}`}>
-        <div className="tb-left">
-          <span className="brand">OnPeace</span>
-          <RoundTag />
-          {pause}
-          {!online.connected && <span className="status offline">Riconnessione…</span>}
-        </div>
-        <TopCenter fasi={fasi} />
-        <div className="tb-right">{tools}</div>
-      </header>
-    );
-  }
 
   return (
     <header className={`topbar${mine ? ' my-move' : ''}`}>
-      <span className="brand">OnPeace</span>
-      <ol className="phases" aria-label="Fasi del turno">
-        {phases.map((p) => (
-          <li key={p.id} className={view.phase === p.id ? 'on' : ''} aria-current={view.phase === p.id ? 'step' : undefined}>
-            {p.label}
-          </li>
-        ))}
-      </ol>
-      {view.turn && (
-        <span className="status num" title={`Turno ${view.turn.number}, giro ${round}`}>
-          Giro <b>{round}</b>
-        </span>
-      )}
-      {!over && (
-        <span className="whose">
-          {mine ? (
-            <b>Tocca a te</b>
-          ) : acting ? (
-            <>
-              <Chip color={colorOf(acting)} /> {playerName(acting)}
-            </>
-          ) : view.phase === 'briefing' ? (
-            'Tutti leggono l’obiettivo'
-          ) : (
-            'Tutti piazzano'
-          )}
-        </span>
-      )}
-      {!over && <Countdown deadline={online.deadline} paused={online.paused} {...(online.total ? { total: online.total } : {})} />}
-      {pause}
-      {!online.connected && <span className="status offline">Riconnessione…</span>}
-      <span className="spacer" />
-      {tools}
+      <div className="tb-left">
+        <span className="brand">OnPeace</span>
+        {view.turn && (
+          <span className="status num" title={`Turno ${view.turn.number}, giro ${round}`}>
+            Giro <b>{round}</b>
+          </span>
+        )}
+        {isHost && !over && (
+          <button
+            type="button"
+            className="ghost tiny"
+            title={online.paused ? 'Fa ripartire il tempo' : 'Ferma il tempo per tutti (si può giocare lo stesso)'}
+            onClick={() => send({ t: 'pause', paused: !online.paused })}
+          >
+            {online.paused?.reason === 'error' ? 'Riprova' : online.paused ? 'Riprendi' : 'Pausa'}
+          </button>
+        )}
+        {!online.connected && <span className="status offline">Riconnessione…</span>}
+      </div>
+      <div className="tb-center">
+        {!over && (
+          <>
+            <Whose />
+            <PhasePath color={acting ? colorOf(acting) : me ? colorOf(me) : '#888888'} />
+            <Countdown deadline={online.deadline} paused={online.paused} {...(online.total ? { total: online.total } : {})} />
+          </>
+        )}
+      </div>
+      <div className="tb-right">
+        {children}
+        <AppearanceMenu />
+        <SoundButton />
+        <button type="button" className="ghost tiny" onClick={onGuide}>
+          Guida
+        </button>
+        <button type="button" className="ghost tiny" onClick={onReport}>
+          Segnala
+        </button>
+        <button
+          type="button"
+          className="ghost tiny"
+          onClick={() => {
+            if (over || confirm('Uscire dalla partita? Le tue armate restano sul tabellone e il server giocherà al posto tuo.')) leave();
+          }}
+        >
+          Esci
+        </button>
+      </div>
     </header>
   );
 }
