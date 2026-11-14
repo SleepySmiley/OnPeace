@@ -22,7 +22,7 @@ export const PLAYERS = ['ada', 'bruno', 'carla', 'dario', 'elena', 'franco'].map
   color: ['#2f5fb3', '#c8302c', '#2e8b47', '#e2b72f', '#7b3fa0', '#e07a1f'][i]!,
 }));
 
-export function newGame(n = 4, mode: GameMode = 'objectives', seed = 1234, ctx = worldContext()): GameState {
+export function newGame(n = 4, mode: GameMode = 'objectives', seed: number | readonly number[] = 1234, ctx = worldContext()): GameState {
   return createGame(ctx, PLAYERS.slice(0, n), mode, seed);
 }
 
