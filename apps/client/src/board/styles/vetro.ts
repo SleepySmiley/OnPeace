@@ -232,6 +232,7 @@ export const vetro: BoardStyle = {
     // pedine rotonde
     const taken: Rect[] = [];
     for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
+      if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
       const [x, y] = screenOf(env, t.anchor);
       const color = colorOf(t.id);
       const active = t.id === state.selected || t.id === state.hover;

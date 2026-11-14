@@ -81,6 +81,8 @@ interface Session {
   /** Toglie le armate messe e non confermate. */
   resetPlacements(): void;
   confirmPlacement(): void;
+  /** Inizio partita: obiettivo letto. */
+  ready(): void;
   playSet(cards: [string, string, string]): void;
   attack(blitz?: boolean): void;
   stopBlitz(): void;
@@ -444,11 +446,20 @@ export const useSession = create<Session>((set, get) => {
         return;
       }
       const me = s.online.me;
+      const name = (x: string) => territoryName(board, x);
+      const neighbours = board.geo.neighbours;
+
+      if (move.kind === 'pick') {
+        if (right) return;
+        const t = view.territories[id];
+        if (t) return notice(`${name(id)} è già ${t.owner === me ? 'tuo' : `di ${view.players.find((p) => p.id === t.owner)?.name ?? ''}`}: scegline uno libero.`);
+        if (act({ kind: 'pick', territory: id })) sfx.play('pickup');
+        return;
+      }
+
       const t = view.territories[id];
       if (!t) return;
-      const name = (x: string) => territoryName(board, x);
       const mine = t.owner === me;
-      const neighbours = board.geo.neighbours;
 
       if (move.kind === 'place') {
         if (!mine) return notice('Le armate si mettono solo sui tuoi territori.');
@@ -518,6 +529,9 @@ export const useSession = create<Session>((set, get) => {
       setDraft({ selected: d.selected === id ? null : id, target: null });
     },
 
+    ready() {
+      if (currentMove()?.kind === 'briefing' && act({ kind: 'ready' })) sfx.play('ready');
+    },
     confirmPlacement() {
       const move = currentMove();
       const d = get().draft;

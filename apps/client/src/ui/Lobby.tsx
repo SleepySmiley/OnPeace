@@ -133,6 +133,17 @@ export function Lobby() {
                 </select>
               </label>
               <label className="field">
+                <span>Territori</span>
+                <select
+                  disabled={!isHost}
+                  value={settings.distribution}
+                  onChange={(e) => set({ distribution: e.target.value as LobbySettings['distribution'] })}
+                >
+                  <option value="draft">Scelti a turno, uno a testa</option>
+                  <option value="random">Distribuiti a caso</option>
+                </select>
+              </label>
+              <label className="field">
                 <span>Piazzamento iniziale</span>
                 <select
                   disabled={!isHost}
@@ -180,6 +191,11 @@ export function Lobby() {
         <details className="rules-brief">
           <summary>Le regole in breve</summary>
           <ul>
+            <li>
+              All'inizio ognuno legge il suo obiettivo, poi i territori{' '}
+              {settings.distribution === 'draft' ? 'si scelgono a turno, uno alla volta' : 'si distribuiscono a caso'}; le armate rimaste si
+              piazzano {settings.placement === 'rounds' ? `a giri, ${rules.setup.perRound} per volta` : 'tutti insieme, alla cieca'}.
+            </li>
             <li>
               A ogni turno: <b>rinforzi</b> (un'armata ogni {rules.reinforcements.divisor} territori, almeno {rules.reinforcements.minimum}
               , più il bonus dei continenti interi), poi <b>attacchi</b> quanto vuoi, poi <b>{rules.fortify.moves} spostamento</b> verso un

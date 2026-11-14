@@ -16,7 +16,8 @@ import { ReportModal } from '../ui/ReportModal';
 import { ActionPanel } from './ActionPanel';
 import { describeEvent, isHighlight, namesFor } from './describe';
 import { GameOver } from './GameOver';
-import { attackTargets, maxDice, moveTargets, owned } from './logic';
+import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
+import { ObjectiveCard } from './ObjectiveCard';
 import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
 import { TopBar } from './TopBar';
 import { useGame } from './useGame';
@@ -70,6 +71,8 @@ function useBoardState(): BoardState {
       else active = new Set(mine.filter((id) => view.territories[id]!.armies >= 2 && moveTargets(view, rules, n, id).length > 0));
     } else if (move.kind === 'place') {
       active = new Set(mine);
+    } else if (move.kind === 'pick') {
+      active = new Set(freeTerritories(view, board.def.territories));
     } else if (move.kind === 'occupy') {
       selected = move.from;
       target = move.to;
@@ -168,7 +171,7 @@ export function GameScreen() {
   const [cardsOpen, setCardsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
-  const mine = move.kind === 'place' || move.kind === 'attack' || move.kind === 'fortify' || move.kind === 'occupy';
+  const mine = isMyMove(move);
   useGameSounds({ me, fresh, deadline: online.deadline, paused: Boolean(online.paused), myMove: mine, chat: online.chat });
 
   // gli avvisi si chiudono da soli
@@ -206,7 +209,8 @@ export function GameScreen() {
       if (e.key === 'Escape') s.patchDraft({ selected: null, target: null, blitz: false });
       else if (e.key === '0') painter?.resetView();
       else if (e.key === 'Enter') {
-        if (move.kind === 'place') s.confirmPlacement();
+        if (move.kind === 'briefing') s.ready();
+        else if (move.kind === 'place') s.confirmPlacement();
         else if (move.kind === 'attack' && s.draft.target) s.attack();
         else if (move.kind === 'occupy') s.occupy(Math.min(move.max, Math.max(move.min, s.draft.occupy ?? move.max)));
         else if (move.kind === 'fortify' && s.draft.target) s.fortify();
@@ -262,7 +266,7 @@ export function GameScreen() {
           <div className="corner-players panel">
             <PlayersPanel compact />
           </div>
-          <AnchoredAction painter={painter} />
+          {move.kind !== 'briefing' && <AnchoredAction painter={painter} />}
           <div className="corner-tools">
             <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
               Carte e obiettivo <span className="count">{cardCount}</span>
@@ -306,6 +310,7 @@ export function GameScreen() {
           )}
         </div>
       )}
+      {move.kind === 'briefing' && <ObjectiveCard />}
       {over && !overClosed && <GameOver onClose={() => setOverClosed(true)} />}
       {overlay === 'guide' && <GuideModal rules={lobby.rules} onClose={() => setOverlay(null)} />}
       {overlay === 'report' && <ReportModal onClose={() => setOverlay(null)} />}

@@ -18,6 +18,8 @@ export interface PlayerView {
   objective: string | null;
   setupLeft: number;
   setupDone: boolean;
+  /** Ha letto il suo obiettivo (inizio partita). */
+  ready: boolean;
   /** Piazzamento tutti insieme: le proprie armate già decise e ancora coperte. */
   pending: Record<string, number> | null;
   eliminatedBy?: string;
@@ -53,6 +55,7 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
         objective: visible && p.objective ? describeObjective(ctx, state, p.objective) : null,
         setupLeft: p.setupLeft,
         setupDone: p.setupDone,
+        ready: p.ready !== false,
         pending: visible ? (p.pending ?? null) : null,
         ...(p.eliminatedBy ? { eliminatedBy: p.eliminatedBy } : {}),
       };

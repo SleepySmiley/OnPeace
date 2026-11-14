@@ -97,8 +97,13 @@ export const KICK_AFTER_IDLE = 2;
 
 export const newToken = () => randomBytes(18).toString('base64url');
 
-/** Che cosa misura il tempo: un giro di piazzamento (a giri), tutto il piazzamento (tutti insieme) o un turno. */
+/**
+ * Che cosa misura il tempo: la lettura degli obiettivi, una scelta di territorio, un giro di
+ * piazzamento (a giri), tutto il piazzamento (tutti insieme) o un turno.
+ */
 function clockKey(ctx: GameContext, state: GameState): string {
+  if (state.phase === 'briefing') return 'briefing';
+  if (state.phase === 'draft') return `draft:${state.setupPlayer}:${Object.keys(state.territories).length}`;
   if (state.phase === 'setup') {
     if (ctx.rules.setup.placement !== 'rounds') return 'setup';
     const left = state.players.reduce((n, p) => n + p.setupLeft, 0);
@@ -161,6 +166,7 @@ export class Room {
     return {
       board: this.s.board ?? (s.board && boards.has(s.board) ? s.board : boards.defaultId),
       mode: s.mode && boards.rules.modes.includes(s.mode) ? s.mode : boards.rules.modes[0]!,
+      distribution: s.distribution ?? boards.rules.setup.distribution,
       placement: s.placement ?? boards.rules.setup.placement,
       turnSeconds: s.turnSeconds ?? boards.rules.timers.turnSeconds,
     };
@@ -414,7 +420,15 @@ export class Room {
     this.s.clock = key;
     this.s.acted = [];
     const { timers } = ctx.rules;
-    this.setTimer((state.phase === 'setup' ? timers.setupSeconds : timers.turnSeconds) * 1000);
+    const seconds =
+      state.phase === 'briefing'
+        ? timers.briefingSeconds
+        : state.phase === 'draft'
+          ? timers.pickSeconds
+          : state.phase === 'setup'
+            ? timers.setupSeconds
+            : timers.turnSeconds;
+    this.setTimer(seconds * 1000);
   }
 
   /** Fa partire il tempo; se il tempo è fermo, lo mette da parte per la ripresa. */
@@ -461,8 +475,8 @@ export class Room {
       this.broadcastStatus();
       return;
     }
-    // chi doveva muoversi e non ha fatto nulla: un turno saltato in più
-    for (const id of playersToAct(ctx, state)) {
+    // chi doveva muoversi e non ha fatto nulla: un turno saltato in più (leggere l'obiettivo non conta)
+    for (const id of state.phase === 'briefing' ? [] : playersToAct(ctx, state)) {
       const seat = this.seat(id);
       if (seat && !seat.left && !this.s.acted.includes(id)) seat.idleTurns++;
     }

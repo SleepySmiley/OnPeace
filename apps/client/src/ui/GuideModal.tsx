@@ -16,6 +16,15 @@ export function GuideModal({ rules, onClose }: { rules: ConquestRules; onClose: 
         <h1 id="guide-title">Come si gioca</h1>
         <div className="guide-cols">
           <section>
+            <h2>L'inizio</h2>
+            <p>
+              Prima ognuno legge il suo obiettivo. Poi i territori{' '}
+              {rules.setup.distribution === 'draft'
+                ? 'si scelgono a turno: ognuno prende un territorio libero e ci mette un\'armata, finché sono presi tutti'
+                : 'si distribuiscono a caso, un\'armata su ognuno'}
+              . Le armate rimaste si piazzano{' '}
+              {rules.setup.placement === 'rounds' ? `a giri, ${rules.setup.perRound} per volta` : 'tutti insieme, alla cieca'}.
+            </p>
             <h2>Il turno</h2>
             <ol>
               <li>

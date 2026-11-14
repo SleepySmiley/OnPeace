@@ -46,6 +46,16 @@
     "setup": {
       "type": "object",
       "properties": {
+        "briefing": {
+          "type": "boolean"
+        },
+        "distribution": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "random"
+          ]
+        },
         "placement": {
           "type": "string",
           "enum": [
@@ -60,6 +70,8 @@
         }
       },
       "required": [
+        "briefing",
+        "distribution",
         "placement",
         "perRound"
       ],
@@ -233,11 +245,23 @@
           "type": "integer",
           "minimum": 10,
           "maximum": 9007199254740991
+        },
+        "briefingSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 9007199254740991
+        },
+        "pickSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 9007199254740991
         }
       },
       "required": [
         "turnSeconds",
-        "setupSeconds"
+        "setupSeconds",
+        "briefingSeconds",
+        "pickSeconds"
       ],
       "additionalProperties": false
     },

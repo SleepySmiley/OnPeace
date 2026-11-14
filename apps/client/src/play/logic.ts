@@ -6,6 +6,12 @@
 import type { ConquestRules, GameView, PlayerView } from '@onpeace/conquista';
 
 export type MyMove =
+  /** Inizio partita: leggere il proprio obiettivo e dire che si è pronti. */
+  | { kind: 'briefing' }
+  /** Obiettivo letto: si aspetta che lo leggano gli altri. */
+  | { kind: 'wait-briefing' }
+  /** Scelta a turno: tocca a me prendere un territorio libero. */
+  | { kind: 'pick' }
   /** Piazzamento iniziale o rinforzi: `budget` armate da distribuire sui propri territori. */
   | { kind: 'place'; setup: boolean; budget: number }
   /** Appena conquistato: quante armate far entrare. */
@@ -24,6 +30,8 @@ export function myMove(view: GameView, me: string | null, rules: ConquestRules, 
   if (view.phase === 'over') return { kind: 'over' };
   const p = view.players.find((x) => x.id === me);
   if (!p || !p.alive || left) return { kind: 'out' };
+  if (view.phase === 'briefing') return p.ready ? { kind: 'wait-briefing' } : { kind: 'briefing' };
+  if (view.phase === 'draft') return view.setupPlayer === me ? { kind: 'pick' } : { kind: 'wait', player: view.setupPlayer };
   if (view.phase === 'setup') {
     if (rules.setup.placement === 'rounds') {
       if (view.setupPlayer !== me) return { kind: 'wait', player: view.setupPlayer };
@@ -40,14 +48,21 @@ export function myMove(view: GameView, me: string | null, rules: ConquestRules, 
   return { kind: 'fortify' };
 }
 
-/** Chi deve muoversi adesso (per "tocca a…"): chi piazza a giri o chi ha il turno; null se tutti insieme. */
+/** Chi deve muoversi adesso (per "tocca a…"): chi sceglie, chi piazza a giri o chi ha il turno; null se tutti insieme. */
 export function actingPlayer(view: GameView): string | null {
-  if (view.phase === 'setup') return view.setupPlayer;
-  if (view.phase === 'over') return null;
+  if (view.phase === 'draft' || view.phase === 'setup') return view.setupPlayer;
+  if (view.phase === 'over' || view.phase === 'briefing') return null;
   return view.turn?.player ?? null;
 }
 
 export const owned = (view: GameView, id: string) => Object.keys(view.territories).filter((t) => view.territories[t]!.owner === id);
+
+/** Mosse in cui tocca a me fare qualcosa (per "tocca a te", suoni e titolo della scheda). */
+export const isMyMove = (move: MyMove) =>
+  move.kind === 'briefing' || move.kind === 'pick' || move.kind === 'place' || move.kind === 'attack' || move.kind === 'fortify' || move.kind === 'occupy';
+
+/** Territori ancora liberi (scelta a turno). */
+export const freeTerritories = (view: GameView, all: readonly { id: string }[]) => all.filter((t) => !view.territories[t.id]).map((t) => t.id);
 
 /** Regola Prestige: prima della fine del giro protetto nessuno si può eliminare. */
 export function eliminationAllowed(view: GameView, rules: ConquestRules): boolean {

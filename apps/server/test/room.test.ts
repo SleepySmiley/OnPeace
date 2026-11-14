@@ -19,7 +19,10 @@ afterEach(() => {
 });
 
 const boards = new BoardLibrary(fileURLToPath(new URL('../../../data', import.meta.url)));
-const SETUP_MS = boards.rules.timers.setupSeconds * 1000;
+const { timers } = boards.rules;
+const SETUP_MS = timers.setupSeconds * 1000;
+const BRIEFING_MS = timers.briefingSeconds * 1000;
+const PICK_MS = timers.pickSeconds * 1000;
 
 function setup() {
   let clock = 1_000_000;
@@ -73,13 +76,23 @@ function lobby(n = 2, settings: Parameters<RoomManager['create']>[2] = { mode: '
   return { ...t, room, host, guests, guest: guests[0]! };
 }
 
-/** Lascia scadere il tempo finché finisce la preparazione (le armate si piazzano da sole). */
+const BEFORE_TURNS = ['briefing', 'draft', 'setup'];
+
+/** Lascia scadere il tempo finché finisce la preparazione (obiettivo, territori e armate fanno da soli). */
 function toFirstTurn(t: ReturnType<typeof setup>, room: Room) {
-  for (let i = 0; room.state!.phase === 'setup' && i < 200; i++) {
-    t.advance(SETUP_MS + 1);
+  for (let i = 0; BEFORE_TURNS.includes(room.state!.phase) && i < 300; i++) {
+    t.advance(Math.max(SETUP_MS, BRIEFING_MS, PICK_MS) + 1);
     t.manager.tick();
   }
   expect(room.state!.phase).toBe('reinforce');
+}
+
+/** Lascia scadere il tempo per leggere l'obiettivo. */
+function skipBriefing(t: ReturnType<typeof setup>, room: Room) {
+  expect(room.state!.phase).toBe('briefing');
+  t.advance(BRIEFING_MS + 1);
+  t.manager.tick();
+  expect(room.state!.phase).not.toBe('briefing');
 }
 
 function playing(n = 2) {
@@ -100,7 +113,7 @@ describe('sala d’attesa', () => {
     expect(room.handle(host.id, { t: 'settings', settings: { board: 'atlantide' } })).toBe('Tabellone sconosciuto');
     const info = t.last(room.id, guest.id, 'lobby')!.lobby;
     expect(info.board.id).toBe('mondo');
-    expect(info.settings).toEqual({ board: 'mondo', mode: 'objectives', placement: 'rounds', turnSeconds: 180 });
+    expect(info.settings).toEqual({ board: 'mondo', mode: 'objectives', distribution: 'draft', placement: 'rounds', turnSeconds: 180 });
     expect(info.rules.setup.placement).toBe('rounds');
   });
 
@@ -120,11 +133,13 @@ describe('sala d’attesa', () => {
   });
 
   it('le opzioni dell’host cambiano le regole della partita', () => {
-    const t = lobby(3, { mode: 'objectives', placement: 'simultaneous', turnSeconds: 60 });
+    const t = lobby(3, { mode: 'objectives', distribution: 'random', placement: 'simultaneous', turnSeconds: 60 });
     expect(t.room.handle(t.host.id, { t: 'start' })).toBeNull();
     const info = t.last(t.room.id, t.guest.id, 'lobby')!.lobby;
+    expect(info.rules.setup.distribution).toBe('random');
     expect(info.rules.setup.placement).toBe('simultaneous');
     expect(info.rules.timers.turnSeconds).toBe(60);
+    skipBriefing(t, t.room);
     // tutti insieme: non c'è un turno di piazzamento, piazzano tutti
     expect(t.room.state!.setupPlayer).toBeNull();
   });
@@ -163,11 +178,68 @@ describe('sala d’attesa', () => {
   });
 });
 
-describe('partita', () => {
-  it('a giri piazza solo chi tocca; gli eventi arrivano a tutti, le carte e gli obiettivi altrui no', () => {
+describe('inizio partita', () => {
+  it('prima il tempo per leggere l’obiettivo, poi un tempo per ogni territorio scelto', () => {
     const t = lobby(3, { mode: 'objectives' });
     const { room, host } = t;
     expect(room.handle(host.id, { t: 'start' })).toBeNull();
+    expect(room.state!.phase).toBe('briefing');
+    expect(t.last(room.id, host.id, 'status')!.total).toBe(BRIEFING_MS);
+    for (const id of room.state!.order) expect(room.handle(id, { t: 'act', action: { kind: 'ready' } })).toBeNull();
+    const state = room.state!;
+    expect(state.phase).toBe('draft');
+    const [a, b] = state.order as [string, string];
+    expect(state.setupPlayer).toBe(a);
+    const status = t.last(room.id, host.id, 'status')!;
+    expect(status.total).toBe(PICK_MS);
+    // chi sceglie fuori turno sbaglia; chi tocca sceglie e il tempo riparte per il prossimo
+    const free = boards.context(room.settings).board.territories.map((x) => x.id);
+    expect(room.handle(b, { t: 'act', action: { kind: 'pick', territory: free[0]! } })).toBe('Non tocca a te scegliere.');
+    t.advance(1000);
+    expect(room.handle(a, { t: 'act', action: { kind: 'pick', territory: free[0]! } })).toBeNull();
+    expect(room.state!.setupPlayer).toBe(b);
+    expect(t.last(room.id, host.id, 'status')!.deadline).toBe(t.now() + PICK_MS);
+    // a b scade il tempo: sceglie il server e gli si conta un turno saltato
+    t.advance(PICK_MS + 1);
+    t.manager.tick();
+    expect(Object.values(room.state!.territories).filter((x) => x.owner === b)).toHaveLength(1);
+    expect(room.seats.find((s) => s.id === b)!.idleTurns).toBe(1);
+  });
+
+  it('chi non chiude l’obiettivo in tempo non perde un turno', () => {
+    const t = lobby(2);
+    t.room.handle(t.host.id, { t: 'start' });
+    skipBriefing(t, t.room);
+    expect(t.room.state!.phase).toBe('draft');
+    expect(t.room.seats.every((s) => s.idleTurns === 0)).toBe(true);
+  });
+
+  it('chi esce durante la scelta: il server chiude il suo obiettivo e sceglie per lui', () => {
+    const t = lobby(3);
+    const { room, host, guests } = t;
+    room.handle(host.id, { t: 'start' });
+    const gone = guests[1]!.id;
+    expect(room.handle(gone, { t: 'leave' })).toBeNull();
+    for (const id of room.state!.order.filter((p) => p !== gone)) room.handle(id, { t: 'act', action: { kind: 'ready' } });
+    expect(room.state!.phase).toBe('draft');
+    const free = () => boards.context(room.settings).board.territories.map((x) => x.id).filter((x) => !room.state!.territories[x]);
+    // quando tocca a chi è uscito il server sceglie subito, senza aspettare il tempo
+    for (let i = 0; room.state!.phase === 'draft' && i < 100; i++) {
+      const who = room.state!.setupPlayer!;
+      expect(who).not.toBe(gone);
+      expect(room.handle(who, { t: 'act', action: { kind: 'pick', territory: free()[0]! } })).toBeNull();
+    }
+    expect(room.state!.phase).toBe('setup');
+    expect(Object.values(room.state!.territories).filter((x) => x.owner === gone).length).toBeGreaterThan(10);
+  });
+});
+
+describe('partita', () => {
+  it('a giri piazza solo chi tocca; gli eventi arrivano a tutti, le carte e gli obiettivi altrui no', () => {
+    const t = lobby(3, { mode: 'objectives', distribution: 'random' });
+    const { room, host } = t;
+    expect(room.handle(host.id, { t: 'start' })).toBeNull();
+    skipBriefing(t, room);
     const state = room.state!;
     const first = state.setupPlayer!;
     const other = state.order.find((p) => p !== first)!;
@@ -186,9 +258,10 @@ describe('partita', () => {
   });
 
   it('tempo scaduto: le armate si piazzano da sole, il tempo riparte, il turno saltato si conta', () => {
-    const t = lobby(2);
+    const t = lobby(2, { mode: 'conquest', distribution: 'random' });
     const { room, host } = t;
     room.handle(host.id, { t: 'start' });
+    skipBriefing(t, room);
     const first = room.state!.setupPlayer!;
     const deadline = t.last(room.id, host.id, 'status')!.deadline!;
     t.advance(SETUP_MS - 1000);

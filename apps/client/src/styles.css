@@ -36,6 +36,8 @@ body[data-stile='classico'] {
   --card-bg: #fbf5e4;
   --card-edge: #2b2219;
   --card-joker: #e9c76a;
+  --card-back: repeating-linear-gradient(45deg, #7f251b 0 7px, #8e2d21 7px 14px);
+  --card-back-ink: #f6efdc;
   --chip-radius: 3px;
   --chip-ring: 0 0 0 1px rgba(0, 0, 0, 0.45);
   --btn-primary: #2b2219;
@@ -73,6 +75,8 @@ body[data-stile='vetro'] {
   --card-bg: #2a2d34;
   --card-edge: rgba(255, 255, 255, 0.18);
   --card-joker: #ffd60a;
+  --card-back: linear-gradient(150deg, #10284f 0%, #0a64d8 55%, #4cc3f0 100%);
+  --card-back-ink: #ffffff;
   --chip-radius: 50%;
   --chip-ring: 0 0 0 1.5px rgba(255, 255, 255, 0.85);
   --btn-primary: #0a84ff;
@@ -1278,6 +1282,165 @@ body[data-stile='vetro'] .topbar.my-move .whose b {
   .rolling .die,
   .toast {
     animation: none;
+  }
+}
+
+/* --- carta dell'obiettivo a inizio partita: arriva coperta e si gira */
+.objective-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--veil);
+}
+
+/* l'entrata (dissolvenza) e la rotazione stanno su due elementi: l'opacità appiattirebbe il 3D */
+.objective-card {
+  width: min(400px, 100%);
+  height: min(560px, calc(100vh - 48px));
+  perspective: 1600px;
+  animation: card-in 450ms ease-out 150ms both;
+}
+
+.card-flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: card-turn 800ms cubic-bezier(0.3, 0.7, 0.2, 1) 700ms both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.9);
+  }
+}
+
+@keyframes card-turn {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+
+.objective-card .face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: calc(var(--radius) * 2);
+  border: 1px solid var(--card-edge);
+  box-shadow: var(--shadow);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.objective-card .back {
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--card-back);
+  color: var(--card-back-ink);
+}
+
+.objective-card .back::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius);
+  opacity: 0.55;
+}
+
+.back-mark {
+  font-family: var(--display);
+  font-size: 44px;
+  letter-spacing: 0.04em;
+}
+
+.back-sub {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  opacity: 0.85;
+}
+
+.objective-card .front {
+  transform: rotateY(180deg);
+  padding: 34px 32px 26px;
+  background: var(--card-bg);
+  color: var(--ink);
+}
+
+.card-kicker {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+
+body[data-stile='vetro'] .card-kicker {
+  color: #64d2ff;
+}
+
+.card-text {
+  margin: auto 0;
+  font-family: var(--display);
+  font-size: 30px;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+body[data-stile='vetro'] .card-text {
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+
+.card-note {
+  margin: 0 0 18px;
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.card-foot .primary {
+  padding: 10px 22px;
+  font-size: 15px;
+}
+
+.card-clock {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.card-clock .countdown {
+  min-width: 0;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .objective-card {
+    animation: none;
+  }
+  .card-flip {
+    animation: none;
+    transform: rotateY(180deg);
   }
 }
 

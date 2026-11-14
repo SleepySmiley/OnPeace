@@ -7,7 +7,8 @@
  *
  *   npm run prova                                   avvia un server di prova (cartelle temporanee)
  *   npm run prova -- --url https://xxx.trycloudflare.com    contro un server già acceso (anche dal tunnel)
- *   opzioni: --giocatori 4   --giri 40   --seme 1   --modo conquest|objectives   --piazzamento rounds|simultaneous
+ *   opzioni: --giocatori 4   --giri 40   --seme 1   --modo conquest|objectives   --territori draft|random
+ *            --piazzamento rounds|simultaneous
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -28,6 +29,7 @@ const ROUNDS = Math.max(3, Number(arg('giri', '40')));
 const SEED = Number(arg('seme', '1'));
 const MODE = arg('modo', PLAYERS >= 3 ? 'objectives' : 'conquest') as 'objectives' | 'conquest';
 const PLACEMENT = arg('piazzamento', 'simultaneous') as 'rounds' | 'simultaneous';
+const DISTRIBUTION = arg('territori', 'draft') as 'draft' | 'random';
 const TIMEOUT_MS = 10 * 60_000;
 
 const board = BoardDef.parse(readJson(join(dataDir, 'territori', 'mondo.json')));
@@ -94,6 +96,14 @@ function spread(v: GameView, me: string, n: number, rng: Rng): Record<string, nu
 function nextAction(v: GameView, me: string, rules: ConquestRules, rng: Rng, attacks: number): Action | null {
   const p = v.players.find((x) => x.id === me);
   if (!p || !p.alive || v.phase === 'over') return null;
+  if (v.phase === 'briefing') return p.ready ? null : { kind: 'ready' };
+  if (v.phase === 'draft') {
+    if (v.setupPlayer !== me) return null;
+    // un territorio libero, meglio se accanto ai propri
+    const free = board.territories.map((t) => t.id).filter((t) => !v.territories[t]);
+    const near = free.filter((t) => (neighbours.get(t) ?? []).some((n) => v.territories[n]?.owner === me));
+    return { kind: 'pick', territory: rng.pick(near.length > 0 ? near : free) };
+  }
   if (v.phase === 'setup') {
     if (p.setupDone || p.pending) return null;
     if (rules.setup.placement === 'rounds' && v.setupPlayer !== me) return null;
@@ -344,7 +354,7 @@ async function main() {
   if (PLAYERS >= 3) guests.at(-1)!.quitAt = PLAYERS * 6;
   const started = Date.now();
 
-  await host.connect({ t: 'create', name: host.name, color: host.color, settings: { mode: MODE, placement: PLACEMENT, turnSeconds: 60 } });
+  await host.connect({ t: 'create', name: host.name, color: host.color, settings: { mode: MODE, distribution: DISTRIBUTION, placement: PLACEMENT, turnSeconds: 60 } });
   await until(() => !!host.lobby, 'la partita non è stata creata');
   const game = host.lobby!.id; // c'è: lo garantisce until() qui sopra
   for (const b of guests) await b.connect({ t: 'join', game, name: b.name, color: b.color });

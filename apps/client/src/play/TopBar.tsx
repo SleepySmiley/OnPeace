@@ -6,7 +6,7 @@ import { Countdown } from '../ui/Countdown';
 import { SoundButton } from '../ui/SoundButton';
 import { Chip } from './bits';
 import { PHASES } from './describe';
-import { actingPlayer, roundOf } from './logic';
+import { actingPlayer, isMyMove, roundOf } from './logic';
 import { useGame } from './useGame';
 
 export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; onReport: () => void; children?: ReactNode }) {
@@ -18,13 +18,16 @@ export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; o
   const isHost = lobby.hostId === me;
   const { round } = roundOf(view);
   const over = view.phase === 'over' || lobby.phase === 'ended';
-  const mine = move.kind === 'place' || move.kind === 'attack' || move.kind === 'fortify' || move.kind === 'occupy';
+  const mine = isMyMove(move);
+  // prima dei turni si vedono solo le fasi della preparazione, poi solo quelle del turno
+  const before = view.phase === 'briefing' || view.phase === 'draft' || view.phase === 'setup';
+  const phases = PHASES.filter((p) => (before ? ['briefing', 'draft', 'setup'] : ['reinforce', 'attack', 'fortify']).includes(p.id));
 
   return (
     <header className={`topbar${mine ? ' my-move' : ''}`}>
       <span className="brand">OnPeace</span>
       <ol className="phases" aria-label="Fasi del turno">
-        {PHASES.filter((p) => p.id !== 'setup' || view.phase === 'setup').map((p) => (
+        {phases.map((p) => (
           <li key={p.id} className={view.phase === p.id ? 'on' : ''} aria-current={view.phase === p.id ? 'step' : undefined}>
             {p.label}
           </li>
@@ -43,6 +46,8 @@ export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; o
             <>
               <Chip color={colorOf(acting)} /> {playerName(acting)}
             </>
+          ) : view.phase === 'briefing' ? (
+            'Tutti leggono l’obiettivo'
           ) : (
             'Tutti piazzano'
           )}

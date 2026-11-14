@@ -28,10 +28,10 @@ export interface BoardProvider {
 }
 
 /** Le regole con le opzioni scelte dall'host al posto di quelle predefinite. */
-export function rulesWith(base: ConquestRules, settings: Pick<RoomSettings, 'placement' | 'turnSeconds'>): ConquestRules {
+export function rulesWith(base: ConquestRules, settings: Pick<RoomSettings, 'distribution' | 'placement' | 'turnSeconds'>): ConquestRules {
   return {
     ...base,
-    setup: { ...base.setup, placement: settings.placement },
+    setup: { ...base.setup, distribution: settings.distribution, placement: settings.placement },
     timers: { ...base.timers, turnSeconds: settings.turnSeconds },
   };
 }
@@ -91,7 +91,7 @@ export class BoardLibrary implements BoardProvider {
 
   context(settings: RoomSettings): GameContext {
     const entry = this.entry(settings.board);
-    const key = `${entry.def.id}|${settings.placement}|${settings.turnSeconds}`;
+    const key = `${entry.def.id}|${settings.distribution}|${settings.placement}|${settings.turnSeconds}`;
     let ctx = this.contexts.get(key);
     if (!ctx) {
       ctx = createContext(entry.def, rulesWith(this.rules, settings), entry.objectives);

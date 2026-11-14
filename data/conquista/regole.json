@@ -2,7 +2,7 @@
   "$schema": "../schema/conquista-regole.schema.json",
   "players": { "min": 2, "max": 8, "objectivesMin": 3 },
   "initialArmies": { "2": 45, "3": 38, "4": 32, "5": 27, "6": 23, "7": 20, "8": 18 },
-  "setup": { "placement": "rounds", "perRound": 3 },
+  "setup": { "briefing": true, "distribution": "draft", "placement": "rounds", "perRound": 3 },
   "reinforcements": { "divisor": 3, "minimum": 3 },
   "dice": { "attackMax": 3, "defenseMax": 3, "tiesTo": "defender" },
   "fortify": { "moves": 1, "reach": "adjacent" },
@@ -17,6 +17,6 @@
     "inheritOnElimination": true
   },
   "elimination": { "protectedRounds": 4 },
-  "timers": { "turnSeconds": 180, "setupSeconds": 45 },
+  "timers": { "turnSeconds": 180, "setupSeconds": 45, "briefingSeconds": 30, "pickSeconds": 15 },
   "modes": ["objectives", "conquest"]
 }

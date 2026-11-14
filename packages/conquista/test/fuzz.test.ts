@@ -68,8 +68,10 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
 const armiesOnBoard = (s: GameState) => Object.values(s.territories).reduce((n, t) => n + t.armies, 0);
 
 function play(players: number, mode: GameMode, seed: number) {
-  let s = newGame(players, mode, seed);
-  while (s.phase === 'setup') s = timeout(ctx, s).state;
+  // con le regole vere: obiettivo, territori scelti a turno (tutti a tempo scaduto), piazzamento
+  let s = newGame(players, mode, seed, ctx);
+  expect(s.phase).toBe('briefing');
+  while (s.phase === 'briefing' || s.phase === 'draft' || s.phase === 'setup') s = timeout(ctx, s).state;
   const cards = cardTotal(s);
   const rng = createRng(seed * 7 + 1);
   const seen = { fortify: 0, timeouts: 0 };

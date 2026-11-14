@@ -24,6 +24,8 @@ export const SettingsS = z
     board: Id,
     /** Obiettivi segreti o conquista del mondo. */
     mode: z.enum(['objectives', 'conquest']),
+    /** Territori: scelti a turno uno alla volta, o distribuiti a caso. */
+    distribution: z.enum(['draft', 'random']),
     /** Piazzamento iniziale: a giri come al tavolo, o tutti insieme alla cieca. */
     placement: z.enum(['rounds', 'simultaneous']),
     /** Durata di un turno. */

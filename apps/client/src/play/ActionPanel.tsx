@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { useSession } from '../store';
 import { Chip } from './bits';
 import { PHASES } from './describe';
-import { attackTargets, maxDice, moveTargets, reinforcementsFor } from './logic';
+import { attackTargets, freeTerritories, maxDice, moveTargets, reinforcementsFor } from './logic';
 import { useGame } from './useGame';
 
 const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
@@ -41,6 +41,48 @@ export function ActionPanel({ floating = false }: { floating?: boolean }) {
 
   let body: ReactNode;
   switch (move.kind) {
+    case 'briefing':
+      body = (
+        <>
+          <h3>Il tuo obiettivo</h3>
+          <p>Leggilo con calma: la partita comincia quando hanno finito tutti.</p>
+          <div className="button-row">
+            <button type="button" className="primary" disabled={busy} onClick={() => s.ready()}>
+              Ho capito
+            </button>
+          </div>
+        </>
+      );
+      break;
+    case 'wait-briefing': {
+      const ready = view.players.filter((p) => p.ready).length;
+      body = (
+        <>
+          <h3>Pronto</h3>
+          <p>
+            Si aspetta che gli altri leggano l'obiettivo (
+            <span className="num">
+              {ready}/{view.players.length}
+            </span>
+            ). Poi si scelgono i territori a turno.
+          </p>
+        </>
+      );
+      break;
+    }
+    case 'pick': {
+      const free = freeTerritories(view, board.def.territories).length;
+      body = (
+        <>
+          <h3>Scegli un territorio</h3>
+          <p>
+            Clic su un territorio libero: diventa tuo con un'armata. Ne restano <span className="num">{free}</span>.
+          </p>
+          <p className="hint">Pensa al tuo obiettivo: territori vicini tra loro si difendono meglio.</p>
+        </>
+      );
+      break;
+    }
     case 'place': {
       const placed = sum(draft.placements);
       const left = move.budget - placed;
@@ -282,7 +324,14 @@ export function ActionPanel({ floating = false }: { floating?: boolean }) {
               'Si aspetta'
             )}
           </h3>
-          <p className="dim">{view.phase === 'setup' ? 'Sta piazzando le armate iniziali.' : `${phaseLabel}.`} Intanto puoi guardare il tabellone.</p>
+          <p className="dim">
+            {view.phase === 'draft'
+              ? `Sta scegliendo un territorio (ne restano ${freeTerritories(view, board.def.territories).length}).`
+              : view.phase === 'setup'
+                ? 'Sta piazzando le armate iniziali.'
+                : `${phaseLabel}.`}{' '}
+            Intanto puoi guardare il tabellone.
+          </p>
         </>
       );
       break;

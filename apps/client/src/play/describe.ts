@@ -2,6 +2,8 @@
 import type { Card, GameEvent, GameView, Phase } from '@onpeace/conquista';
 
 export const PHASES: { id: Exclude<Phase, 'over'>; label: string }[] = [
+  { id: 'briefing', label: 'Obiettivo' },
+  { id: 'draft', label: 'Scelta territori' },
   { id: 'setup', label: 'Piazzamento' },
   { id: 'reinforce', label: 'Rinforzi' },
   { id: 'attack', label: 'Attacco' },
@@ -34,6 +36,10 @@ const armies = (n: number) => (n === 1 ? '1 armata' : `${n} armate`);
 export function describeEvent(e: GameEvent, n: Names, me: string | null): string {
   const who = (id: string) => (id === me ? 'Tu' : n.player(id));
   switch (e.type) {
+    case 'ready':
+      return `${who(e.player)}: obiettivo letto`;
+    case 'pick':
+      return `${who(e.player)}: ${e.player === me ? 'prendi' : 'prende'} ${n.territory(e.territory)}`;
     case 'setup-place':
       return e.hidden
         ? `${who(e.player)}: armate piazzate (coperte fino alla fine)`
