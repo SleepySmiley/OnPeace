@@ -1,0 +1,928 @@
+/*
+ * Scena della pesca: la carta grande (retro con la rosa dei venti, fronte con la mappa del
+ * territorio e il simbolo), il mazzo e i tre modi di farla arrivare (centro, ventaglio, angolo).
+ * Due temi: classico (cartoncino, inchiostro) e vetro (scuro, lucido). Le durate arrivano in
+ * --flip e --fly; il volo verso il bottone delle carte in --fx, --fy, --fs.
+ */
+
+/* ------------------------------------------------------------------ la carta */
+.dc {
+  --dc-r: 10px;
+  position: relative;
+  display: block;
+  width: 220px;
+  height: 308px;
+  perspective: 1400px;
+}
+
+body[data-stile='vetro'] .dc {
+  --dc-r: 18px;
+}
+
+.dc-inner {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-style: preserve-3d;
+}
+
+.dc-face {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--dc-r);
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.dc-front {
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px 16px;
+}
+
+/* --- retro */
+.dc-back-field {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.dc-emblem {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+}
+
+.dc-brand {
+  line-height: 1.4;
+}
+
+body[data-stile='classico'] .dc-back {
+  background: #7a2318;
+  border: 1px solid #2b2219;
+}
+
+body[data-stile='classico'] .dc-back-field {
+  inset: 9px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(246, 239, 220, 0.85);
+  background: var(--card-back);
+  color: #f6efdc;
+  box-shadow:
+    inset 0 0 0 3px #7a2318,
+    inset 0 0 0 4px rgba(246, 239, 220, 0.5);
+}
+
+body[data-stile='classico'] .dc-emblem {
+  background: radial-gradient(circle, #7a2318 0 64%, transparent 65%);
+}
+
+body[data-stile='classico'] .dc-emblem-dot {
+  fill: #7a2318;
+}
+
+body[data-stile='classico'] .dc-brand {
+  padding: 0 10px;
+  background: #7a2318;
+  font-family: var(--display);
+  font-size: 17px;
+  letter-spacing: 0.12em;
+}
+
+body[data-stile='vetro'] .dc-back {
+  background: var(--card-back);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+body[data-stile='vetro'] .dc-back::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 38%);
+  pointer-events: none;
+}
+
+body[data-stile='vetro'] .dc-back-field {
+  inset: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.2), transparent 62%);
+  color: #ffffff;
+}
+
+body[data-stile='vetro'] .dc-emblem-dot {
+  fill: #0a64d8;
+}
+
+body[data-stile='vetro'] .dc-brand {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+/* --- fronte */
+.dc-kind {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dc-mapwrap {
+  position: relative;
+  margin: 4px 0 18px;
+}
+
+.dc-map {
+  display: block;
+  width: 188px;
+  height: 112px;
+}
+
+.dc-medal {
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  width: 42px;
+  height: 42px;
+  margin-left: -21px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.dc-name {
+  margin: 4px 0 0;
+  max-width: 100%;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.dc-sub {
+  margin: 0;
+  text-align: center;
+}
+
+.dc-owner {
+  margin: auto 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.dc-corner {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  display: flex;
+}
+
+.dc-corner-end {
+  top: auto;
+  left: auto;
+  bottom: 15px;
+  right: 15px;
+  transform: rotate(180deg);
+}
+
+.dc-star {
+  margin: 14px 0 6px;
+  display: grid;
+  place-items: center;
+}
+
+body[data-stile='classico'] .dc-front {
+  --card-bg: #fbf5e4;
+  background: radial-gradient(ellipse at 30% 18%, #fffaf0 0%, #f7efda 55%, #efe3c6 100%);
+  border: 1px solid #2b2219;
+  color: #2b2219;
+}
+
+body[data-stile='classico'] .dc-front::before,
+body[data-stile='classico'] .dc-front::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 6px;
+}
+
+body[data-stile='classico'] .dc-front::before {
+  inset: 7px;
+  border: 1px solid rgba(43, 34, 25, 0.62);
+}
+
+body[data-stile='classico'] .dc-front::after {
+  inset: 10px;
+  border: 0.5px solid rgba(43, 34, 25, 0.35);
+  border-radius: 4px;
+}
+
+body[data-stile='classico'] .dc-kind {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+}
+
+body[data-stile='classico'] .dc-map {
+  border: 1px solid rgba(43, 34, 25, 0.75);
+  border-radius: 3px;
+}
+
+body[data-stile='classico'] .dc-medal {
+  background: #fbf5e4;
+  border: 1.5px solid #2b2219;
+  color: #2b2219;
+  box-shadow: 0 2px 0 rgba(43, 34, 25, 0.18);
+}
+
+body[data-stile='classico'] .dc-name {
+  font-family: var(--display);
+  font-size: 25px;
+  line-height: 1.02;
+}
+
+body[data-stile='classico'] .dc-sub {
+  font-style: italic;
+  font-size: 13px;
+  color: #6b5a45;
+}
+
+body[data-stile='classico'] .dc-joker {
+  background: linear-gradient(160deg, #f3d98c 0%, #e5be62 60%, #d8aa48 100%);
+}
+
+body[data-stile='classico'] .dc-joker .dc-star {
+  color: #7a2318;
+}
+
+body[data-stile='classico'] .dc-joker .dc-sub {
+  color: #5a4220;
+}
+
+body[data-stile='vetro'] .dc-front {
+  --card-bg: #24272e;
+  background: linear-gradient(165deg, #363a43 0%, #25282f 55%, #1c1e24 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: #f5f5f7;
+}
+
+body[data-stile='vetro'] .dc-kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+body[data-stile='vetro'] .dc-map {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+
+body[data-stile='vetro'] .dc-medal {
+  --card-bg: #1c1e24;
+  background: #1c1e24;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(47, 140, 255, 0.4);
+}
+
+body[data-stile='vetro'] .dc-name {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+body[data-stile='vetro'] .dc-sub {
+  font-size: 12.5px;
+  color: #a1a1aa;
+}
+
+body[data-stile='vetro'] .dc-corner {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body[data-stile='vetro'] .dc-joker .dc-star {
+  color: #ffd60a;
+  filter: drop-shadow(0 0 16px rgba(255, 214, 10, 0.55));
+}
+
+/* --- mazzo: retri impilati, ognuno un filo più su */
+.dc-deck {
+  position: relative;
+  display: block;
+  width: 220px;
+  height: 308px;
+}
+
+.dc-stacked {
+  position: absolute;
+  inset: 0;
+  transform: translate(calc(var(--k) * var(--step-x, -1px)), calc(var(--k) * var(--step-y, -1.6px)));
+}
+
+.dc-stacked .dc-face {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ------------------------------------------------------------------ strato comune */
+.draw-layer {
+  position: absolute;
+  inset: 52px 0 0;
+  z-index: 22;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dl-card .dc-face {
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
+}
+
+.dl-slot {
+  position: absolute;
+  width: 220px;
+  height: 308px;
+}
+
+.dl-card {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.18s ease-out;
+}
+
+.dl-head {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.dl-title {
+  margin: 0;
+  font-size: 30px;
+}
+
+.dl-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.dl-auto {
+  display: block;
+  width: 120px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dl-auto i {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  animation: dl-auto linear forwards;
+}
+
+@keyframes dl-auto {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+/* in volo verso il bottone delle carte (da fermi a scala --rs) */
+.dl-card.is-fly {
+  animation: dl-fly var(--fly) cubic-bezier(0.55, 0, 0.8, 0.35) forwards;
+}
+
+.dl-card.is-fly .dc-inner {
+  transform: rotateY(180deg);
+}
+
+@keyframes dl-fly {
+  0% {
+    transform: translate(0, 0) scale(var(--rs, 1)) rotate(0deg);
+    opacity: 1;
+  }
+  28% {
+    transform: translate(calc(var(--fx) * 0.08), calc(var(--fy) * 0.08 - 28px)) scale(calc(var(--rs, 1) * 0.86)) rotate(-3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--fx), var(--fy)) scale(var(--fs)) rotate(-14deg);
+    opacity: 0.5;
+  }
+}
+
+@keyframes dl-flip {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+
+@keyframes dl-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dl-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* il bottone delle carte quando la carta arriva */
+.count.bump {
+  animation: count-bump 560ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes count-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.55);
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------------ A: al centro */
+.dl-centro {
+  pointer-events: auto;
+  cursor: pointer;
+  color: #fbf5e4;
+}
+
+body[data-stile='vetro'] .dl-centro {
+  color: #ffffff;
+}
+
+.dl-centro .dl-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 70% at 50% 46%, rgba(6, 12, 9, 0.62), rgba(6, 12, 9, 0.78));
+  animation: dl-fade-in 320ms ease-out both;
+}
+
+.dl-centro.is-fly .dl-veil {
+  animation: dl-fade-out var(--fly) ease-in forwards;
+}
+
+.dl-centro .dl-stage {
+  position: absolute;
+  inset: 0 0 110px;
+}
+
+.dl-centro .dl-slot {
+  left: 50%;
+  top: 50%;
+  margin: -154px 0 0 -110px;
+}
+
+.dl-centro.is-offer .dl-slot {
+  animation: dl-deck-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes dl-deck-in {
+  from {
+    transform: translateY(70px) scale(1.06);
+    opacity: 0;
+  }
+}
+
+.dl-centro .dl-deck {
+  --step-x: -2px;
+  --step-y: -3px;
+  position: absolute;
+  inset: 0;
+  transform: scale(0.72);
+  filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.45));
+}
+
+.dl-centro.is-reveal .dl-deck,
+.dl-centro.is-fly .dl-deck {
+  animation: dl-deck-out 420ms ease-in forwards;
+}
+
+@keyframes dl-deck-out {
+  to {
+    transform: translateY(40px) scale(0.68);
+    opacity: 0;
+  }
+}
+
+/* la prima carta del mazzo è la carta vera, coperta: sale, si gira e si ingrandisce */
+.dl-centro .dl-card.is-offer {
+  transform: translate(-8.6px, -13px) scale(0.72);
+}
+
+.dl-centro.is-offer:hover .dl-card.is-offer {
+  transform: translate(-8.6px, -28px) scale(0.72) rotate(-1.5deg);
+}
+
+.dl-centro .dl-card.is-reveal {
+  animation: dl-c-reveal var(--flip) cubic-bezier(0.25, 0.7, 0.25, 1) forwards;
+}
+
+.dl-centro .dl-card.is-reveal .dc-inner {
+  animation: dl-flip calc(var(--flip) * 0.7) ease-in-out calc(var(--flip) * 0.15) both;
+}
+
+@keyframes dl-c-reveal {
+  0% {
+    transform: translate(-8.6px, -13px) scale(0.72);
+  }
+  40% {
+    transform: translate(0, -44px) scale(0.88);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.dl-centro .dl-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(50% + 140px);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  animation: dl-fade-in 400ms ease-out 160ms both;
+}
+
+.dl-centro .dl-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + 132px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  font-size: 13px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  animation: dl-fade-in 400ms ease-out 260ms both;
+}
+
+.dl-centro .dl-foot .dim {
+  opacity: 0.7;
+}
+
+.dl-centro .dl-foot kbd {
+  margin-left: 6px;
+}
+
+.dl-centro.is-reveal .dl-head,
+.dl-centro.is-reveal .dl-foot,
+.dl-centro.is-fly .dl-head,
+.dl-centro.is-fly .dl-foot {
+  animation: dl-fade-out 200ms ease-in forwards;
+}
+
+/* ------------------------------------------------------------------ B: ventaglio */
+.dl-ventaglio {
+  color: #fbf5e4;
+}
+
+body[data-stile='vetro'] .dl-ventaglio {
+  color: #ffffff;
+}
+
+.dl-ventaglio .dl-shade {
+  position: absolute;
+  inset: auto 0 0;
+  height: 72%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.5) 45%, rgba(0, 0, 0, 0));
+  animation: dl-fade-in 320ms ease-out both;
+}
+
+.dl-ventaglio.is-fly .dl-shade {
+  animation: dl-fade-out var(--fly) ease-in forwards;
+}
+
+.dl-ventaglio .dl-slot {
+  left: 50%;
+  top: calc(50% - 55px);
+  margin: -154px 0 0 -110px;
+}
+
+.dl-ventaglio.is-reveal .dl-slot {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dl-ventaglio .dl-card.is-reveal {
+  animation: dl-v-reveal var(--flip) cubic-bezier(0.3, 0.75, 0.25, 1) forwards;
+}
+
+.dl-ventaglio .dl-card.is-reveal .dc-inner {
+  animation: dl-flip 600ms ease-in-out 380ms both;
+}
+
+@keyframes dl-v-reveal {
+  0% {
+    transform: translate(var(--sx), var(--sy)) rotate(var(--sr)) scale(0.6);
+  }
+  45% {
+    transform: translate(calc(var(--sx) * 0.3), calc(var(--sy) * 0.3 - 30px)) rotate(calc(var(--sr) * 0.3)) scale(0.86);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+.dl-fan-wrap {
+  position: absolute;
+  left: 50%;
+  /* le carte ai lati scendono un po' (ventaglio): restano sopra la barra dei comandi */
+  bottom: 158px;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.dl-ventaglio .dl-head {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+  animation: dl-fade-in 400ms ease-out 200ms both;
+}
+
+.dl-ventaglio .dl-title {
+  font-size: 26px;
+}
+
+.dl-ventaglio.is-reveal .dl-head,
+.dl-ventaglio.is-fly .dl-head {
+  animation: dl-fade-out 200ms ease-in forwards;
+}
+
+.dl-fan {
+  position: relative;
+  width: 0;
+  height: 186px;
+}
+
+.dl-fan-card {
+  position: absolute;
+  left: -66px;
+  top: 0;
+  width: 132px;
+  height: 185px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform-origin: 50% 100%;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: dl-fan-in 440ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--k) * 70ms);
+}
+
+.dl-fan-card:focus-visible {
+  outline: none;
+}
+
+.dl-fan-card:focus-visible .dc-face {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes dl-fan-in {
+  from {
+    transform: translate(0, 260px) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+.dl-fan-lift {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transition: transform 0.16s ease-out;
+}
+
+.dl-fan-card:not(:disabled):hover .dl-fan-lift {
+  transform: translateY(-20px);
+}
+
+.dl-fan-card .dc {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: scale(0.6);
+  transform-origin: 0 0;
+}
+
+.dl-fan-card .dc-face {
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
+}
+
+.dl-ventaglio.is-reveal .dl-fan-card,
+.dl-ventaglio.is-fly .dl-fan-card {
+  cursor: default;
+  animation: dl-fan-out 420ms ease-in forwards;
+  animation-delay: calc(var(--k) * 35ms);
+}
+
+.dl-fan-card.picked {
+  visibility: hidden;
+}
+
+@keyframes dl-fan-out {
+  to {
+    translate: 0 280px;
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ C: nell'angolo */
+.dl-angolo {
+  --rs: 0.78;
+}
+
+.dl-angolo .dl-slot {
+  /* la carta in scala 0,78 (172 × 240) con lo spigolo a 12 px dal bordo, sopra i bottoni */
+  left: -12px;
+  bottom: 128px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dl-angolo .dl-card.is-offer {
+  animation: dl-a-rise 560ms cubic-bezier(0.2, 0.9, 0.3, 1.15) forwards;
+}
+
+.dl-angolo .dl-card.is-offer .dc-inner {
+  animation: dl-bob 1.5s ease-in-out 600ms infinite;
+}
+
+.dl-angolo .dl-card.is-offer .dc-back {
+  animation: dl-glow 1.5s ease-in-out 600ms infinite;
+}
+
+@keyframes dl-a-rise {
+  from {
+    transform: translate(var(--sx), var(--sy)) scale(var(--ss));
+  }
+  to {
+    transform: translate(0, 0) scale(0.72);
+  }
+}
+
+@keyframes dl-bob {
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes dl-glow {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--accent),
+      0 0 30px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+
+.dl-angolo .dl-card.is-reveal {
+  animation: dl-a-reveal var(--flip) cubic-bezier(0.3, 0.7, 0.3, 1) forwards;
+}
+
+.dl-angolo .dl-card.is-reveal .dc-inner {
+  animation: dl-flip var(--flip) ease-in-out both;
+}
+
+@keyframes dl-a-reveal {
+  from {
+    transform: scale(0.72);
+  }
+  50% {
+    transform: translateY(-14px) scale(0.8);
+  }
+  to {
+    transform: scale(0.78);
+  }
+}
+
+.dl-angolo .dl-tag {
+  position: absolute;
+  left: 196px;
+  bottom: 170px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  animation: dl-fade-in 300ms ease-out 380ms both;
+}
+
+.dl-angolo .dl-tag .dl-auto {
+  width: 100%;
+  margin-top: 4px;
+  color: var(--accent);
+}
+
+.dl-angolo.is-reveal .dl-tag,
+.dl-angolo.is-fly .dl-tag {
+  animation: dl-fade-out 180ms ease-in forwards;
+}
+
+/* il mazzetto accanto al bottone delle carte */
+.hand-deck {
+  --step-x: -14px;
+  --step-y: -20px;
+  position: relative;
+  align-self: center;
+  width: 28px;
+  height: 34px;
+  margin-right: 2px;
+}
+
+.hand-deck .dc-deck {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  transform: scale(0.112);
+  transform-origin: 0 0;
+}
+
+.hand-deck .dc-face {
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hand-deck.busy .dc-stacked:last-child {
+  visibility: hidden;
+}
+
+.hand-deck.earned::before {
+  content: '';
+  position: absolute;
+  inset: -5px -6px -4px -4px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--accent);
+  animation: earned-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes earned-pulse {
+  50% {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 16px color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+}
+
+.hand-deck-badge {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ meno movimento */
+@media (prefers-reduced-motion: reduce) {
+  .draw-layer *,
+  .draw-layer,
+  .hand-deck::before,
+  .count.bump {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+  }
+}

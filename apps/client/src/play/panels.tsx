@@ -6,6 +6,7 @@ import { useSession } from '../store';
 import { ChatPanel } from '../ui/ChatPanel';
 import { CardView, Chip, Die } from './bits';
 import { describeEvent, isHighlight, namesFor } from './describe';
+import { cardsInScene, useDraw } from './draw';
 import { actingPlayer, owned, totals } from './logic';
 import { ObjectiveSheet, objectiveInfo, skinOf } from './objective';
 import { useGame } from './useGame';
@@ -115,7 +116,9 @@ export function HandPanel() {
   const playSet = useSession((s) => s.playSet);
   const mine = view.players.find((p) => p.id === me);
   const [chosen, setChosen] = useState<string[]>([]);
-  const cards = useMemo(() => mine?.cards ?? [], [mine]);
+  // le carte appena pescate arrivano quando la loro scena le porta qui
+  const inScene = useDraw((s) => [...cardsInScene(s)].join('|'));
+  const cards = useMemo(() => (mine?.cards ?? []).filter((c) => !inScene.split('|').includes(c.id)), [mine, inScene]);
   // le carte giocate spariscono dalla mano: si tolgono anche dalla scelta
   useEffect(() => setChosen((c) => c.filter((id) => cards.some((x) => x.id === id))), [cards]);
   if (!mine) return null;

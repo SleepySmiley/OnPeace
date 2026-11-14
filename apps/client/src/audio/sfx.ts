@@ -35,7 +35,9 @@ export type SoundName =
   | 'kill'
   | 'dice'
   | 'whoosh'
-  | 'cannon';
+  | 'cannon'
+  | 'deal'
+  | 'flip';
 
 type Synth = (ac: BaseAudioContext, out: AudioNode, t: number, noise: AudioBuffer) => void;
 
@@ -290,6 +292,19 @@ export const SOUNDS: Record<SoundName, Synth> = {
     noise(ac, out, t, n, { dur: 0.32, gain: 0.16, filter: 'bandpass', freq: 380, to: 2600, q: 1.4, attack: 0.16 });
     tone(ac, out, t + 0.3, { freq: 82, to: 46, dur: 0.35, gain: 0.22 });
   },
+  /** Il mazzo arriva sul tavolo: carte che strisciano e si posano. */
+  deal: (ac, out, t, n) => {
+    [0, 0.05, 0.09].forEach((d, k) => {
+      noise(ac, out, t + d, n, { dur: 0.09, gain: 0.12 - k * 0.025, filter: 'bandpass', freq: 3200, to: 1800, q: 1.2, attack: 0.02 });
+    });
+    noise(ac, out, t + 0.13, n, { dur: 0.06, gain: 0.1, filter: 'lowpass', freq: 900, to: 300 });
+  },
+  /** Una carta che si gira: lo schiocco del cartoncino. */
+  flip: (ac, out, t, n) => {
+    noise(ac, out, t, n, { dur: 0.05, gain: 0.16, filter: 'bandpass', freq: 2400, to: 5200, q: 1.6, attack: 0.012 });
+    noise(ac, out, t + 0.045, n, { dur: 0.025, gain: 0.14, filter: 'highpass', freq: 3800, q: 0.7 });
+    tone(ac, out, t + 0.045, { type: 'triangle', freq: 520, to: 380, dur: 0.03, gain: 0.05 });
+  },
 };
 
 /**
@@ -328,6 +343,8 @@ export const MIX: Record<SoundName, number> = {
   dice: 1,
   whoosh: 0.9,
   cannon: 0.8,
+  deal: 1.2,
+  flip: 1.1,
 };
 
 /** Suona `name` al tempo `t` dentro `out`, al suo livello di mixaggio. */

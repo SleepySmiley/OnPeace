@@ -19,6 +19,8 @@ import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned }
 import { ObjectiveCard } from './ObjectiveCard';
 import { connectBattleFeed, useBattle } from './battle';
 import { BattleLayer } from './BattleScene';
+import { cardsInScene, connectDrawFeed, useDraw } from './draw';
+import { DrawLayer, HandDeck } from './DrawScene';
 import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
 import { TopBar } from './TopBar';
 import { useGame } from './useGame';
@@ -34,6 +36,8 @@ function useBoardState(): BoardState {
   const fresh = useSession((s) => s.fresh);
   // durante la scena della battaglia i due territori non hanno la pedina: ci sono i carri della scena
   const fighting = useBattle((s) => (s.playing && !s.playing.small && s.playing.stage !== 'outro' ? `${s.playing.eng.a.territory}|${s.playing.eng.d.territory}` : ''));
+  // la carta appena pescata: il suo territorio lampeggia
+  const spot = useDraw((s) => s.spot);
   return useMemo(() => {
     const owners = new Map<string, string>();
     const armies = new Map<string, number>();
@@ -51,6 +55,7 @@ function useBoardState(): BoardState {
         if (e.event.attackerLosses > 0) flashes.set(e.event.from, fresh!.at);
       }
     }
+    if (spot) flashes.set(spot.territory, spot.at);
     const rules = lobby.rules;
     const n = board.geo.neighbours;
     const mine = me ? owned(view, me) : [];
@@ -77,7 +82,7 @@ function useBoardState(): BoardState {
     }
     const hidden = fighting ? new Set(fighting.split('|')) : null;
     return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden };
-  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting]);
+  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting, spot]);
 }
 
 /** Eventi importanti appena successi, in basso a destra per qualche secondo. */
@@ -167,6 +172,9 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
     };
   }, []);
 
+  // le carte pescate passano dalla loro scena prima di arrivare tra le carte
+  useEffect(() => connectDrawFeed(), []);
+
   // in sviluppo, per le prove automatiche: il tabellone e la sessione raggiungibili dalla console
   useEffect(() => {
     if (import.meta.env.DEV) Object.assign(window, { __tabellone: painter, __sessione: useSession });
@@ -200,7 +208,12 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   }, [move, painter, overlay]);
 
   const over = view.phase === 'over' || lobby.phase === 'ended';
-  const cardCount = view.players.find((p) => p.id === me)?.cardCount ?? 0;
+  // le carte ancora in scena si contano quando arrivano
+  const inScene = useDraw((s) => [...cardsInScene(s)].join('|'));
+  const landed = useDraw((s) => s.landed);
+  const mineView = view.players.find((p) => p.id === me);
+  const waiting = inScene ? (mineView?.cards ?? []).filter((c) => inScene.split('|').includes(c.id)).length : 0;
+  const cardCount = (mineView?.cardCount ?? 0) - waiting;
 
   return (
     <div className="game">
@@ -213,11 +226,16 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
         <PlayersPanel />
       </div>
       <BattleLayer painter={painter} />
+      <DrawLayer />
       {extra}
       {move.kind !== 'briefing' && <CommandBar />}
       <div className="corner-tools">
-        <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
-          Carte e obiettivo <span className="count">{cardCount}</span>
+        <HandDeck />
+        <button type="button" className="pill panel" data-hand-pill aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
+          Carte e obiettivo{' '}
+          <span key={landed} className={`count${landed ? ' bump' : ''}`}>
+            {cardCount}
+          </span>
         </button>
         <button type="button" className="pill panel" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>
           Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}

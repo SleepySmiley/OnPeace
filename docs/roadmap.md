@@ -29,7 +29,13 @@ Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazz
 
 **Da decidere.** Il clic può essere solo scena (la carta la decide comunque il server e le regole non cambiano), oppure una mossa vera con tempo limite e pesca automatica se non clicchi. Consiglio la prima: è più semplice e non rallenta la partita.
 
-Servono 2-3 proposte: il mazzo, il gesto della pesca, la carta che si gira e vola nella mano.
+**Proposte pronte (14/11), da scegliere.** Pagina di prova `pesca.html` (`?modo=centro|ventaglio|angolo`), col gioco vero: per ora il clic è solo scena, e se non clicchi la carta parte da sola dopo 6 secondi.
+
+- **A — Al centro.** Velo scuro, il mazzo cade al centro, la prima carta sale, si gira grande e vola su "Carte e obiettivo".
+- **B — Ventaglio.** Cinque carte coperte a ventaglio sopra la barra in basso, ne tocchi una (è solo scena: la carta è sempre quella decisa dal server), sale al centro, si gira e vola.
+- **C — Nell'angolo.** Un mazzetto sta sempre accanto a "Carte e obiettivo" e si accende con "+1" appena conquisti nel tuo turno; a fine turno la carta sale da lì, si gira nell'angolo e scende tra le carte. La mappa resta libera.
+
+In comune: carta grande nuova nei due temi (retro con la rosa dei venti, fronte con la mappa del territorio, il simbolo e di chi è), il territorio lampeggia sulla mappa, suoni nuovi (mazzo, carta che si gira), Invio o spazio per pescare, il contatore delle carte sale quando la carta arriva. La pesca aspetta che finisca la tua battaglia; se ti attaccano mentre il mazzo aspetta, si toglie di mezzo e torna dopo.
 
 ### 2. Mappa più leggibile
 
