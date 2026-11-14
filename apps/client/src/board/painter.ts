@@ -100,8 +100,22 @@ export class BoardPainter {
   setInsets(insets: Insets): void {
     const same = (Object.keys(insets) as (keyof Insets)[]).every((k) => insets[k] === this.insets[k]);
     if (same) return;
+    // a vista d'insieme la mappa si rifà nello spazio nuovo; ingrandita resta dov'era, spostata di mezza differenza
+    const fit = this.fitView();
+    const atFit = Math.abs(this.view.scale - fit.scale) < fit.scale * 0.005 && Math.abs(this.view.x - fit.x) < 2 && Math.abs(this.view.y - fit.y) < 2;
+    const old = this.insets;
     this.insets = insets;
-    this.resetView();
+    if (atFit || this.canvas.width === 0) {
+      this.resetView();
+      return;
+    }
+    this.fitScale = this.fitView().scale;
+    this.view = {
+      ...this.view,
+      x: this.view.x + (insets.left - old.left - (insets.right - old.right)) / 2,
+      y: this.view.y + (insets.top - old.top - (insets.bottom - old.bottom)) / 2,
+    };
+    this.viewChanged();
   }
 
   /** Torna alla vista d'insieme. */

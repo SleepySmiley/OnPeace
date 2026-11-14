@@ -273,7 +273,10 @@ function useCamera(
   }, [painter, from, to, side, top, bottom, maxZoom, spread]);
   const leaving = p.stage === 'outro';
   useEffect(() => {
-    if (!leaving || !painter || !home || useBattle.getState().queue.length > 0) return;
+    // resta lì solo se dopo c'è un'altra scena grande: quelle piccole degli altri non muovono la camera
+    const s = useBattle.getState();
+    const bigNext = s.queue.some((e) => e.role !== 'spectator' || s.watch !== 'piccola');
+    if (!leaving || !painter || !home || bigNext) return;
     void painter.flyTo(home, p.ms + 160);
     home = null;
   }, [leaving, painter, p.ms]);

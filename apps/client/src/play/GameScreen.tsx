@@ -22,11 +22,15 @@ import { BattleLayer } from './BattleScene';
 import { cardsInScene, useDraw } from './draw';
 import { connectDrawFeed, DrawLayer } from './DrawScene';
 import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
+import { BottomSheet, HandFan, HandTable, MapCallouts, NewsToasts, SideColumn, TurnAnnounce, type ColumnTab } from './proposte';
 import { TopBar } from './TopBar';
+import { useUiLook } from './uilook';
 import { useGame } from './useGame';
 
 /** Spazio coperto da barra in alto e barra dei comandi: la mappa si adatta nel resto. */
 const INSETS: Insets = { top: 56, right: 0, bottom: 110, left: 0 };
+/** Proposta "colonna": larghezza della colonna a destra (con il suo margine). */
+const COLUMN = 384;
 
 /** Il tabellone con lo stato della partita, le scelte in corso e i lampi delle ultime battaglie. */
 function useBoardState(): BoardState {
@@ -38,6 +42,7 @@ function useBoardState(): BoardState {
   const fighting = useBattle((s) => (s.playing && !s.playing.small && s.playing.stage !== 'outro' ? `${s.playing.eng.a.territory}|${s.playing.eng.d.territory}` : ''));
   // la carta appena pescata: il suo territorio lampeggia
   const spot = useDraw((s) => s.spot);
+  const arrowLook = useUiLook((s) => s.frecce);
   return useMemo(() => {
     const owners = new Map<string, string>();
     const armies = new Map<string, number>();
@@ -81,8 +86,8 @@ function useBoardState(): BoardState {
       arrows = { to: [move.to], kind: 'move' };
     }
     const hidden = fighting ? new Set(fighting.split('|')) : null;
-    return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden };
-  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting, spot]);
+    return { owners, armies, hover, selected, target, arrows, active, pending, flashes, hidden, arrowLook };
+  }, [view, board, me, move, lobby, colorOf, draft, hover, fresh, fighting, spot, arrowLook]);
 }
 
 /** Eventi importanti appena successi, in basso a destra per qualche secondo. */
@@ -116,13 +121,13 @@ function EventToasts() {
 }
 
 /** Il tabellone, a parte: spostare la vista o passare col mouse sui territori non ridisegna i pannelli. */
-function Board({ onPainter }: { onPainter: (p: BoardPainter | null) => void }) {
+function Board({ onPainter, insets }: { onPainter: (p: BoardPainter | null) => void; insets: Insets }) {
   const board = useSession((s) => s.board)!;
   const style = useLook((s) => s.style);
   const state = useBoardState();
   const onClick = useCallback((id: string | null, how: { shift: boolean; right: boolean }) => useSession.getState().clickTerritory(id, how), []);
   const onHover = useCallback((id: string | null) => useSession.getState().setHover(id), []);
-  return <BoardCanvas geo={board.geo} style={style} state={state} insets={INSETS} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
+  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
 }
 
 interface Props {
@@ -143,6 +148,12 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   const [overClosed, setOverClosed] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const ui = useUiLook();
+  // proposte dei cassetti: colonna a destra (con la scheda aperta), pannello dal basso, mano aperta
+  const [column, setColumn] = useState<ColumnTab | null>(null);
+  const [sheet, setSheet] = useState<'log' | 'chat' | null>(null);
+  const [table, setTable] = useState(false);
+  const insets = useMemo<Insets>(() => (ui.cassetti === 'colonna' && column ? { ...INSETS, right: COLUMN } : INSETS), [ui.cassetti, column]);
 
   const mine = isMyMove(move);
   useGameSounds({ me, fresh, deadline: online.deadline, paused: Boolean(online.paused), myMove: mine, chat: online.chat });
@@ -215,43 +226,79 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   const waiting = inScene ? (mineView?.cards ?? []).filter((c) => inScene.split('|').includes(c.id)).length : 0;
   const cardCount = (mineView?.cardCount ?? 0) - waiting;
 
-  return (
-    <div className="game">
-      <Board onPainter={setPainter} />
-      <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
-        {topbarExtra}
-      </TopBar>
-
-      <div className="corner-players panel">
-        <PlayersPanel />
-      </div>
-      <BattleLayer painter={painter} />
-      <DrawLayer />
-      {extra}
-      {move.kind !== 'briefing' && <CommandBar />}
-      <div className="corner-tools">
-        <button type="button" className="pill panel" data-hand-pill aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
+  const pills = (
+    <div className="corner-tools">
+      {ui.cassetti !== 'mano' && (
+        <button
+          type="button"
+          className="pill panel"
+          data-hand-pill
+          aria-expanded={ui.cassetti === 'colonna' ? column === 'carte' : ui.cassetti === 'basso' ? sheet !== null : cardsOpen}
+          onClick={() => {
+            if (ui.cassetti === 'colonna') setColumn((c) => (c === 'carte' ? null : 'carte'));
+            else if (ui.cassetti === 'basso') setSheet((o) => (o ? null : 'log'));
+            else setCardsOpen((o) => !o);
+          }}
+        >
           Carte e obiettivo{' '}
           <span key={landed} className={`count${landed ? ' bump' : ''}`}>
             {cardCount}
           </span>
         </button>
-        <button type="button" className="pill panel" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>
-          Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
-        </button>
-      </div>
-      {cardsOpen && (
+      )}
+      <button
+        type="button"
+        className="pill panel"
+        aria-expanded={ui.cassetti === 'colonna' ? column === 'registro' || column === 'chat' : ui.cassetti === 'basso' ? sheet !== null : chatOpen}
+        onClick={() => {
+          if (ui.cassetti === 'colonna') setColumn((c) => (c === 'registro' || c === 'chat' ? null : online.unread > 0 ? 'chat' : 'registro'));
+          else if (ui.cassetti === 'basso') setSheet((o) => (o ? null : online.unread > 0 ? 'chat' : 'log'));
+          else setChatOpen((o) => !o);
+        }}
+      >
+        Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
+      </button>
+    </div>
+  );
+  // con il registro aperto gli avvisi in un angolo non servono
+  const logOpen = ui.cassetti === 'colonna' ? column === 'registro' : ui.cassetti === 'basso' ? sheet !== null : chatOpen;
+
+  return (
+    <div className={`game ui-fasi-${ui.fasi} ui-cassetti-${ui.cassetti}${ui.cassetti === 'colonna' && column ? ' has-column' : ''}`}>
+      <Board onPainter={setPainter} insets={insets} />
+      <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
+        {topbarExtra}
+      </TopBar>
+
+      {ui.fasi !== 'giro' && (
+        <div className="corner-players panel">
+          <PlayersPanel />
+        </div>
+      )}
+      <BattleLayer painter={painter} />
+      <DrawLayer />
+      {extra}
+      {move.kind !== 'briefing' && <CommandBar />}
+      {pills}
+      {ui.cassetti === 'mano' && <HandFan open={table} onOpen={() => setTable((o) => !o)} />}
+      {ui.cassetti === 'ora' && cardsOpen && (
         <div className="drawer drawer-left panel">
           <HandPanel />
         </div>
       )}
-      {chatOpen && (
+      {(ui.cassetti === 'ora' || ui.cassetti === 'mano') && chatOpen && (
         <div className="drawer drawer-right panel">
           <BattlePanel />
           <LogChat />
         </div>
       )}
-      {!chatOpen && <EventToasts />}
+      {ui.cassetti === 'colonna' && column && <SideColumn tab={column} onTab={setColumn} onClose={() => setColumn(null)} />}
+      {ui.cassetti === 'basso' && sheet && <BottomSheet initial={sheet} onClose={() => setSheet(null)} />}
+      {ui.cassetti === 'mano' && table && <HandTable onClose={() => setTable(false)} />}
+      {!logOpen && ui.avvisi === 'ora' && <EventToasts />}
+      {!logOpen && ui.avvisi === 'notizie' && <NewsToasts />}
+      {ui.avvisi === 'mappa' && <MapCallouts painter={painter} />}
+      <TurnAnnounce />
 
       <TerritoryInfo />
 

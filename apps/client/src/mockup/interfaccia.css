@@ -1,0 +1,59 @@
+/* Pagina di prova dell'interfaccia: il pannello delle scelte, aperto dal bottone "Prova" nella barra in alto. */
+
+.ip-dock {
+  position: absolute;
+  z-index: 40;
+  top: 60px;
+  right: 12px;
+  width: 340px;
+  display: grid;
+  gap: 8px;
+  padding: 8px 12px 12px;
+  font-size: 12.5px;
+}
+
+.ip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ip-head .sc-close {
+  margin-left: auto;
+}
+
+.ip-row {
+  display: grid;
+  gap: 3px;
+}
+
+.ip-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.ip-dock .bt-seg {
+  display: grid;
+}
+
+.ip-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ip-actions .mock-restart {
+  grid-column: 1 / -1;
+}
+
+.ip-toggle {
+  padding: 3px 6px;
+}
+
+.ip-toggle.on {
+  border-color: var(--accent);
+}

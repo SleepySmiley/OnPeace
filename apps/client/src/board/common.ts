@@ -34,6 +34,8 @@ export interface BoardState {
   hidden?: ReadonlySet<string> | null;
   /** false: niente pedine (tabellone di sfondo, senza partita). */
   tokens?: boolean;
+  /** Prova (interfaccia.html): frecce del vetro col colore di chi attacca, chiare col bordo, o col colore di chi attacca e il bordo. */
+  arrowLook?: 'ora' | 'chiare' | 'bordate';
 }
 
 /**

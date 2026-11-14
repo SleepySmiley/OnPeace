@@ -64,6 +64,8 @@ export class LocalGame {
   private botAttacks = 0;
   private botTurn = -1;
   private closed = false;
+  /** Avversari fermi (pagine di prova: per guardare con calma). */
+  private hold = false;
 
   constructor(start: Start, seed = Date.now() % 1_000_000) {
     const rules = structuredClone(rulesJson) as typeof rulesJson;
@@ -102,6 +104,21 @@ export class LocalGame {
   stop(): void {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
+  }
+
+  /** Ferma gli avversari (finché non si rimettono a giocare) o li fa ripartire. */
+  setHold(on: boolean): void {
+    this.hold = on;
+    this.schedule();
+  }
+
+  /** Pagine di prova: mette in mano a chi prova `n` carte dal mazzo (come pescate, ma senza scena). */
+  giveCards(n: number): void {
+    const deck = [...this.state.deck];
+    const taken = deck.splice(0, n);
+    const players = this.state.players.map((p) => (p.id === ME ? { ...p, cards: [...p.cards, ...taken] } : p));
+    this.state = { ...this.state, deck, players };
+    this.deliver({ t: 'game', view: viewFor(this.ctx, this.state, ME), log: [], sync: false });
   }
 
   private handle(msg: ClientMsg): void {
@@ -203,7 +220,7 @@ export class LocalGame {
   private schedule(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    if (this.state.phase === 'over') return;
+    if (this.state.phase === 'over' || this.hold || this.closed) return;
     const due = playersToAct(this.ctx, this.state).filter((id) => id !== ME);
     if (due.length === 0) return;
     const phase = this.state.phase;
