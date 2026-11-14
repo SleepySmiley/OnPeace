@@ -1,6 +1,6 @@
 /**
  * Pagina di prova del tabellone (/tabellone.html in sviluppo): il mondo a territori con una
- * partita finta e quattro stili grafici da confrontare (tasti 1-4 o il selettore in alto).
+ * partita finta e i due temi grafici (tasti 1-2 o il selettore in alto).
  */
 import boardJson from '@data/territori/mondo.json';
 import { BoardDef } from '@onpeace/engine';
@@ -8,11 +8,9 @@ import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from '.
 import { buildGeometry } from './geometry';
 import { loadRelief } from './imagery';
 import { classico } from './styles/classico';
-import { plastico } from './styles/plastico';
-import { statoMaggiore } from './styles/stato-maggiore';
 import { vetro } from './styles/vetro';
 
-const STYLES: BoardStyle[] = [statoMaggiore, vetro, classico, plastico];
+const STYLES: BoardStyle[] = [classico, vetro];
 
 // ---------------------------------------------------------------- partita di prova
 /** Generatore pseudo-casuale con seme: la partita finta è sempre la stessa. */

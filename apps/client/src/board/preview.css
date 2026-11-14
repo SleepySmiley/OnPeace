@@ -1,17 +1,17 @@
 /* Pannelli della pagina di prova. Ogni stile della mappa ridefinisce i suoi colori e caratteri. */
 :root,
-body[data-stile='stato-maggiore'] {
-  --bg: #14110d;
-  --panel: rgba(226, 216, 190, 0.96);
-  --panel-edge: rgba(42, 34, 24, 0.55);
-  --ink: #2a2218;
-  --ink-dim: #6a5a43;
-  --accent: #96232a;
-  --font: 'IBM Plex Mono', ui-monospace, monospace;
-  --display: 'Big Shoulders Stencil Display', 'Arial Narrow', sans-serif;
-  --num: 'IBM Plex Mono', ui-monospace, monospace;
-  --radius: 0px;
-  --shadow: 2px 3px 0 rgba(20, 14, 6, 0.55);
+body[data-stile='classico'] {
+  --bg: #0f231a;
+  --panel: rgba(239, 230, 207, 0.97);
+  --panel-edge: #2b2219;
+  --ink: #2b2219;
+  --ink-dim: #6b5a45;
+  --accent: #8a2a1f;
+  --font: Georgia, serif;
+  --display: 'IM Fell English SC', Georgia, serif;
+  --num: Georgia, serif;
+  --radius: 6px;
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
   --blur: none;
 }
 
@@ -28,36 +28,6 @@ body[data-stile='vetro'] {
   --radius: 18px;
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   --blur: blur(24px) saturate(160%);
-}
-
-body[data-stile='classico'] {
-  --bg: #0f231a;
-  --panel: rgba(239, 230, 207, 0.97);
-  --panel-edge: #2b2219;
-  --ink: #2b2219;
-  --ink-dim: #6b5a45;
-  --accent: #8a2a1f;
-  --font: Georgia, serif;
-  --display: 'IM Fell English SC', Georgia, serif;
-  --num: Georgia, serif;
-  --radius: 6px;
-  --shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
-  --blur: none;
-}
-
-body[data-stile='plastico'] {
-  --bg: #0b0d0f;
-  --panel: rgba(22, 30, 36, 0.92);
-  --panel-edge: rgba(220, 235, 242, 0.16);
-  --ink: #eef3f6;
-  --ink-dim: #93a6b1;
-  --accent: #d9a521;
-  --font: 'Barlow Semi Condensed', 'Arial Narrow', sans-serif;
-  --display: 'Barlow Semi Condensed', 'Arial Narrow', sans-serif;
-  --num: 'Barlow Semi Condensed', 'Arial Narrow', sans-serif;
-  --radius: 4px;
-  --shadow: 0 14px 34px rgba(0, 0, 0, 0.6);
-  --blur: none;
 }
 
 * {
@@ -108,10 +78,10 @@ body {
   left: 50%;
   transform: translateX(-50%);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
-  width: min(880px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
 }
 
 .hud-styles button {
