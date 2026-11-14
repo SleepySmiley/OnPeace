@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@onpeace/engine';
-import { applyAction, ownedBy, possibleSets, timeout, type Action, type GameMode, type GameState } from '../src';
+import { applyAction, eliminationAllowed, ownedBy, possibleSets, timeout, type Action, type GameMode, type GameState } from '../src';
 import { cardTotal, newGame, worldContext } from './helpers';
 
 const ctx = worldContext();
@@ -42,6 +42,8 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
     const options = mine.flatMap((from) =>
       (ctx.neighbours.get(from) ?? [])
         .filter((to) => s.territories[to]!.owner !== me && s.territories[from]!.armies > 1)
+        // regola Prestige: nei primi giri l'ultimo territorio di un giocatore non si attacca
+        .filter((to) => eliminationAllowed(ctx, s) || ownedBy(s, s.territories[to]!.owner).length > 1)
         .map((to) => ({ from, to })),
     );
     if (options.length > 0 && rng.next() < 0.85) {
@@ -80,7 +82,7 @@ function play(players: number, mode: GameMode, seed: number) {
 describe('partite casuali fino alla fine', () => {
   for (const mode of ['objectives', 'conquest'] as const) {
     for (const [players, seed] of [
-      [2, 11],
+      [mode === 'objectives' ? 3 : 2, 11],
       [3, 22],
       [5, 33],
       [6, 44],

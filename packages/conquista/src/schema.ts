@@ -16,7 +16,12 @@ export type GameMode = z.infer<typeof GameMode>;
 
 export const ConquestRules = z.strictObject({
   $schema: z.string().optional(),
-  players: z.strictObject({ min: Int.min(2), max: Int.min(2).max(8) }),
+  players: z.strictObject({
+    min: Int.min(2),
+    max: Int.min(2).max(8),
+    /** Giocatori minimi con gli obiettivi segreti: in pochi si parte con l'obiettivo quasi fatto. */
+    objectivesMin: Int.min(2),
+  }),
   /** Armate iniziali per numero di giocatori ("3": 38). */
   initialArmies: z.record(z.string().regex(/^\d$/), Int.positive()),
   setup: z.strictObject({
@@ -52,10 +57,12 @@ export const ConquestRules = z.strictObject({
     }),
     /** Armate in più per ogni carta del tris che mostra un territorio tuo. */
     ownedTerritoryBonus: Int.min(0),
-    /** Con più carte di così, nei rinforzi bisogna giocare un tris prima di piazzare. */
-    maxHand: Int.min(5),
     /** Chi elimina un giocatore ne prende le carte. */
     inheritOnElimination: z.boolean(),
+  }),
+  elimination: z.strictObject({
+    /** Nessuno può essere eliminato prima della fine di questo giro (regola Prestige: 4; 0 = mai protetti). */
+    protectedRounds: Int.min(0),
   }),
   timers: z.strictObject({
     turnSeconds: Int.min(10),

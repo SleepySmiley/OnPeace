@@ -64,7 +64,14 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
   };
 }
 
-/** Eventi visibili a un giocatore: la carta pescata si vede solo da chi la pesca. */
+/**
+ * Eventi visibili a un giocatore: la carta pescata si vede solo da chi la pesca; il cambio di
+ * obiettivo solo dall'interessato (agli altri rivelerebbe chi doveva eliminare chi).
+ */
 export function eventsFor(events: readonly GameEvent[], viewer: string | null): GameEvent[] {
-  return events.map((e) => (e.type === 'card' && e.player !== viewer ? { ...e, card: null } : e));
+  return events.flatMap((e) => {
+    if (e.type === 'card' && e.player !== viewer) return [{ ...e, card: null }];
+    if (e.type === 'objective-changed' && e.player !== viewer) return [];
+    return [e];
+  });
 }

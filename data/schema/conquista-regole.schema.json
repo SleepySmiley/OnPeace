@@ -17,11 +17,17 @@
           "type": "integer",
           "minimum": 2,
           "maximum": 8
+        },
+        "objectivesMin": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
         }
       },
       "required": [
         "min",
-        "max"
+        "max",
+        "objectivesMin"
       ],
       "additionalProperties": false
     },
@@ -189,11 +195,6 @@
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "maxHand": {
-          "type": "integer",
-          "minimum": 5,
-          "maximum": 9007199254740991
-        },
         "inheritOnElimination": {
           "type": "boolean"
         }
@@ -202,8 +203,21 @@
         "jokers",
         "sets",
         "ownedTerritoryBonus",
-        "maxHand",
         "inheritOnElimination"
+      ],
+      "additionalProperties": false
+    },
+    "elimination": {
+      "type": "object",
+      "properties": {
+        "protectedRounds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "protectedRounds"
       ],
       "additionalProperties": false
     },
@@ -247,6 +261,7 @@
     "dice",
     "fortify",
     "cards",
+    "elimination",
     "timers",
     "modes"
   ],

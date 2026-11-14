@@ -1,5 +1,5 @@
 /** Salvataggio delle partite in file JSON (uno per partita), scritti in modo atomico. */
-import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RoomSnapshot } from './room';
 
@@ -21,11 +21,17 @@ export class Storage {
       if (!f.endsWith('.json')) continue;
       try {
         const snap = JSON.parse(readFileSync(join(this.dir, f), 'utf8')) as RoomSnapshot;
-        if (snap.version === 1) out.push(snap);
+        // controllo minimo della forma: un file rovinato non deve rompere i rientri di tutti
+        if (snap?.version === 1 && typeof snap.id === 'string' && Array.isArray(snap.seats)) out.push(snap);
+        else console.warn(`Partita in un formato sconosciuto ignorata: ${f}`);
       } catch (err) {
         console.warn(`Partita illeggibile ignorata: ${f}`, err);
       }
     }
     return out;
+  }
+
+  remove(id: string): void {
+    rmSync(join(this.dir, `${id}.json`), { force: true });
   }
 }

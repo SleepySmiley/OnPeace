@@ -1,6 +1,6 @@
 {
   "$schema": "../schema/conquista-regole.schema.json",
-  "players": { "min": 2, "max": 8 },
+  "players": { "min": 2, "max": 8, "objectivesMin": 3 },
   "initialArmies": { "2": 45, "3": 38, "4": 32, "5": 27, "6": 23, "7": 20, "8": 18 },
   "setup": { "placement": "rounds", "perRound": 3 },
   "reinforcements": { "divisor": 3, "minimum": 3 },
@@ -14,9 +14,9 @@
       "jokerPlusPair": 12
     },
     "ownedTerritoryBonus": 2,
-    "maxHand": 7,
     "inheritOnElimination": true
   },
+  "elimination": { "protectedRounds": 4 },
   "timers": { "turnSeconds": 180, "setupSeconds": 45 },
   "modes": ["objectives", "conquest"]
 }

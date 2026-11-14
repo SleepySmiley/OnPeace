@@ -8,10 +8,17 @@ import { Room, type RoomSnapshot, type Seat } from './room';
 
 /** Se un salvataggio fallisce (es. file bloccato da OneDrive o dall'antivirus) si riprova dopo questo tempo. */
 const SAVE_RETRY_MS = 1500;
+/** Tetto alle partite sul server: chiunque abbia il link del tunnel può crearne, e ognuna è un file. */
+const MAX_ROOMS = 200;
+/** Tetto agli stati di partita allegati alle segnalazioni, per avvio del server (il disco non è infinito). */
+const MAX_REPORT_DUMPS = 100;
+/** Le partite finite da più di così si cancellano al riavvio. */
+const ENDED_KEEP_MS = 7 * 24 * 3600 * 1000;
 
 export interface Persistence {
   save(snapshot: RoomSnapshot): void;
   loadAll(): RoomSnapshot[];
+  remove(id: string): void;
 }
 
 export interface Transport {
@@ -29,6 +36,7 @@ function gameCode(): string {
 export class RoomManager {
   readonly rooms = new Map<string, Room>();
   private readonly pendingSave = new Map<string, ReturnType<typeof setTimeout>>();
+  private reportDumps = 0;
 
   constructor(
     private readonly maps: MapProvider,
@@ -53,12 +61,21 @@ export class RoomManager {
   /** Ricarica le partite salvate (dopo un riavvio del PC). */
   loadSaved(): number {
     for (const snap of this.store.loadAll()) {
-      if (snap.phase === 'ended' && this.now() - snap.updatedAt > 7 * 24 * 3600 * 1000) continue;
+      // partite finite da tempo e sale d'attesa rimaste vuote: via anche il file
+      if ((snap.phase === 'ended' && this.now() - snap.updatedAt > ENDED_KEEP_MS) || snap.seats.length === 0) {
+        this.removeFile(snap.id);
+        continue;
+      }
       // il tempo del turno riparte: chi era a metà turno non lo perde per il riavvio
       if (snap.deadline !== null) snap.deadline = Math.max(snap.deadline, this.now() + 60_000);
       this.rooms.set(snap.id, new Room(snap.id, this.deps(snap.id), snap));
     }
     return this.rooms.size;
+  }
+
+  /** Il server ha già il massimo di partite: non se ne creano altre. */
+  get full(): boolean {
+    return this.rooms.size >= MAX_ROOMS;
   }
 
   create(name: string, color: string, settings: LobbySettings): { room: Room; seat: Seat } {
@@ -93,7 +110,26 @@ export class RoomManager {
   handle(roomId: string, player: PlayerId, msg: ClientMsg): string | null {
     const room = this.rooms.get(roomId);
     if (!room) return 'Partita non trovata';
-    return room.handle(player, msg);
+    const error = room.handle(player, msg);
+    // se ne sono andati tutti dalla sala d'attesa: la partita sparisce, file compreso
+    if (room.seats.length === 0) this.remove(room);
+    return error;
+  }
+
+  private remove(room: Room): void {
+    clearTimeout(this.pendingSave.get(room.id));
+    this.pendingSave.delete(room.id);
+    this.rooms.delete(room.id);
+    this.removeFile(room.id);
+    this.log.info(`Partita ${room.id}: chiusa, non c'è più nessuno`);
+  }
+
+  private removeFile(id: string): void {
+    try {
+      this.store.remove(id);
+    } catch (err) {
+      this.log.error(`Partita ${id}: file non cancellato`, err);
+    }
   }
 
   /** Segnalazione di un giocatore: va nel registro, con lo stato della partita se l'ha scritta lui. */
@@ -102,7 +138,9 @@ export class RoomManager {
     const name = room?.seats.find((x) => x.id === player)?.name ?? null;
     const turn = room?.state?.turn ?? null;
     const snapshot =
-      msg.kind === 'feedback' && room ? this.log.dump(`segnalazione-${room.id}-turno${turn ?? 0}`, room.snapshot()) : null;
+      msg.kind === 'feedback' && room && this.reportDumps++ < MAX_REPORT_DUMPS
+        ? this.log.dump(`segnalazione-${room.id}-turno${turn ?? 0}`, room.snapshot())
+        : null;
     this.log.report({
       kind: msg.kind,
       game: roomId,
@@ -129,8 +167,9 @@ export class RoomManager {
   }
 
   private scheduleSave(room: Room, delayMs: number): void {
-    const prev = this.pendingSave.get(room.id);
-    if (prev) clearTimeout(prev);
+    // già in programma: non si rimanda, così un via vai continuo di messaggi non blocca il salvataggio
+    // (al momento di salvare si prende lo stato più recente)
+    if (this.pendingSave.has(room.id)) return;
     this.pendingSave.set(
       room.id,
       setTimeout(() => {

@@ -105,6 +105,7 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
     return;
   }
   if (msg.t === 'create') {
+    if (manager.full) return raw(conn, { t: 'error', message: 'Il server ha troppe partite aperte: riprova più tardi' });
     const { room, seat } = manager.create(msg.name, msg.color, msg.settings);
     attach(conn, room.id, seat.id);
     raw(conn, { t: 'welcome', token: seat.token, game: room.id, you: seat.id });
@@ -128,7 +129,13 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
 // ---------------------------------------------------------------- HTTP + WebSocket
 const serveClient = staticHandler(join(repoRoot, 'apps', 'client', 'dist'));
 const server = createServer((req, res) => {
-  if (!maps.handle(req, res)) serveClient(req, res);
+  try {
+    if (!maps.handle(req, res)) serveClient(req, res);
+  } catch {
+    // indirizzi malformati (es. "/%zz"): una richiesta strana non deve far cadere il server
+    if (!res.headersSent) res.writeHead(400);
+    res.end();
+  }
 });
 // compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~6 volte meno
 const wss = new WebSocketServer({
@@ -142,6 +149,8 @@ wss.on('connection', (ws) => {
   const conn: Conn = { ws, room: null, player: null, alive: true, reports: 0 };
   conns.add(conn);
   ws.on('pong', () => (conn.alive = true));
+  // messaggio fuori protocollo (troppo grande, UTF-8 non valido...): si chiude solo questa connessione
+  ws.on('error', () => ws.terminate());
   raw(conn, { t: 'server', publicUrl });
 
   ws.on('message', (data) => {
@@ -180,7 +189,9 @@ const heartbeat = setInterval(() => {
 
 const ticker = setInterval(() => manager.tick(), 1000);
 
-server.on('error', (err: NodeJS.ErrnoException) => {
+// gli errori del server HTTP (es. porta occupata) ws li rilancia sul WebSocketServer, prima di ogni
+// altro ascoltatore: vanno gestiti qui, altrimenti il processo cade prima di arrivarci
+wss.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code !== 'EADDRINUSE') throw err;
   log.error(`La porta ${PORT} è già occupata: c'è già un server OnPeace aperto? Chiudilo e riprova.`);
   process.exit(2); // 2 = da non riavviare (vedi tools/serata.ts)
@@ -213,6 +224,7 @@ function shutdown(code = 0) {
 }
 process.on('SIGINT', () => shutdown());
 process.on('SIGTERM', () => shutdown());
+process.on('SIGHUP', () => shutdown()); // su Windows: finestra della console chiusa
 // errore imprevisto: si salva tutto e si esce; `npm run serata` riavvia il server e le partite riprendono
 process.on('uncaughtException', (err) => {
   log.error('Errore imprevisto: il server si chiude dopo aver salvato le partite', err);

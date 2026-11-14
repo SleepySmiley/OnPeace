@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as engine from '@onpeace/engine';
 import { NavGrid, createContext, type PlayerId } from '@onpeace/engine';
-import type { ServerMsg } from '@onpeace/protocol';
+import { parseClientMsg, type ServerMsg } from '@onpeace/protocol';
 import { loadRules, twoIslandMap } from '../../../packages/engine/test/helpers';
 import { memoryLogger } from '../src/log';
 import { RoomManager, type Persistence } from '../src/manager';
@@ -32,6 +32,7 @@ function setup() {
   const store: Persistence = {
     save: (s) => saved.set(s.id, structuredClone(s)),
     loadAll: () => [...saved.values()],
+    remove: (id) => saved.delete(id),
   };
   const transport = {
     send(room: string, player: PlayerId, msg: ServerMsg) {
@@ -87,6 +88,16 @@ describe('stanza di gioco', () => {
     expect(room.phase).toBe('playing');
     expect(room.state!.turn).toBe(1);
     expect(t.manager.join(room.id, 'Carla')).toMatch(/già cominciata/);
+  });
+
+  it('colori: maiuscole e minuscole sono lo stesso colore', () => {
+    const t = setup();
+    const { room } = t.manager.create('Anna', '#e05a4f', {});
+    const guest = t.manager.join(room.id, 'Bruno');
+    if (typeof guest === 'string') throw new Error(guest);
+    const msg = parseClientMsg('{"t":"color","color":"#E05A4F"}');
+    if ('error' in msg) throw new Error(msg.error);
+    expect(room.handle(guest.seat.id, msg)).toMatch(/già preso/);
   });
 
   it('dottrina: si sceglie in sala d’attesa e durante la scelta dei paesi, poi si blocca', () => {
@@ -166,9 +177,33 @@ describe('stanza di gioco', () => {
       t.manager.tick();
     }
     expect(room.seats.find((s) => s.id === guest.id)!.inactiveTurns).toBe(3);
+    const oldToken = guest.token;
     expect(room.handle(host.id, { t: 'kick', player: guest.id })).toBeNull();
     expect(room.state!.players.find((p) => p.id === guest.id)!.status).toBe('left');
     expect(t.last(room.id, guest.id, 'kicked')).toBeDefined();
+    expect(t.manager.byToken(oldToken)).toBeNull(); // col vecchio token non si rientra
+  });
+
+  it('scelta dei paesi: se esce chi deve scegliere per ultimo la partita comincia lo stesso', () => {
+    const t = setup();
+    const { room, seat: host } = t.manager.create('Anna', '#e05a4f', { startingFunds: 100_000 });
+    const guest = t.manager.join(room.id, 'Bruno');
+    if (typeof guest === 'string') throw new Error(guest);
+    room.handle(host.id, { t: 'start' });
+    expect(room.handle(host.id, { t: 'pick', country: 'aa' })).toBeNull();
+    expect(room.handle(guest.seat.id, { t: 'leave' })).toBeNull();
+    expect(room.phase).toBe('playing');
+  });
+
+  it('sala d’attesa rimasta vuota: la partita e il suo file spariscono', async () => {
+    const t = setup();
+    const { room, seat: host } = t.manager.create('Anna', '#e05a4f', {});
+    await new Promise((r) => setTimeout(r, 5));
+    expect(t.saved.has(room.id)).toBe(true);
+    expect(t.manager.handle(room.id, host.id, { t: 'leave' })).toBeNull();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(t.manager.rooms.has(room.id)).toBe(false);
+    expect(t.saved.has(room.id)).toBe(false);
   });
 
   it('rientro con il token e ripresa dopo un riavvio', async () => {
@@ -304,6 +339,7 @@ describe('stanza di gioco', () => {
         saved.push(s.id);
       },
       loadAll: () => [],
+      remove: () => {},
     };
     vi.useFakeTimers();
     try {

@@ -4,7 +4,7 @@
  * restituiscono uno nuovo con gli eventi prodotti; il caso passa dal seme salvato nello stato.
  */
 import { RuleError, assertRule, createRng, type Rng } from '@onpeace/engine';
-import { buildDeck, possibleSets, setValue, shuffle } from './cards';
+import { buildDeck, setValue, shuffle } from './cards';
 import { continentsHeld, dealObjectives, objectiveDef, objectiveMet } from './objectives';
 import type { GameMode } from './schema';
 import type { Action, ActionResult, Card, GameContext, GameEvent, GameState, PlayerState } from './state';
@@ -66,6 +66,9 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
     throw new RuleError(`Servono da ${rules.players.min} a ${rules.players.max} giocatori.`);
   }
   if (!rules.modes.includes(mode)) throw new RuleError('Modalità non disponibile.');
+  if (mode === 'objectives' && players.length < rules.players.objectivesMin) {
+    throw new RuleError(`Con gli obiettivi segreti servono almeno ${rules.players.objectivesMin} giocatori.`);
+  }
   if (new Set(players.map((p) => p.id)).size !== players.length) throw new RuleError('Giocatori ripetuti.');
   const state: GameState = {
     board: board.id,
@@ -166,19 +169,23 @@ function finishSetupIfReady(ctx: GameContext, state: GameState, events: GameEven
   startTurn(ctx, state, state.order[0]!, events);
 }
 
-/** Vittoria: obiettivo raggiunto da chi gioca, tutto il mondo conquistato o un solo superstite. */
+/**
+ * Regola Prestige: nessuno può essere eliminato prima della fine del giro `protectedRounds`.
+ * Finché vale nessuno esce di scena, quindi ogni giro ha esattamente un turno per giocatore.
+ */
+export function eliminationAllowed(ctx: GameContext, state: GameState): boolean {
+  return !state.turn || state.turn.number > ctx.rules.elimination.protectedRounds * state.order.length;
+}
+
+/** Vittoria: obiettivo raggiunto da chi gioca, oppure un solo superstite (che possiede tutto il mondo). */
 function checkVictory(ctx: GameContext, state: GameState, events: GameEvent[]) {
   const alive = state.players.filter((p) => p.alive);
   let winner: string | null = null;
   let reason: 'objective' | 'conquest' | 'last-standing' = 'last-standing';
-  if (alive.length === 1) winner = alive[0]!.id;
-  else if (state.mode === 'conquest') {
-    const owners = new Set(Object.values(state.territories).map((t) => t.owner));
-    if (owners.size === 1) {
-      winner = [...owners][0]!;
-      reason = 'conquest';
-    }
-  } else if (state.turn && objectiveMet(ctx, state, state.turn.player)) {
+  if (alive.length === 1) {
+    winner = alive[0]!.id;
+    if (state.mode === 'conquest') reason = 'conquest';
+  } else if (state.mode === 'objectives' && state.turn && objectiveMet(ctx, state, state.turn.player)) {
     winner = state.turn.player;
     reason = 'objective';
   }
@@ -279,10 +286,6 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
     }
     case 'reinforce': {
       assertRule(state.phase === 'reinforce', 'I rinforzi sono già stati piazzati.');
-      assertRule(
-        me.cards.length <= ctx.rules.cards.maxHand || possibleSets(ctx.rules, me.cards).length === 0,
-        `Hai più di ${ctx.rules.cards.maxHand} carte: gioca un tris prima di piazzare.`,
-      );
       checkPlacements(ctx, state, id, action.placements, turn.reinforcements);
       for (const [tid, n] of Object.entries(action.placements)) state.territories[tid]!.armies += n;
       events.push({ type: 'reinforce', player: id, placements: action.placements });
@@ -300,6 +303,10 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
       assertRule(action.dice <= ctx.rules.dice.attackMax, `Puoi tirare al massimo ${ctx.rules.dice.attackMax} dadi.`);
       assertRule(action.dice <= from.armies - 1, 'Serve almeno un\'armata in più dei dadi che tiri.');
       const defender = to.owner;
+      assertRule(
+        eliminationAllowed(ctx, state) || ownedBy(state, defender).length > 1,
+        `${player(state, defender).name} ha un solo territorio: nessuno può essere eliminato prima della fine del ${ctx.rules.elimination.protectedRounds}° giro.`,
+      );
       const defDice = Math.min(ctx.rules.dice.defenseMax, to.armies);
       const roll = (n: number) =>
         withRng(state, (rng) => Array.from({ length: n }, () => rng.int(1, 6)).sort((a, b) => b - a));
@@ -409,7 +416,7 @@ function autoPlace(ctx: GameContext, state: GameState, id: string, total: number
 
 /**
  * Tempo scaduto: in preparazione piazza a caso le armate di chi non ha confermato; durante un
- * turno chiude quello che manca (tris obbligatori, rinforzi, occupazione) e passa al prossimo.
+ * turno chiude quello che manca (rinforzi, occupazione) e passa al prossimo.
  */
 export function timeout(ctx: GameContext, prev: GameState): ActionResult {
   let state = clone(prev);
@@ -432,14 +439,7 @@ export function timeout(ctx: GameContext, prev: GameState): ActionResult {
     state = r.state;
     events.push(...r.events);
   };
-  if (state.phase === 'reinforce') {
-    while (player(state, id).cards.length > ctx.rules.cards.maxHand) {
-      const best = possibleSets(ctx.rules, player(state, id).cards)[0];
-      if (!best) break;
-      run({ kind: 'play-set', cards: best.cards.map((c) => c.id) as [string, string, string] });
-    }
-    run({ kind: 'reinforce', placements: autoPlace(ctx, state, id, state.turn!.reinforcements) });
-  }
+  if (state.phase === 'reinforce') run({ kind: 'reinforce', placements: autoPlace(ctx, state, id, state.turn!.reinforcements) });
   if (state.phase === 'attack' && state.turn!.occupation) run({ kind: 'occupy', armies: state.turn!.occupation.min });
   if (state.phase === 'attack' || state.phase === 'fortify') run({ kind: 'end-turn' });
   return { state, events };

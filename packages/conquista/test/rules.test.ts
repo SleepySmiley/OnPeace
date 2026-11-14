@@ -3,6 +3,7 @@ import { RuleError } from '@onpeace/engine';
 import {
   applyAction,
   buildDeck,
+  eventsFor,
   objectiveMet,
   ownedBy,
   reinforcementsFor,
@@ -12,9 +13,16 @@ import {
   type Card,
   type GameState,
 } from '../src';
-import { cardTotal, newGame, setTerritories, skipSetup, worldContext } from './helpers';
+import { newGame, setTerritories, skipSetup, worldContext } from './helpers';
 
 const ctx = worldContext();
+
+/** Stesso stato, ma al primo turno dopo i giri in cui nessuno può essere eliminato. */
+function afterProtection(state: GameState): GameState {
+  const s = structuredClone(state);
+  s.turn!.number = ctx.rules.elimination.protectedRounds * s.order.length + 1;
+  return s;
+}
 
 /** Tutto il mondo a un giocatore tranne i territori indicati. */
 function worldTo(state: GameState, owner: string, except: Record<string, [string, number]> = {}): GameState {
@@ -55,6 +63,11 @@ describe('nuova partita', () => {
 
   it('rifiuta un numero di giocatori fuori dalle regole', () => {
     expect(() => newGame(1)).toThrow(RuleError);
+  });
+
+  it('con gli obiettivi segreti servono almeno 3 giocatori (in 2 si vincerebbe senza combattere)', () => {
+    expect(() => newGame(2, 'objectives')).toThrow(/almeno 3/);
+    expect(() => newGame(2, 'conquest')).not.toThrow();
   });
 });
 
@@ -102,7 +115,7 @@ describe('preparazione tutti insieme (variante)', () => {
     (r.setup as { placement: string }).placement = 'simultaneous';
   });
   it('ognuno piazza tutto in una volta, senza turni', () => {
-    let s = newGame(2, 'objectives', 7, quick);
+    let s = newGame(2, 'conquest', 7, quick);
     const [a, b] = s.order as [string, string];
     expect(s.setupPlayer).toBeNull();
     const leftB = s.players.find((p) => p.id === b)!.setupLeft;
@@ -116,7 +129,7 @@ describe('preparazione tutti insieme (variante)', () => {
 
 describe('rinforzi', () => {
   it('un\'armata ogni 3 territori, almeno 3, più i bonus dei continenti', () => {
-    let s = skipSetup(ctx, newGame(2));
+    let s = skipSetup(ctx, newGame(2, 'conquest'));
     const [a, b] = s.order as [string, string];
     // a tiene l'Oceania (4 territori, bonus 2) e nient'altro
     const changes: Record<string, [string, number]> = {};
@@ -157,7 +170,7 @@ describe('carte', () => {
   });
 
   it('un tris aggiunge armate, più il bonus per i territori posseduti', () => {
-    const s = skipSetup(ctx, newGame(2));
+    const s = skipSetup(ctx, newGame(2, 'conquest'));
     const me = s.turn!.player;
     const mine = ownedBy(s, me)[0]!;
     const hand: Card[] = [
@@ -172,16 +185,16 @@ describe('carte', () => {
     expect(r.state.discard).toHaveLength(3);
   });
 
-  it('con troppe carte bisogna giocare un tris prima di piazzare', () => {
-    const s = skipSetup(ctx, newGame(2));
+  it('nessun limite di carte in mano: il tris non è mai obbligatorio', () => {
+    const s = skipSetup(ctx, newGame(2, 'conquest'));
     const me = s.turn!.player;
-    const p = s.players.find((x) => x.id === me)!;
-    p.cards = s.deck.splice(0, ctx.rules.cards.maxHand + 1);
-    expect(() => applyAction(ctx, s, me, { kind: 'reinforce', placements: { [ownedBy(s, me)[0]!]: 3 } })).toThrow(/tris/);
-    // allo scadere del tempo i tris obbligatori si giocano da soli
-    const r = timeout(ctx, s);
-    expect(r.events.some((e) => e.type === 'set')).toBe(true);
-    expect(cardTotal(r.state)).toBe(cardTotal(s));
+    s.players.find((x) => x.id === me)!.cards = s.deck.splice(0, 12);
+    const r = applyAction(ctx, s, me, { kind: 'reinforce', placements: { [ownedBy(s, me)[0]!]: 3 } });
+    expect(r.state.phase).toBe('attack');
+    // nemmeno a tempo scaduto si giocano tris al posto del giocatore
+    const t = timeout(ctx, s);
+    expect(t.events.some((e) => e.type === 'set')).toBe(false);
+    expect(t.state.players.find((x) => x.id === me)!.cards).toHaveLength(12);
   });
 });
 
@@ -256,7 +269,7 @@ describe('attacchi', () => {
 
   it('eliminare un giocatore ne prende le carte; in conquista vince chi resta solo', () => {
     for (let seed = 1; seed < 400; seed++) {
-      let s = skipSetup(ctx, newGame(2, 'conquest', seed));
+      let s = afterProtection(skipSetup(ctx, newGame(2, 'conquest', seed)));
       const [a, b] = s.order as [string, string];
       s = worldTo(s, a, { italia: [a, 9], balcani: [b, 1] });
       s.phase = 'attack';
@@ -266,11 +279,30 @@ describe('attacchi', () => {
       expect(r.events.some((e) => e.type === 'eliminated' && e.player === b && e.cardsTaken === 2)).toBe(true);
       const o = applyAction(ctx, r.state, a, { kind: 'occupy', armies: 3 });
       expect(o.state.winner).toBe(a);
+      expect(o.events.at(-1)).toMatchObject({ type: 'victory', reason: 'conquest' });
       expect(o.state.phase).toBe('over');
       expect(() => applyAction(ctx, o.state, a, { kind: 'end-turn' })).toThrow(/finita/);
       return;
     }
     throw new Error('nessuna conquista');
+  });
+});
+
+describe('regola Prestige: nessuna eliminazione nei primi giri', () => {
+  it("fino alla fine del 4° giro non si attacca l'ultimo territorio di un giocatore", () => {
+    let s = skipSetup(ctx, newGame(3, 'conquest', 8));
+    const [a, b, c] = s.order as [string, string, string];
+    s = worldTo(s, c, { italia: [a, 9], balcani: [b, 1], francia: [b, 1] });
+    s.phase = 'attack';
+    const last = setTerritories(s, { francia: [c, 2] });
+    const n = ctx.rules.elimination.protectedRounds * s.order.length;
+    // b ha due territori: si attacca normalmente
+    expect(() => applyAction(ctx, s, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 })).not.toThrow();
+    // b ha un solo territorio: protetto fino all'ultimo turno del 4° giro compreso
+    last.turn!.number = n;
+    expect(() => applyAction(ctx, last, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 })).toThrow(/4° giro/);
+    last.turn!.number = n + 1;
+    expect(() => applyAction(ctx, last, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 })).not.toThrow();
   });
 });
 
@@ -292,7 +324,7 @@ describe('obiettivi', () => {
 
   it('elimina: se il bersaglio lo elimina un altro si passa alla riserva', () => {
     for (let seed = 1; seed < 400; seed++) {
-      let s = skipSetup(ctx, newGame(3, 'objectives', seed));
+      let s = afterProtection(skipSetup(ctx, newGame(3, 'objectives', seed)));
       const [a, b, c] = s.order as [string, string, string];
       s.players.find((p) => p.id === c)!.objective = { id: 'elimina', target: b };
       s.players.find((p) => p.id === a)!.objective = { id: 'territori_26' };
@@ -302,6 +334,9 @@ describe('obiettivi', () => {
       if (!r.state.turn!.occupation) continue;
       expect(r.state.players.find((p) => p.id === c)!.objective).toEqual({ id: 'territori_26' });
       expect(r.events.some((e) => e.type === 'objective-changed' && e.player === c)).toBe(true);
+      // il cambio di obiettivo lo vede solo c: agli altri rivelerebbe che doveva eliminare b
+      expect(eventsFor(r.events, c).some((e) => e.type === 'objective-changed')).toBe(true);
+      expect(eventsFor(r.events, a).some((e) => e.type === 'objective-changed')).toBe(false);
       return;
     }
     throw new Error('nessuna conquista');
@@ -310,7 +345,7 @@ describe('obiettivi', () => {
 
 describe('spostamento e fine turno', () => {
   it('uno spostamento tra territori confinanti, poi il turno passa', () => {
-    let s = skipSetup(ctx, newGame(2));
+    let s = skipSetup(ctx, newGame(2, 'conquest'));
     const [a, b] = s.order as [string, string];
     s = setTerritories(s, { italia: [a, 6], francia: [a, 1], iberia: [a, 1], balcani: [b, 1] });
     s.phase = 'attack';

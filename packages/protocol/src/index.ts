@@ -62,7 +62,11 @@ export const SettingsS = z
 export type LobbySettings = z.infer<typeof SettingsS>;
 
 const Name = z.string().trim().min(1).max(18);
-const Color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+// in minuscolo: "#4A8FF0" e "#4a8ff0" sono lo stesso colore anche per il controllo "già preso"
+const Color = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .transform((c) => c.toLowerCase());
 
 export const ClientMsgS = z.discriminatedUnion('t', [
   /** Primo messaggio: con il token si rientra nella propria partita. */
