@@ -67,7 +67,13 @@ const ProjCfgS = z.object({
       id: z.string(),
       kmPerPunto: z.number(),
       proiezione: z.discriminatedUnion('tipo', [
-        z.object({ tipo: z.literal('miller'), meridianoCentrale: z.number(), latMin: z.number(), latMax: z.number() }),
+        z.object({
+          tipo: z.literal('miller'),
+          /** Tra 0 e 180: il taglio del mondo al meridiano opposto è scritto per questi valori. */
+          meridianoCentrale: z.number().min(0).max(180),
+          latMin: z.number(),
+          latMax: z.number(),
+        }),
         z.object({ tipo: z.literal('laea'), centro: LonLatS, larghezzaKm: z.number(), altezzaKm: z.number() }),
       ]),
     }),
