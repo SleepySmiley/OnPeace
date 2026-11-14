@@ -7,6 +7,7 @@ import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from '.
 import { flashLevel } from './common';
 import { geometryAt, type BoardGeometry } from './geometry';
 import { loadRelief } from './imagery';
+import { onMapLook, ownersInStatic, pulsing } from './maplook';
 
 export interface PainterEvents {
   onHover(id: string | null): void;
@@ -59,6 +60,7 @@ export class BoardPainter {
     this.listen();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
+    this.off.push(onMapLook(() => this.renderStatic()));
     this.resize();
     const id = geo.board.id;
     if (!reliefs.has(id)) reliefs.set(id, loadRelief(geo.board).catch(() => null));
@@ -85,7 +87,7 @@ export class BoardPainter {
     const owners = key !== this.ownersKey;
     this.ownersKey = key;
     // lo strato fisso di alcuni stili è colorato coi padroni (Vetro): solo lì va rifatto se cambiano
-    if (owners && this.style.ownersInStatic) this.renderStatic();
+    if (owners && (this.style.ownersInStatic || ownersInStatic())) this.renderStatic();
     else this.requestFrame();
   }
 
@@ -277,6 +279,8 @@ export class BoardPainter {
     // lampi delle battaglie: si continua a disegnare finché non si sono spenti
     const now = performance.now();
     if ([...(this.state.flashes?.keys() ?? [])].some((id) => flashLevel(this.state, id, now) > 0)) this.requestFrame();
+    // contorno che pulsa sui territori su cui si può agire
+    else if (pulsing() && (this.state.active || (this.state.selected && this.state.arrows))) this.requestFrame();
   }
 
   private requestFrame(): void {

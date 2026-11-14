@@ -1,0 +1,19 @@
+/* Pagina di prova della mappa: il pannello delle scelte, una riga per domanda. */
+
+.mp-dock {
+  width: 330px;
+  gap: 8px;
+}
+
+.mp-row {
+  display: grid;
+  gap: 3px;
+}
+
+.mp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}

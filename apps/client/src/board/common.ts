@@ -115,6 +115,12 @@ export function shade(hex: string, t: number): string {
   const c = (v: number) => Math.round(v + (target - v) * k);
   return `rgb(${c(r)}, ${c(g)}, ${c(b)})`;
 }
+/** Mescola due colori #rrggbb: t = 0 dà `a`, t = 1 dà `b`. */
+export function mix(a: string, b: string, t: number): string {
+  const ca = hexRgb(a);
+  const cb = hexRgb(b);
+  return `#${ca.map((v, i) => Math.round(v + (cb[i]! - v) * t).toString(16).padStart(2, '0')).join('')}`;
+}
 export function luminance(hex: string): number {
   const v = hexRgb(hex).map((c) => {
     const s = c / 255;
@@ -273,6 +279,111 @@ export function routePath(route: BoardGeometry['routes'][number]): Path2D {
   }
   return path;
 }
+
+// ---------------------------------------------------------------- leggibilità (prove di mappa.html)
+
+/** Le terre di ogni continente in un percorso solo (per ritagliarci dentro), una volta per tabellone. */
+const lands = new WeakMap<BoardGeometry, Map<string, Path2D>>();
+export function continentLand(geo: BoardGeometry): Map<string, Path2D> {
+  let done = lands.get(geo);
+  if (done) return done;
+  done = new Map();
+  for (const t of geo.board.territories) {
+    let p = done.get(t.continent);
+    if (!p) done.set(t.continent, (p = new Path2D()));
+    p.addPath(geo.paths.get(t.id)!);
+  }
+  lands.set(geo, done);
+  return done;
+}
+
+/** Il bordo di ogni continente: le sue coste e i confini con gli altri continenti (con le coste di tutti: si ritaglia). */
+const edgesOf = new WeakMap<BoardGeometry, Map<string, Path2D>>();
+export function continentEdges(geo: BoardGeometry): Map<string, Path2D> {
+  let done = edgesOf.get(geo);
+  if (done) return done;
+  done = new Map();
+  for (const c of geo.board.continents) {
+    const p = new Path2D();
+    p.addPath(geo.coast);
+    for (const b of geo.borders) {
+      if (b.frontier && (geo.continentOf.get(b.a) === c.id || geo.continentOf.get(b.b) === c.id)) p.addPath(b.path);
+    }
+    done.set(c.id, p);
+  }
+  edgesOf.set(geo, done);
+  return done;
+}
+
+/** Fascia larga `w` (unità del contesto) lungo il contorno, solo all'interno del percorso. */
+export function innerBand(ctx: CanvasRenderingContext2D, path: Path2D, w: number, color: string, edges: Path2D = path) {
+  ctx.save();
+  ctx.clip(path, 'evenodd');
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2 * w;
+  ctx.strokeStyle = color;
+  ctx.stroke(edges);
+  ctx.restore();
+}
+
+/** Righe diagonali di un colore su fondo trasparente: piastrella da 12 px schermo, disegnata al doppio. */
+const stripes = new Map<string, HTMLCanvasElement>();
+export function stripeTile(color: string, width = 4.5): HTMLCanvasElement {
+  const k = `${color}|${width}`;
+  let tile = stripes.get(k);
+  if (tile) return tile;
+  tile = document.createElement('canvas');
+  tile.width = tile.height = 24;
+  const g = tile.getContext('2d')!;
+  g.strokeStyle = color;
+  g.lineWidth = width * 2;
+  g.lineCap = 'square';
+  for (const o of [-24, 0, 24]) {
+    g.beginPath();
+    g.moveTo(o, 24);
+    g.lineTo(o + 24, 0);
+    g.stroke();
+  }
+  stripes.set(k, tile);
+  return tile;
+}
+
+/** Riempie un territorio di righe (coordinate mappa): la piastrella resta della stessa misura sullo schermo. */
+export function fillStripes(env: PaintEnv, path: Path2D, color: string, alpha: number, width?: number) {
+  const { ctx, view } = env;
+  const pattern = ctx.createPattern(stripeTile(color, width), 'repeat')!;
+  pattern.setTransform(new DOMMatrix().scale(0.5 / view.scale));
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = pattern;
+  ctx.fill(path, 'evenodd');
+  ctx.restore();
+}
+
+/** Territori sbiaditi: tolta buona parte del colore (si capisce ancora di chi sono) e un velo sopra. Coordinate mappa. */
+export function fadeTerritories(env: PaintEnv, ids: Iterable<string>, wash: string) {
+  const { ctx, geo } = env;
+  ctx.save();
+  ctx.globalCompositeOperation = 'saturation';
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = '#808080';
+  const list = [...ids];
+  for (const id of list) ctx.fill(geo.paths.get(id)!, 'evenodd');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = wash;
+  for (const id of list) ctx.fill(geo.paths.get(id)!, 'evenodd');
+  ctx.restore();
+}
+
+/** Territori su cui si può agire: quelli non spenti, se qualcosa è spento. */
+export function litTerritories(state: BoardState, all: readonly { id: string }[], dim: ReadonlySet<string>): string[] {
+  if (dim.size === 0) return [];
+  return all.map((t) => t.id).filter((id) => !dim.has(id) && id !== state.selected);
+}
+
+/** Intensità del contorno che pulsa (0..1), un respiro ogni 1,4 secondi. */
+export const pulseLevel = (now: number) => 0.5 + 0.5 * Math.sin((now / 1400) * Math.PI * 2);
 
 /** Piastrella di rumore (grana), generata una volta per tinta. */
 const noiseTiles = new Map<string, HTMLCanvasElement>();

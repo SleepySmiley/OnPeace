@@ -6,12 +6,21 @@
 import { drawTankToken, type TankTheme } from '../tanks';
 import {
   clamp,
+  continentEdges,
+  continentLand,
   dimmed,
+  fadeTerritories,
+  fillStripes,
   flashLevel,
+  innerBand,
+  litTerritories,
+  mix,
   noiseTile,
   pendingBadge,
   placeLabels,
+  pulseLevel,
   qPoint,
+  rgba,
   routePath,
   selectionArrows,
   shade,
@@ -24,9 +33,12 @@ import {
   type Rect,
 } from '../common';
 import { geometryAt } from '../geometry';
+import { mapLook } from '../maplook';
 
 const SERIF = '"IM Fell English SC", Georgia, serif';
 const INK = '#2b2219';
+/** Carta della plancia. */
+const PAPER = '#efe6cf';
 
 /** Carri sulla carta: contorno d'inchiostro, cingoli scuri, ombra sotto. */
 const TANK_THEME: TankTheme = {
@@ -174,7 +186,7 @@ export const classico: BoardStyle = {
   fonts: [`400 16px ${SERIF}`],
 
   paintStatic(env: PaintEnv) {
-    const { ctx, geo, view, dpr, assets } = env;
+    const { ctx, geo, view, dpr, assets, state } = env;
     const { width: W, height: H } = geo;
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
@@ -224,14 +236,23 @@ export const classico: BoardStyle = {
     ctx.fillStyle = '#93bccb';
     ctx.fill(geo.land, 'evenodd');
 
-    // territori nella tinta del continente, ognuno appena diverso dal vicino
+    // territori nella tinta del continente, ognuno appena diverso dal vicino; a seconda della prova,
+    // col colore del padrone pieno, sul bordo o a righe
     const counter = new Map<string, number>();
+    const look = mapLook.owner;
     for (const t of geo.board.territories) {
       const k = counter.get(t.continent) ?? 0;
       counter.set(t.continent, k + 1);
       const base = CONTINENT[t.continent] ?? '#bbbbbb';
-      ctx.fillStyle = shade(base, [0, 0.08, -0.06, 0.14, -0.1][k % 5]!);
-      ctx.fill(geo.paths.get(t.id)!, 'evenodd');
+      const path = geo.paths.get(t.id)!;
+      const owner = look === 'now' ? undefined : state.owners.get(t.id);
+      ctx.fillStyle = owner && look === 'fill' ? mix(owner, PAPER, 0.3) : shade(base, [0, 0.08, -0.06, 0.14, -0.1][k % 5]!);
+      ctx.fill(path, 'evenodd');
+      if (owner && look === 'rim') {
+        ctx.fillStyle = rgba(owner, 0.14);
+        ctx.fill(path, 'evenodd');
+        innerBand(ctx, path, 4.2 * Math.min(1.5, Math.sqrt(z)) * px, owner);
+      } else if (owner && look === 'hatch') fillStripes(env, path, owner, 0.58);
     }
     if (assets.relief) {
       ctx.save();
@@ -244,14 +265,39 @@ export const classico: BoardStyle = {
 
     // confini
     ctx.lineCap = 'round';
+    const cont = mapLook.continent;
+    const grow = Math.min(1.7, Math.sqrt(z));
     for (const b of geo.borders) {
-      ctx.lineWidth = (b.frontier ? 2.6 : 1.1) * Math.min(1.7, Math.sqrt(z)) * px;
-      ctx.strokeStyle = b.frontier ? INK : 'rgba(43, 34, 25, 0.8)';
+      const frontier = b.frontier && cont === 'line';
+      ctx.lineWidth = (frontier ? 2.6 : 1.1) * grow * px;
+      ctx.strokeStyle = frontier ? INK : 'rgba(43, 34, 25, 0.8)';
       ctx.stroke(b.path);
     }
-    ctx.lineWidth = 1.5 * Math.min(1.7, Math.sqrt(z)) * px;
+    ctx.lineWidth = 1.5 * grow * px;
     ctx.strokeStyle = INK;
     ctx.stroke(geo.coast);
+    if (cont === 'ribbon') {
+      // nastro del colore del continente lungo coste e confini con gli altri continenti
+      const lands = continentLand(geo);
+      const edges = continentEdges(geo);
+      for (const c of geo.board.continents) innerBand(ctx, lands.get(c.id)!, 4.6 * grow * px, shade(CONTINENT[c.id] ?? '#bbbbbb', -0.22), edges.get(c.id)!);
+      ctx.lineWidth = 1.6 * grow * px;
+      ctx.strokeStyle = INK;
+      for (const b of geo.borders) if (b.frontier) ctx.stroke(b.path);
+      ctx.stroke(geo.coast);
+    } else if (cont === 'gap') {
+      // canale di mare tra un continente e l'altro, coi due argini d'inchiostro
+      ctx.lineCap = 'butt';
+      for (const [w, color] of [
+        [9, INK],
+        [6, '#9cc4d0'],
+      ] as const) {
+        ctx.lineWidth = w * grow * px;
+        ctx.strokeStyle = color;
+        for (const b of geo.borders) if (b.frontier) ctx.stroke(b.path);
+      }
+      ctx.lineCap = 'round';
+    }
 
     // rotte
     for (const route of geo.routes) {
@@ -341,11 +387,28 @@ export const classico: BoardStyle = {
     const colorOf = (id: string) => state.owners.get(id) ?? '#888888';
 
     toMap(env);
-    // fuori gioco adesso: un velo d'inchiostro
+    // fuori gioco adesso: un velo d'inchiostro, oppure (prove) sbiaditi verso la carta
     const dim = dimmed(state, geo.board.territories);
-    ctx.fillStyle = 'rgba(43, 34, 25, 0.34)';
-    for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    const act = mapLook.active;
+    if (act === 'veil') {
+      ctx.fillStyle = 'rgba(43, 34, 25, 0.34)';
+      for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    } else if (act === 'fade' || act === 'both') fadeTerritories(env, dim, 'rgba(239, 230, 207, 0.32)');
     const now = performance.now();
+    if (act === 'pulse' || act === 'both') {
+      // contorno dei territori su cui si può agire: inchiostro e un filo chiaro (che pulsa)
+      const k = act === 'pulse' ? pulseLevel(now) : 1;
+      const lit = litTerritories(state, geo.board.territories, dim);
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.45 + 0.55 * k;
+      ctx.lineWidth = (act === 'pulse' ? 4.4 : 3.4) * px;
+      ctx.strokeStyle = INK;
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.lineWidth = (act === 'pulse' ? 2.2 : 1.6) * px;
+      ctx.strokeStyle = '#fff3c8';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.globalAlpha = 1;
+    }
     for (const id of state.flashes?.keys() ?? []) {
       const k = flashLevel(state, id, now);
       if (k <= 0) continue;

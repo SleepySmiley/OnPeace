@@ -6,10 +6,18 @@
 import { drawTankToken, type TankTheme } from '../tanks';
 import {
   clamp,
+  continentEdges,
+  continentLand,
   dimmed,
+  fadeTerritories,
+  fillStripes,
   flashLevel,
+  innerBand,
+  litTerritories,
+  mix,
   pendingBadge,
   placeLabels,
+  pulseLevel,
   rgba,
   routePath,
   selectionArrows,
@@ -22,8 +30,15 @@ import {
   type PaintEnv,
   type Rect,
 } from '../common';
+import { mapLook } from '../maplook';
+import { CONTINENT } from './classico';
 
 const FONT = '"Geist", system-ui, sans-serif';
+
+/** Tinte dei continenti sul vetro: le stesse dell'atlante, scure e spente (i giocatori sono accesi). */
+const DARK_CONTINENT = Object.fromEntries(Object.entries(CONTINENT).map(([id, c]) => [id, mix(c, '#2a2d33', 0.58)]));
+/** Le stesse, chiare, per i nastri dei continenti. */
+const LIGHT_CONTINENT = Object.fromEntries(Object.entries(CONTINENT).map(([id, c]) => [id, mix(c, '#ffffff', 0.12)]));
 
 /** Carri sul vetro: contorno chiaro, cingoli quasi neri, ombra scura (i territori sono del colore del padrone). */
 const TANK_THEME: TankTheme = {
@@ -78,9 +93,14 @@ export const vetro: BoardStyle = {
     ctx.fill(geo.land, 'evenodd');
     ctx.restore();
 
-    // territori: colore pieno con una luce dall'alto
+    // territori: colore pieno con una luce dall'alto; nelle prove i liberi prendono la tinta scura
+    // del continente, e il padrone può stare sul bordo o a righe sopra quella tinta
+    const look = mapLook.owner;
+    const z = zoomOf(env);
     for (const t of geo.board.territories) {
-      const color = state.owners.get(t.id) ?? '#3a3d44';
+      const owner = state.owners.get(t.id);
+      const tint = look === 'now' ? '#3a3d44' : (DARK_CONTINENT[t.continent] ?? '#3a3d44');
+      const color = owner && (look === 'now' || look === 'fill') ? owner : tint;
       const path = geo.paths.get(t.id)!;
       const [, y0, , y1] = geo.boxes.get(t.id)!;
       const g = ctx.createLinearGradient(0, y0, 0, y1);
@@ -88,6 +108,11 @@ export const vetro: BoardStyle = {
       g.addColorStop(1, shade(color, -0.16));
       ctx.fillStyle = g;
       ctx.fill(path, 'evenodd');
+      if (owner && look === 'rim') {
+        ctx.fillStyle = rgba(owner, 0.2);
+        ctx.fill(path, 'evenodd');
+        innerBand(ctx, path, 4 * Math.min(1.5, Math.sqrt(z)) * px, owner);
+      } else if (owner && look === 'hatch') fillStripes(env, path, owner, 0.6, 3.5);
     }
     if (assets.relief) {
       ctx.save();
@@ -115,6 +140,24 @@ export const vetro: BoardStyle = {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
     ctx.stroke(geo.coast);
     ctx.restore();
+    const cont = mapLook.continent;
+    const grow = Math.min(1.6, Math.sqrt(z));
+    if (cont === 'ribbon') {
+      // nastro luminoso del colore del continente lungo coste e confini con gli altri continenti
+      const lands = continentLand(geo);
+      const edges = continentEdges(geo);
+      for (const c of geo.board.continents) innerBand(ctx, lands.get(c.id)!, 4.2 * grow * px, LIGHT_CONTINENT[c.id] ?? '#cccccc', edges.get(c.id)!);
+      ctx.lineWidth = 1.2 * px;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+      for (const b of geo.borders) if (b.frontier) ctx.stroke(b.path);
+    } else if (cont === 'gap') {
+      // canale scuro tra un continente e l'altro: i continenti sono lastre separate
+      ctx.lineCap = 'butt';
+      ctx.lineWidth = 7 * grow * px;
+      ctx.strokeStyle = '#0d0e12';
+      for (const b of geo.borders) if (b.frontier) ctx.stroke(b.path);
+      ctx.lineCap = 'round';
+    }
 
     // rotte via mare: puntini
     ctx.lineCap = 'round';
@@ -156,9 +199,26 @@ export const vetro: BoardStyle = {
     // (nella pagina di prova, col territorio scelto: tutto tranne lui e i suoi confinanti)
     const focus = state.selected && state.arrows === undefined ? new Set([state.selected, ...(geo.neighbours.get(state.selected) ?? [])]) : null;
     const dim = focus ? new Set(geo.board.territories.map((t) => t.id).filter((id) => !focus.has(id))) : dimmed(state, geo.board.territories);
-    ctx.fillStyle = 'rgba(6, 7, 10, 0.5)';
-    for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    const act = mapLook.active;
+    if (act === 'veil') {
+      ctx.fillStyle = 'rgba(6, 7, 10, 0.5)';
+      for (const id of dim) ctx.fill(geo.paths.get(id)!, 'evenodd');
+    } else if (act === 'fade' || act === 'both') fadeTerritories(env, dim, 'rgba(8, 9, 12, 0.36)');
     const now = performance.now();
+    if (act === 'pulse' || act === 'both') {
+      // contorno bianco dei territori su cui si può agire (che pulsa), con un solco scuro sotto
+      const k = act === 'pulse' ? pulseLevel(now) : 1;
+      const lit = litTerritories(state, geo.board.territories, dim);
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.4 + 0.6 * k;
+      ctx.lineWidth = (act === 'pulse' ? 4 : 3) * px;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.lineWidth = (act === 'pulse' ? 2 : 1.4) * px;
+      ctx.strokeStyle = '#ffffff';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.globalAlpha = 1;
+    }
     for (const id of state.flashes?.keys() ?? []) {
       const k = flashLevel(state, id, now);
       if (k <= 0) continue;
