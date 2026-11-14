@@ -67,6 +67,8 @@ export interface GameState {
   order: string[];
   territories: Record<string, TerritoryState>;
   phase: Phase;
+  /** Preparazione a giri: chi deve piazzare adesso (null se tutti insieme o finita). */
+  setupPlayer: string | null;
   turn: TurnState | null;
   deck: Card[];
   discard: Card[];
@@ -98,7 +100,7 @@ export const ActionS = z.discriminatedUnion('kind', [
 export type Action = z.infer<typeof ActionS>;
 
 export type GameEvent =
-  | { type: 'setup-done'; player: string }
+  | { type: 'setup-place'; player: string; placements: Record<string, number>; left: number }
   | { type: 'turn'; player: string; number: number; reinforcements: number }
   | { type: 'set'; player: string; cards: Card[]; armies: number }
   | { type: 'reinforce'; player: string; placements: Record<string, number> }

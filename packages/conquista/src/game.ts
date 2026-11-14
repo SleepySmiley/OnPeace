@@ -75,6 +75,7 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
     order: [],
     territories: {},
     phase: 'setup',
+    setupPlayer: null,
     turn: null,
     deck: [],
     discard: [],
@@ -93,14 +94,36 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
       state.territories[tid] = { owner: state.order[i % state.order.length]!, armies: 1 };
     });
     const initial = rules.initialArmies[String(players.length)]!;
-    for (const p of state.players) p.setupLeft = initial - ownedBy(state, p.id).length;
+    for (const p of state.players) {
+      p.setupLeft = initial - ownedBy(state, p.id).length;
+      p.setupDone = p.setupLeft === 0;
+    }
     state.deck = shuffle(buildDeck(ctx), rng);
     if (mode === 'objectives') {
       const dealt = dealObjectives(ctx, state.order, rng);
       for (const p of state.players) p.objective = dealt.get(p.id)!;
     }
   });
+  if (rules.setup.placement === 'rounds') state.setupPlayer = nextToPlace(state, null);
+  // nessuno ha armate da piazzare (regole con armate iniziali minime): si parte subito
+  if (state.players.every((p) => p.setupDone)) finishSetupIfReady(ctx, state, []);
   return state;
+}
+
+/** Preparazione a giri: il prossimo, in ordine di gioco dopo `after`, che ha ancora armate da piazzare. */
+function nextToPlace(state: GameState, after: string | null): string | null {
+  const start = after === null ? -1 : state.order.indexOf(after);
+  for (let k = 1; k <= state.order.length; k++) {
+    const id = state.order[(start + k) % state.order.length]!;
+    if (player(state, id).setupLeft > 0) return id;
+  }
+  return null;
+}
+
+/** Armate da piazzare adesso nella preparazione: un giro, o tutte se si piazza tutti insieme. */
+export function setupStep(ctx: GameContext, state: GameState, id: string): number {
+  const left = state.players.find((p) => p.id === id)?.setupLeft ?? 0;
+  return ctx.rules.setup.placement === 'rounds' ? Math.min(ctx.rules.setup.perRound, left) : left;
 }
 
 // ---------------------------------------------------------------- turni
@@ -138,7 +161,9 @@ function endTurn(ctx: GameContext, state: GameState, events: GameEvent[]) {
 }
 
 function finishSetupIfReady(ctx: GameContext, state: GameState, events: GameEvent[]) {
-  if (state.players.every((p) => p.setupDone)) startTurn(ctx, state, state.order[0]!, events);
+  if (!state.players.every((p) => p.setupDone)) return;
+  state.setupPlayer = null;
+  startTurn(ctx, state, state.order[0]!, events);
 }
 
 /** Vittoria: obiettivo raggiunto da chi gioca, tutto il mondo conquistato o un solo superstite. */
@@ -216,12 +241,16 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
 
   if (action.kind === 'setup-place') {
     assertRule(state.phase === 'setup', 'La preparazione è già finita.');
-    assertRule(!me.setupDone, 'Hai già piazzato le armate iniziali.');
-    checkPlacements(ctx, state, id, action.placements, me.setupLeft);
+    assertRule(!me.setupDone, 'Hai già piazzato tutte le armate iniziali.');
+    const rounds = ctx.rules.setup.placement === 'rounds';
+    assertRule(!rounds || state.setupPlayer === id, 'Non tocca a te piazzare.');
+    const step = setupStep(ctx, state, id);
+    checkPlacements(ctx, state, id, action.placements, step);
     for (const [tid, n] of Object.entries(action.placements)) state.territories[tid]!.armies += n;
-    me.setupLeft = 0;
-    me.setupDone = true;
-    events.push({ type: 'setup-done', player: id });
+    me.setupLeft -= step;
+    me.setupDone = me.setupLeft === 0;
+    events.push({ type: 'setup-place', player: id, placements: action.placements, left: me.setupLeft });
+    if (rounds) state.setupPlayer = nextToPlace(state, id);
     finishSetupIfReady(ctx, state, events);
     return { state, events };
   }
@@ -387,8 +416,11 @@ export function timeout(ctx: GameContext, prev: GameState): ActionResult {
   const events: GameEvent[] = [];
   if (state.phase === 'over') return { state, events };
   if (state.phase === 'setup') {
-    for (const p of state.players.filter((x) => !x.setupDone)) {
-      const r = applyAction(ctx, state, p.id, { kind: 'setup-place', placements: autoPlace(ctx, state, p.id, p.setupLeft) });
+    // a giri scade solo il giro di chi deve piazzare; tutti insieme, quello di chi non ha confermato
+    const late = state.setupPlayer ? [state.setupPlayer] : state.players.filter((x) => !x.setupDone).map((x) => x.id);
+    for (const pid of late) {
+      const placements = autoPlace(ctx, state, pid, setupStep(ctx, state, pid));
+      const r = applyAction(ctx, state, pid, { kind: 'setup-place', placements });
       state = r.state;
       events.push(...r.events);
     }

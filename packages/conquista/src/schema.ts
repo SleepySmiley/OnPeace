@@ -19,6 +19,12 @@ export const ConquestRules = z.strictObject({
   players: z.strictObject({ min: Int.min(2), max: Int.min(2).max(8) }),
   /** Armate iniziali per numero di giocatori ("3": 38). */
   initialArmies: z.record(z.string().regex(/^\d$/), Int.positive()),
+  setup: z.strictObject({
+    /** A giri come al tavolo (in ordine di gioco, poche armate per volta) o tutti insieme. */
+    placement: z.enum(['rounds', 'simultaneous']),
+    /** Armate per giro (solo a giri). */
+    perRound: Int.min(1),
+  }),
   reinforcements: z.strictObject({
     /** Un'armata ogni `divisor` territori... */
     divisor: Int.positive(),
@@ -53,6 +59,7 @@ export const ConquestRules = z.strictObject({
   }),
   timers: z.strictObject({
     turnSeconds: Int.min(10),
+    /** Tempo per ogni giro di piazzamento (a giri) o per tutto il piazzamento (tutti insieme). */
     setupSeconds: Int.min(10),
   }),
   modes: z.array(GameMode).min(1),

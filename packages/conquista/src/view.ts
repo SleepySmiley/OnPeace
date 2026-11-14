@@ -28,6 +28,7 @@ export interface GameView {
   order: string[];
   territories: Record<string, TerritoryState>;
   phase: Phase;
+  setupPlayer: string | null;
   turn: TurnState | null;
   deckCount: number;
   winner: string | null;
@@ -56,6 +57,7 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
     order: state.order,
     territories: state.territories,
     phase: state.phase,
+    setupPlayer: state.setupPlayer,
     turn: state.turn,
     deckCount: state.deck.length,
     winner: state.winner,

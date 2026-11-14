@@ -6,10 +6,14 @@ import { createContext, createGame, type GameContext, type GameMode, type GameSt
 const data = (path: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../../data/${path}`, import.meta.url)), 'utf8'));
 
 let cached: GameContext | null = null;
-/** Contesto vero: tabellone del mondo, regole e obiettivi da data/. */
-export function worldContext(): GameContext {
-  cached ??= createContext(BoardDef.parse(data('territori/mondo.json')), data('conquista/regole.json'), data('conquista/obiettivi/mondo.json'));
-  return cached;
+/** Contesto vero: tabellone del mondo, regole e obiettivi da data/ (con eventuali regole cambiate). */
+export function worldContext(patch?: (rules: Record<string, unknown>) => void): GameContext {
+  if (!patch && cached) return cached;
+  const rules = data('conquista/regole.json');
+  patch?.(rules);
+  const ctx = createContext(BoardDef.parse(data('territori/mondo.json')), rules, data('conquista/obiettivi/mondo.json'));
+  if (!patch) cached = ctx;
+  return ctx;
 }
 
 export const PLAYERS = ['ada', 'bruno', 'carla', 'dario', 'elena', 'franco'].map((id, i) => ({
@@ -18,8 +22,8 @@ export const PLAYERS = ['ada', 'bruno', 'carla', 'dario', 'elena', 'franco'].map
   color: ['#2f5fb3', '#c8302c', '#2e8b47', '#e2b72f', '#7b3fa0', '#e07a1f'][i]!,
 }));
 
-export function newGame(n = 4, mode: GameMode = 'objectives', seed = 1234): GameState {
-  return createGame(worldContext(), PLAYERS.slice(0, n), mode, seed);
+export function newGame(n = 4, mode: GameMode = 'objectives', seed = 1234, ctx = worldContext()): GameState {
+  return createGame(ctx, PLAYERS.slice(0, n), mode, seed);
 }
 
 /** Copia con alcune modifiche ai territori: { id: [padrone, armate] }. */
@@ -39,6 +43,7 @@ export function skipSetup(ctx: GameContext, state: GameState): GameState {
     p.setupDone = true;
   }
   s.phase = 'reinforce';
+  s.setupPlayer = null;
   s.turn = { player: s.order[0]!, number: 1, reinforcements: 3, conquered: false, occupation: null, fortifyLeft: ctx.rules.fortify.moves };
   return s;
 }

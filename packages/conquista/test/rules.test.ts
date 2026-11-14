@@ -58,20 +58,59 @@ describe('nuova partita', () => {
   });
 });
 
-describe('preparazione', () => {
-  it('accetta solo il totale esatto sui propri territori, poi comincia il primo turno', () => {
-    let s = newGame(2, 'objectives', 7);
-    const [a, b] = s.order as [string, string];
-    const mineA = ownedBy(s, a);
-    const left = s.players.find((p) => p.id === a)!.setupLeft;
-    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA[0]!]: left - 1 } })).toThrow(/esattamente/);
-    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: left } })).toThrow(/non è tuo/);
-    s = applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA[0]!]: left } }).state;
+describe('preparazione a giri', () => {
+  it('in ordine di gioco, 3 armate per volta, solo sui propri territori', () => {
+    let s = newGame(3, 'objectives', 7);
+    const [a, b, c] = s.order as [string, string, string];
+    expect(s.setupPlayer).toBe(a);
+    const mineA = ownedBy(s, a)[0]!;
+    expect(() => applyAction(ctx, s, b, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/Non tocca a te/);
+    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2 } })).toThrow(/esattamente 3/);
+    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/non è tuo/);
+    const before = s.players.find((p) => p.id === a)!.setupLeft;
+    const r = applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2, [ownedBy(s, a)[1]!]: 1 } });
+    s = r.state;
+    expect(s.players.find((p) => p.id === a)!.setupLeft).toBe(before - 3);
+    expect(r.events[0]).toMatchObject({ type: 'setup-place', player: a, left: before - 3 });
+    expect(s.setupPlayer).toBe(b);
+    // il tempo scaduto piazza solo il giro di chi tocca
+    s = timeout(ctx, s).state;
+    expect(s.setupPlayer).toBe(c);
     expect(s.phase).toBe('setup');
-    const r = timeout(ctx, s);
+  });
+
+  it('si va avanti a giri finché le armate finiscono, poi comincia il primo turno', () => {
+    let s = newGame(4, 'conquest', 3);
+    let steps = 0;
+    while (s.phase === 'setup') {
+      s = timeout(ctx, s).state;
+      steps++;
+    }
+    const per = ctx.rules.initialArmies['4']!;
+    const total = Object.values(s.territories).reduce((n, t) => n + t.armies, 0);
+    // 4 giocatori, armate iniziali meno i territori già coperti, 3 alla volta
+    expect(steps).toBe(s.players.reduce((n, p) => n + Math.ceil((per - ownedBy(s, p.id).length) / 3), 0));
+    expect(total).toBe(per * 4);
+    expect(s.phase).toBe('reinforce');
+    expect(s.turn!.player).toBe(s.order[0]);
+    expect(s.setupPlayer).toBeNull();
+  });
+});
+
+describe('preparazione tutti insieme (variante)', () => {
+  const quick = worldContext((r) => {
+    (r.setup as { placement: string }).placement = 'simultaneous';
+  });
+  it('ognuno piazza tutto in una volta, senza turni', () => {
+    let s = newGame(2, 'objectives', 7, quick);
+    const [a, b] = s.order as [string, string];
+    expect(s.setupPlayer).toBeNull();
+    const leftB = s.players.find((p) => p.id === b)!.setupLeft;
+    s = applyAction(quick, s, b, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: leftB } }).state;
+    expect(s.phase).toBe('setup');
+    const r = timeout(quick, s);
     expect(r.state.phase).toBe('reinforce');
-    expect(r.state.turn!.player).toBe(s.order[0]);
-    expect(r.events.some((e) => e.type === 'turn')).toBe(true);
+    expect(r.state.turn!.player).toBe(a);
   });
 });
 

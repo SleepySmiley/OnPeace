@@ -63,7 +63,8 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
 }
 
 function play(players: number, mode: GameMode, seed: number) {
-  let s = timeout(ctx, newGame(players, mode, seed)).state;
+  let s = newGame(players, mode, seed);
+  while (s.phase === 'setup') s = timeout(ctx, s).state;
   const cards = cardTotal(s);
   const rng = createRng(seed * 7 + 1);
   let steps = 0;
