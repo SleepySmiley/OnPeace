@@ -50,7 +50,7 @@ function infoFor(caseId: string, skin: Skin): ObjectiveInfo {
   const fallback = defs.find((x) => x.id === d.fallback);
   return {
     kind: 'eliminate',
-    target: { name: 'Marco', color: colors[1]! },
+    target: { name: 'Marco', color: colors[4]! },
     fallback: fallback && fallback.kind === 'territories' ? fallback.count : 26,
     text: d.text.replace('{giocatore}', 'Marco'),
   };
@@ -94,7 +94,7 @@ function Page() {
   });
 
   const info = useMemo(() => infoFor(obj, skin), [obj, skin]);
-  const props: CardProps = { info, geo, board, skin, me: { name: 'Tu', color: STYLES[skin].playerColors[0]! } };
+  const props: CardProps = { info, geo, board, skin, me: { name: 'Lupo', color: STYLES[skin].playerColors[0]! } };
   const { Card } = DIRECTIONS.find((d) => d.id === dir)!;
 
   return (

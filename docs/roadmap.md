@@ -27,7 +27,7 @@ Tre proposte, ognuna nei due temi e per ogni tipo di obiettivo (continenti, uno 
 
 Quando l'obiettivo è un numero di territori si vedono le pedine da contare. Quando è eliminare qualcuno si vede la sua pedina nel mirino.
 
-**Stato.** Il codice comune c'è già in `apps/client/src/mockup/`: la mini-mappa disegnata dal tabellone vero, le pedine, la tabella dei dati e le tre carte. Mancano lo stile (`carta.css`) e la pagina `carta.html`.
+**Stato.** Le tre proposte si provano su `carta.html` (con `npm run dev`: http://localhost:5173/carta.html). Tasti: 1-3 proposta, T tema, frecce per cambiare obiettivo, R rifà l'animazione. Si aspetta la scelta.
 
 **Dopo la scelta.** Il server deve mandare l'obiettivo con i suoi dati (tipo, continenti, numeri, bersaglio), non solo la frase, perché la carta li deve disegnare. La versione piccola nel pannello delle carte usa lo stesso disegno.
 
