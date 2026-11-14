@@ -12,7 +12,6 @@
   "dependencies": {
     "@onpeace/engine": "*",
     "@onpeace/protocol": "*",
-    "d3-contour": "^4.0.3",
     "pixi.js": "^8.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

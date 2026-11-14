@@ -6,6 +6,7 @@ import boardJson from '@data/territori/mondo.json';
 import { BoardDef } from '@onpeace/engine';
 import { PLAYER_COLORS } from '@onpeace/protocol';
 import { buildGeometry } from './geometry';
+import { loadEarthBase } from './imagery';
 import { BOARD_COLORS, paintOverlay, paintStatic, type BoardState, type BoardView } from './paint';
 
 // ---------------------------------------------------------------- partita di prova
@@ -41,6 +42,7 @@ const ctx = canvas.getContext('2d')!;
 const cache = document.createElement('canvas');
 const cacheCtx = cache.getContext('2d')!;
 let cacheView: BoardView | null = null;
+let earth: HTMLCanvasElement | null = null;
 let dpr = 1;
 let view: BoardView = { scale: 1, x: 0, y: 0 };
 let fitScale = 1;
@@ -50,8 +52,8 @@ let idleTimer = 0;
 function fitView(): BoardView {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const margin = 150; // cornice compresa
-  const scale = Math.min((w - 32) / (geo.width + margin), (h - 32) / (geo.height + margin));
+  // spazio attorno per le coordinate e gli angolari della cornice
+  const scale = Math.min((w - 110) / geo.width, (h - 90) / geo.height);
   return { scale, x: (w - geo.width * scale) / 2, y: (h - geo.height * scale) / 2 };
 }
 
@@ -68,7 +70,7 @@ function resize() {
 }
 
 function renderStatic() {
-  paintStatic(cacheCtx, geo, view, state, dpr, fitScale);
+  paintStatic(cacheCtx, geo, view, state, dpr, fitScale, earth);
   cacheView = { ...view };
   requestFrame();
 }
@@ -181,8 +183,7 @@ window.addEventListener('resize', resize);
 const playersEl = document.querySelector('.hud-players') as HTMLElement;
 const cardEl = document.querySelector('.hud-card') as HTMLElement;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-const chip = (color: string) =>
-  `<span class="chip" style="background: radial-gradient(circle at 35% 30%, ${color}, ${color} 55%, #000 140%)"></span>`;
+const chip = (color: string) => `<span class="chip" style="--c: ${color}"></span>`;
 
 function renderPlayers() {
   const rows = players
@@ -209,18 +210,34 @@ function showCard(id: string | null) {
   const neighbours = (geo.neighbours.get(id) ?? [])
     .map((n) => board.territories.find((x) => x.id === n)!)
     .sort((a, b) => a.name.localeCompare(b.name, 'it'))
-    .map((n) => `<li class="${seaWith.has(n.id) ? 'sea' : ''}">${chip(players[ownerOf.get(n.id)!]!.color)}${esc(n.name)}</li>`)
+    .map((n) => {
+      const enemy = ownerOf.get(n.id) !== ownerOf.get(id);
+      const tags = [seaWith.has(n.id) ? 'via mare' : '', enemy ? `${state.armies.get(n.id) ?? 0} arm.` : 'tuo'].filter(Boolean).join(' · ');
+      return `<li>${chip(players[ownerOf.get(n.id)!]!.color)}<span>${esc(n.name)}</span><span class="tag${enemy ? ' enemy' : ''}">${tags}</span></li>`;
+    })
     .join('');
   cardEl.innerHTML = `
     <p class="name">${esc(t.name)}</p>
     <p class="continent">${esc(continent.name)}, bonus +${continent.bonus}</p>
     <div class="owner">${chip(owner.color)}<span>${esc(owner.name)}</span><span class="armies">${state.armies.get(id) ?? 0}</span></div>
-    <h2>Confina con</h2>
+    <h2>Confinanti</h2>
     <ul>${neighbours}</ul>`;
   cardEl.hidden = false;
 }
 
 // ---------------------------------------------------------------- avvio
-await Promise.all(['300', '500', '600', '700'].map((w) => document.fonts.load(`${w} 16px Archivo`))).catch(() => undefined);
+await Promise.all([
+  document.fonts.load('600 16px "IBM Plex Sans Condensed"'),
+  document.fonts.load('500 16px "IBM Plex Sans Condensed"'),
+  document.fonts.load('600 16px "IBM Plex Mono"'),
+  document.fonts.load('500 16px "IBM Plex Mono"'),
+]).catch(() => undefined);
 renderPlayers();
 resize();
+// la base satellitare arriva dopo: intanto si vede già il tabellone
+loadEarthBase(board)
+  .then((canvas) => {
+    earth = canvas;
+    renderStatic();
+  })
+  .catch((err: unknown) => console.warn(err));

@@ -1,13 +1,13 @@
 :root {
-  --table: #0a1015;
-  --panel: rgba(13, 26, 33, 0.86);
-  --panel-edge: rgba(200, 216, 224, 0.22);
-  --panel-highlight: rgba(243, 247, 249, 0.1);
-  --ink: #eef2f4;
-  --ink-dim: #9fb1bb;
-  --platinum: #a7b3bb;
-  --font: 'Archivo', system-ui, sans-serif;
-  --radius: 10px;
+  --table: #04080b;
+  --panel: rgba(5, 11, 15, 0.9);
+  --panel-edge: rgba(140, 200, 220, 0.2);
+  --grid: rgba(140, 200, 220, 0.9);
+  --ink: #e6eef2;
+  --ink-dim: #8fa5b0;
+  --font: 'IBM Plex Sans Condensed', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --radius: 3px;
 }
 
 * {
@@ -47,25 +47,47 @@ body {
   background: var(--panel);
   border: 1px solid var(--panel-edge);
   border-radius: var(--radius);
-  box-shadow:
-    inset 0 1px 0 var(--panel-highlight),
-    0 14px 40px rgba(2, 6, 9, 0.55);
-  backdrop-filter: blur(10px) saturate(130%);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+/* angolari come sulla cornice della mappa */
+.hud::before,
+.hud::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 0 solid var(--grid);
+  pointer-events: none;
+}
+
+.hud::before {
+  top: -1px;
+  left: -1px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.hud::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
 }
 
 .hud-title {
   top: 16px;
   left: 16px;
-  padding: 12px 16px 13px;
-  max-width: 380px;
+  padding: 11px 14px 12px;
+  max-width: 360px;
 }
 
 .hud-title h1 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-  font-stretch: 118%;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
 }
 
 .hud-title p {
@@ -78,57 +100,61 @@ body {
 .hud-players {
   left: 16px;
   bottom: 16px;
-  padding: 10px 6px;
-  min-width: 220px;
+  padding: 10px 4px 8px;
+  min-width: 240px;
 }
 
 .hud-players h2,
 .hud-card h2 {
   margin: 0 10px 6px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--ink-dim);
 }
 
 .player {
   display: grid;
-  grid-template-columns: 18px 1fr auto auto;
+  grid-template-columns: 22px 1fr auto auto;
+  white-space: nowrap;
   align-items: center;
-  gap: 10px;
-  padding: 5px 10px;
-  border-radius: 7px;
-  font-size: 13.5px;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 14px;
 }
 
 .player .count {
-  font-stretch: 75%;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  font-size: 12px;
   color: var(--ink-dim);
   text-align: right;
 }
 
 .player .count b {
   color: var(--ink);
-  font-weight: 700;
+  font-weight: 600;
 }
 
+/* segnalino come sulla mappa: riquadro col simbolo della fanteria */
 .chip {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--platinum);
-  box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.35),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.6);
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 13px;
+  border: 1px solid rgba(2, 6, 9, 0.9);
+  outline: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(to top right, transparent calc(50% - 0.7px), rgba(2, 6, 9, 0.9) calc(50% - 0.7px), rgba(2, 6, 9, 0.9) calc(50% + 0.7px), transparent calc(50% + 0.7px)),
+    linear-gradient(to bottom right, transparent calc(50% - 0.7px), rgba(2, 6, 9, 0.9) calc(50% - 0.7px), rgba(2, 6, 9, 0.9) calc(50% + 0.7px), transparent calc(50% + 0.7px)),
+    var(--c);
 }
 
 .hud-card {
   right: 16px;
   top: 16px;
-  width: 280px;
-  padding: 14px 16px 16px;
+  width: 290px;
+  padding: 13px 14px 14px;
 }
 
 .hud-card[hidden] {
@@ -137,13 +163,14 @@ body {
 
 .hud-card .name {
   margin: 0;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
-  font-stretch: 118%;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .hud-card .continent {
-  margin: 2px 0 12px;
+  margin: 2px 0 10px;
   font-size: 12.5px;
   color: var(--ink-dim);
 }
@@ -153,48 +180,43 @@ body {
   align-items: center;
   gap: 10px;
   font-size: 14px;
-  padding: 8px 0 12px;
+  padding: 8px 0 11px;
   border-bottom: 1px solid var(--panel-edge);
   margin-bottom: 10px;
 }
 
 .hud-card .owner .armies {
   margin-left: auto;
-  font-stretch: 75%;
-  font-weight: 700;
-  font-size: 18px;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 17px;
 }
 
 .hud-card ul {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: 2px;
 }
 
 .hud-card li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
   align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  padding: 4px 9px 4px 6px;
-  border-radius: 999px;
-  background: rgba(200, 216, 224, 0.08);
-  border: 1px solid rgba(200, 216, 224, 0.14);
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 2px;
 }
 
-.hud-card li .chip {
-  width: 11px;
-  height: 11px;
-  border-width: 1px;
-}
-
-.hud-card li.sea::after {
-  content: 'via mare';
+.hud-card li .tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
   color: var(--ink-dim);
-  font-size: 11px;
+}
+
+.hud-card li .tag.enemy {
+  color: #ff9d8a;
 }
 
 @media (max-width: 760px) {

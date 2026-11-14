@@ -1,12 +1,13 @@
 /**
- * Pittura del tabellone in Canvas 2D. Il look è quello di una plancia da collezione:
- * territori in smalto (cloisonné) incassati tra fili di platino, mare in lacca scura
- * con le linee di profondità incise, rotte via mare come puntinature d'argento.
+ * Pittura del tabellone in Canvas 2D, stile sala operativa: base satellitare notturna,
+ * griglia di latitudine e longitudine, zone di controllo dei giocatori (velatura, tratteggio
+ * e bordo luminoso nel loro colore), segnalini tattici con le armate, frecce d'attacco.
  *
- * Due strati: `paintStatic` (mare, smalto, fili, rotte: cambia solo con la vista o i
- * padroni) e `paintOverlay` (selezione, pedine e nomi: si ridisegna a ogni fotogramma).
+ * Due strati: `paintStatic` (base, griglia, zone, confini, rotte: cambia con la vista o i
+ * padroni) e `paintOverlay` (selezione, frecce, segnalini e nomi: a ogni fotogramma).
  */
 import type { BoardGeometry, Box } from './geometry';
+import { millerFrame } from './imagery';
 
 /** Vista: punto schermo = punto mappa × scale + (x, y), in pixel CSS. */
 export interface BoardView {
@@ -24,46 +25,24 @@ export interface BoardState {
 }
 
 export const BOARD_COLORS = {
-  table: '#0a1015',
-  lacquerTop: '#14303c',
-  lacquerBottom: '#0c1c25',
-  engraving: '200, 216, 224',
-  platinum: '#8e9aa2',
-  platinumLight: '#f3f7f9',
-  platinumDark: '#1d252b',
-  ink: '#eef2f4',
-  inkShadow: '#081015',
-  /** Smalto dei territori senza padrone, per continente. */
-  unowned: {
-    nordamerica: '#5d6b74',
-    sudamerica: '#66707a',
-    europa: '#59676f',
-    africa: '#6a7178',
-    asia: '#5f6d70',
-    oceania: '#646a77',
-  } as Record<string, string>,
+  table: '#04080b',
+  ocean: '#050c12',
+  grid: '140, 200, 220',
+  line: '214, 230, 236',
+  ink: '#e6eef2',
+  inkDim: '#8fa5b0',
+  plate: 'rgba(5, 10, 14, 0.9)',
+  neutral: '#6f7c84',
 };
 
-export const BOARD_FONT = '"Archivo", system-ui, sans-serif';
+export const BOARD_FONT = '"IBM Plex Sans Condensed", system-ui, sans-serif';
+export const BOARD_MONO = '"IBM Plex Mono", ui-monospace, monospace';
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
-function hexToRgb(hex: string): [number, number, number] {
-  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-}
-/** Mescola un colore con il bianco (t > 0) o con il nero (t < 0). */
-function shade(hex: string, t: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  const target = t > 0 ? 255 : 0;
-  const k = Math.abs(t);
-  return `rgb(${Math.round(r + (target - r) * k)}, ${Math.round(g + (target - g) * k)}, ${Math.round(b + (target - b) * k)})`;
-}
-function luminance(hex: string): number {
-  const v = hexToRgb(hex).map((c) => {
-    const s = c / 255;
-    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * v[0]! + 0.7152 * v[1]! + 0.0722 * v[2]!;
+function rgba(hex: string, a: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
 /** Quanto è ingrandita la vista rispetto alla vista d'insieme. */
@@ -71,48 +50,34 @@ export function zoomLevel(view: BoardView, fitScale: number): number {
   return view.scale / fitScale;
 }
 
-let grain: HTMLCanvasElement | null = null;
-/** Grana fine della lacca: rumore casuale, generato una volta. */
-function grainTile(): HTMLCanvasElement {
-  if (grain) return grain;
-  grain = document.createElement('canvas');
-  grain.width = grain.height = 192;
-  const g = grain.getContext('2d')!;
-  const img = g.createImageData(192, 192);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const v = 128 + (Math.random() - 0.5) * 90;
-    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
-    img.data[i + 3] = 255;
-  }
-  g.putImageData(img, 0, 0);
-  return grain;
-}
-
-/** Filo di metallo in rilievo: ombra, corpo, riflesso. `w` in pixel CSS. */
-function wire(ctx: CanvasRenderingContext2D, path: Path2D, w: number, scale: number, bright = 1) {
-  const px = 1 / scale;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.save();
-  ctx.translate(0.5 * px, 1.1 * px);
-  ctx.lineWidth = (w + 1.4) * px;
-  ctx.strokeStyle = 'rgba(4, 9, 12, 0.72)';
-  ctx.stroke(path);
-  ctx.restore();
-  ctx.lineWidth = w * px;
-  ctx.strokeStyle = BOARD_COLORS.platinum;
-  ctx.stroke(path);
-  ctx.save();
-  ctx.translate(-0.3 * px, -0.45 * px);
-  ctx.lineWidth = Math.max(0.6, w * 0.36) * px;
-  ctx.strokeStyle = `rgba(243, 247, 249, ${0.85 * bright})`;
-  ctx.stroke(path);
-  ctx.restore();
+/** Tratteggio diagonale nel colore dato, in pixel del dispositivo (cache per colore). */
+const hatches = new Map<string, HTMLCanvasElement>();
+function hatchTile(color: string, dpr: number): HTMLCanvasElement {
+  const k = `${color}@${dpr}`;
+  let tile = hatches.get(k);
+  if (tile) return tile;
+  const size = Math.round(7 * dpr);
+  tile = document.createElement('canvas');
+  tile.width = tile.height = size;
+  const g = tile.getContext('2d')!;
+  g.strokeStyle = color;
+  g.lineWidth = 1 * dpr;
+  g.beginPath();
+  // diagonale che continua da una piastrella all'altra
+  g.moveTo(-1, size + 1);
+  g.lineTo(size + 1, -1);
+  g.moveTo(-1 - size, size + 1);
+  g.lineTo(1, -1);
+  g.moveTo(size - 1, 2 * size + 1);
+  g.lineTo(2 * size + 1, size - 1);
+  g.stroke();
+  hatches.set(k, tile);
+  return tile;
 }
 
 /**
- * Strato fisso: tavolo, cornice, mare, linee incise, smalto e fili.
- * `ctx` è già grande quanto lo schermo (in pixel del dispositivo).
+ * Strato fisso: base satellitare, griglia, zone di controllo, confini e rotte.
+ * `ctx` è grande quanto lo schermo (in pixel del dispositivo).
  */
 export function paintStatic(
   ctx: CanvasRenderingContext2D,
@@ -121,303 +86,256 @@ export function paintStatic(
   state: BoardState,
   dpr: number,
   fitScale: number,
+  earth: HTMLCanvasElement | null,
 ) {
   const { width: W, height: H } = geo;
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
   const z = zoomLevel(view, fitScale);
-  const k = clamp(z ** 0.45, 1, 2.6);
+  const px = 1 / view.scale; // un pixel CSS in unità mappa
   const toMap = () => ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
   const toScreen = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // tavolo
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const pool = ctx.createRadialGradient(cw / 2, ch * 0.45, 0, cw / 2, ch * 0.45, Math.max(cw, ch) * 0.75);
-  pool.addColorStop(0, '#15232c');
-  pool.addColorStop(1, BOARD_COLORS.table);
-  ctx.fillStyle = pool;
+  ctx.fillStyle = BOARD_COLORS.table;
   ctx.fillRect(0, 0, cw, ch);
 
-  // cornice: doppio filo di platino attorno alla plancia
+  // base satellitare
   toMap();
-  const m1 = 34;
-  const m2 = 56;
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-  ctx.shadowBlur = 28 * dpr;
-  ctx.shadowOffsetY = 10 * dpr;
-  ctx.fillStyle = '#10222c';
-  ctx.fillRect(-m2, -m2, W + 2 * m2, H + 2 * m2);
-  ctx.restore();
-  const frame = new Path2D();
-  frame.rect(-m2, -m2, W + 2 * m2, H + 2 * m2);
-  const frameIn = new Path2D();
-  frameIn.rect(-m1, -m1, W + 2 * m1, H + 2 * m1);
-  wire(ctx, frame, 2.2 * k, view.scale);
-  wire(ctx, frameIn, 1.1 * k, view.scale, 0.7);
-
-  // mare in lacca: sfumatura verticale e un riflesso largo in diagonale
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, W, H);
   ctx.clip();
-  const sea = ctx.createLinearGradient(0, 0, 0, H);
-  sea.addColorStop(0, BOARD_COLORS.lacquerTop);
-  sea.addColorStop(1, BOARD_COLORS.lacquerBottom);
-  ctx.fillStyle = sea;
+  ctx.fillStyle = BOARD_COLORS.ocean;
   ctx.fillRect(0, 0, W, H);
-  const sheen = ctx.createLinearGradient(W * 0.1, 0, W * 0.55, H);
-  sheen.addColorStop(0, 'rgba(255, 255, 255, 0)');
-  sheen.addColorStop(0.45, 'rgba(190, 225, 235, 0.06)');
-  sheen.addColorStop(0.55, 'rgba(190, 225, 235, 0.06)');
-  sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = sheen;
-  ctx.fillRect(0, 0, W, H);
-  const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.62);
-  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.38)');
-  ctx.fillStyle = vignette;
+  if (earth) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(earth, 0, 0, W, H);
+  }
+  // le terre fuori gioco (Antartide tagliata, isolette) restano più spente dei territori
+  ctx.fillStyle = 'rgba(2, 6, 9, 0.35)';
   ctx.fillRect(0, 0, W, H);
 
-  // linee di profondità incise: solco scuro e bordo chiaro, sempre più tenui al largo
-  const alphas = [0.34, 0.24, 0.17, 0.12, 0.08];
-  geo.waterlines.forEach((path, i) => {
-    const a = alphas[i] ?? 0.06;
-    ctx.lineJoin = 'round';
-    ctx.save();
-    ctx.translate(0, 1 / view.scale);
-    ctx.lineWidth = 1 / view.scale;
-    ctx.strokeStyle = `rgba(0, 0, 0, ${a * 1.2})`;
-    ctx.stroke(path);
-    ctx.restore();
-    ctx.lineWidth = 0.9 / view.scale;
-    ctx.strokeStyle = `rgba(${BOARD_COLORS.engraving}, ${a})`;
-    ctx.stroke(path);
-  });
+  // griglia ogni 15 gradi; equatore e meridiano di Greenwich più marcati
+  const proj = geo.board.projection;
+  if (proj) {
+    const f = millerFrame(proj, W);
+    ctx.lineWidth = px;
+    for (let lon = -180; lon < 180; lon += 15) {
+      const x = f.x(lon);
+      ctx.strokeStyle = `rgba(${BOARD_COLORS.grid}, ${lon === 0 ? 0.2 : 0.09})`;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+    for (let lat = -45; lat <= 75; lat += 15) {
+      const y = f.y(lat);
+      ctx.strokeStyle = `rgba(${BOARD_COLORS.grid}, ${lat === 0 ? 0.2 : 0.09})`;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+  }
 
-  // rosa dei venti incisa
-  if (geo.board.compass) paintCompass(ctx, geo.board.compass[0], geo.board.compass[1], 190, view.scale);
-
-  // nomi dei continenti e bonus, incisi nel mare
+  // nomi dei continenti nel mare, con il bonus
   for (const c of geo.board.continents) {
     if (!c.label) continue;
     const [x, y] = c.label;
-    const size = 118;
-    const px = 1 / view.scale;
+    const size = 92;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `300 ${size}px ${BOARD_FONT}`;
-    ctx.fontStretch = 'expanded';
+    ctx.font = `500 ${size}px ${BOARD_FONT}`;
+    ctx.letterSpacing = `${size * 0.42}px`;
+    ctx.fillStyle = `rgba(${BOARD_COLORS.line}, 0.2)`;
+    ctx.fillText(c.name.toUpperCase(), x + size * 0.21, y);
+    ctx.font = `500 ${size * 0.5}px ${BOARD_MONO}`;
     ctx.letterSpacing = `${size * 0.1}px`;
-    // incisione: solco scuro sotto, bordo di luce sopra, poi il metallo
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillText(c.name, x, y + 1.6 * px);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.fillText(c.name, x, y - px);
-    ctx.fillStyle = `rgba(${BOARD_COLORS.engraving}, 0.5)`;
-    ctx.fillText(c.name, x, y);
-    ctx.font = `500 ${size * 0.42}px ${BOARD_FONT}`;
-    ctx.letterSpacing = `${size * 0.06}px`;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillText(`+${c.bonus} armate`, x, y + size * 0.92 + 1.4 * px);
-    ctx.fillStyle = `rgba(${BOARD_COLORS.engraving}, 0.62)`;
-    ctx.fillText(`+${c.bonus} armate`, x, y + size * 0.92);
+    ctx.fillStyle = `rgba(${BOARD_COLORS.grid}, 0.5)`;
+    ctx.fillText(`BONUS +${c.bonus}`, x, y + size * 1.05);
     ctx.letterSpacing = '0px';
-    ctx.fontStretch = 'normal';
   }
-  ctx.restore();
 
-  // grana della lacca, in pixel schermo
-  ctx.save();
-  toScreen();
-  ctx.beginPath();
-  ctx.rect(view.x, view.y, W * view.scale, H * view.scale);
-  ctx.clip();
-  ctx.globalAlpha = 0.07;
-  ctx.globalCompositeOperation = 'overlay';
-  ctx.fillStyle = ctx.createPattern(grainTile(), 'repeat')!;
-  ctx.fillRect(0, 0, cw / dpr, ch / dpr);
-  ctx.restore();
-
-  toMap();
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, 0, W, H);
-  ctx.clip();
-
-  // acqua bassa: alone chiaro attorno alle coste
-  ctx.save();
-  ctx.shadowColor = 'rgba(110, 185, 200, 0.42)';
-  ctx.shadowBlur = clamp(16 * k, 10, 30) * dpr;
-  ctx.fillStyle = '#16323d';
-  ctx.fill(geo.land, 'evenodd');
-  ctx.restore();
-
-  // smalto: colore pieno, cupola di luce, bordo incassato
+  // zone di controllo: velatura, tratteggio e bordo luminoso interno nel colore del padrone
   for (const t of geo.board.territories) {
     const path = geo.paths.get(t.id)!;
-    const color = state.owners.get(t.id) ?? BOARD_COLORS.unowned[t.continent] ?? '#5f6a72';
-    const [x0, y0, x1, y1] = geo.boxes.get(t.id)!;
-    const w = x1 - x0;
-    const h = y1 - y0;
-    ctx.fillStyle = shade(color, -0.08);
+    const color = state.owners.get(t.id) ?? BOARD_COLORS.neutral;
+    ctx.fillStyle = rgba(color, 0.24);
     ctx.fill(path, 'evenodd');
-
     ctx.save();
     ctx.clip(path, 'evenodd');
-    const cx = t.anchor[0] - w * 0.18;
-    const cy = t.anchor[1] - h * 0.22;
-    const r = Math.max(w, h) * 0.8;
-    const dome = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    dome.addColorStop(0, 'rgba(255, 255, 255, 0.26)');
-    dome.addColorStop(0.4, 'rgba(255, 255, 255, 0.05)');
-    dome.addColorStop(1, 'rgba(0, 0, 0, 0.34)');
-    ctx.fillStyle = dome;
-    ctx.fillRect(x0, y0, w, h);
-    // bordo incassato sotto il filo
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = 7 * dpr * Math.min(1.6, k);
-    ctx.lineWidth = 3.2 / view.scale;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    toScreen();
+    ctx.fillStyle = ctx.createPattern(hatchTile(rgba(color, 0.2), dpr), 'repeat')!;
+    ctx.fillRect(0, 0, cw / dpr, ch / dpr);
+    toMap();
+    ctx.shadowColor = rgba(color, 0.9);
+    ctx.shadowBlur = clamp(9 * Math.sqrt(z), 7, 18) * dpr;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.6 * px;
+    ctx.strokeStyle = rgba(color, 0.95);
     ctx.stroke(path);
     ctx.restore();
   }
 
-  // grana dello smalto, fissa sullo schermo come la lacca
-  ctx.save();
-  ctx.clip(geo.land, 'evenodd');
-  toScreen();
-  ctx.globalAlpha = 0.12;
-  ctx.globalCompositeOperation = 'soft-light';
-  ctx.fillStyle = ctx.createPattern(grainTile(), 'repeat')!;
-  ctx.fillRect(0, 0, cw / dpr, ch / dpr);
-  ctx.restore();
-
-  // fili di platino
-  wire(ctx, geo.inner, 1.05 * k, view.scale, 0.55);
-  wire(ctx, geo.frontier, 2.1 * k, view.scale, 0.8);
-  wire(ctx, geo.coast, 1.45 * k, view.scale, 0.5);
-  ctx.restore();
-
-  // rotte via mare: puntinatura d'argento con un rivetto a ogni capo
-  paintRoutes(ctx, geo, view, k, dpr);
-}
-
-function paintCompass(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, scale: number) {
-  const line = (a: number) => `rgba(${BOARD_COLORS.engraving}, ${a})`;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.lineWidth = 1 / scale;
-  // cerchi
-  for (const [rr, a] of [
-    [r, 0.32],
-    [r * 0.82, 0.2],
-  ] as const) {
-    ctx.beginPath();
-    ctx.arc(0, 0, rr, 0, Math.PI * 2);
-    ctx.strokeStyle = line(a);
-    ctx.stroke();
-  }
-  // tacche ogni 15°
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const r0 = i % 6 === 0 ? r * 0.74 : r * 0.82;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
-    ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-    ctx.strokeStyle = line(0.3);
-    ctx.stroke();
-  }
-  // stella a otto punte: le quattro principali più lunghe, metà piena e metà vuota
-  const star = (len: number, wid: number, rot: number, fillA: number) => {
-    for (let i = 0; i < 4; i++) {
-      const a = rot + (i * Math.PI) / 2;
-      const tip: [number, number] = [Math.cos(a) * len, Math.sin(a) * len];
-      const l: [number, number] = [Math.cos(a - Math.PI / 4) * wid, Math.sin(a - Math.PI / 4) * wid];
-      const rgt: [number, number] = [Math.cos(a + Math.PI / 4) * wid, Math.sin(a + Math.PI / 4) * wid];
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(...tip);
-      ctx.lineTo(...l);
-      ctx.closePath();
-      ctx.fillStyle = line(fillA);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(...tip);
-      ctx.lineTo(...rgt);
-      ctx.closePath();
-      ctx.strokeStyle = line(0.4);
-      ctx.stroke();
+  // confini: sottili tra territori dello stesso padrone, netti dove c'è un fronte
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const b of geo.borders) {
+    const front = state.owners.get(b.a) !== state.owners.get(b.b);
+    if (front) {
+      ctx.lineWidth = 1.6 * px;
+      ctx.strokeStyle = 'rgba(2, 5, 8, 0.85)';
+      ctx.stroke(b.path);
+    } else {
+      ctx.save();
+      ctx.setLineDash([3 * px, 3 * px]);
+      ctx.lineWidth = 0.9 * px;
+      ctx.strokeStyle = `rgba(${BOARD_COLORS.line}, ${b.frontier ? 0.55 : 0.35})`;
+      ctx.stroke(b.path);
+      ctx.restore();
     }
-  };
-  star(r * 0.62, r * 0.12, Math.PI / 4, 0.18);
-  star(r * 0.96, r * 0.16, -Math.PI / 2, 0.36);
-  ctx.font = `500 ${r * 0.22}px ${BOARD_FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = line(0.55);
-  ctx.fillText('N', 0, -r * 1.12);
+  }
   ctx.restore();
-}
 
-function paintRoutes(ctx: CanvasRenderingContext2D, geo: BoardGeometry, view: BoardView, k: number, dpr: number) {
-  const px = 1 / view.scale;
+  // rotte via mare: tratteggio luminoso con un rombo a ogni approdo
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, geo.width, geo.height);
+  ctx.rect(0, 0, W, H);
   ctx.clip();
-  ctx.lineCap = 'round';
   for (const route of geo.routes) {
     const path = new Path2D();
     for (const c of route.curves) {
       path.moveTo(c.from[0], c.from[1]);
       path.quadraticCurveTo(c.ctrl[0], c.ctrl[1], c.to[0], c.to[1]);
     }
-    const dot = 2.4 * Math.min(1.5, k);
-    ctx.setLineDash([0.001, 6.5 * Math.min(1.5, k) * px]);
-    ctx.lineWidth = (dot + 1.2) * px;
-    ctx.strokeStyle = 'rgba(3, 8, 11, 0.7)';
-    ctx.save();
-    ctx.translate(0.4 * px, 0.8 * px);
+    ctx.setLineDash([6 * px, 4 * px]);
+    ctx.lineWidth = 3 * px;
+    ctx.strokeStyle = 'rgba(2, 6, 9, 0.6)';
     ctx.stroke(path);
-    ctx.restore();
-    ctx.lineWidth = dot * px;
-    ctx.strokeStyle = 'rgba(226, 235, 240, 0.92)';
+    ctx.lineWidth = 1.3 * px;
+    ctx.strokeStyle = `rgba(${BOARD_COLORS.grid}, 0.85)`;
     ctx.stroke(path);
     ctx.setLineDash([]);
     for (const [x, y] of route.ends) {
-      const r = 3.4 * Math.min(1.6, k) * px;
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-      ctx.shadowBlur = 3 * dpr;
-      ctx.shadowOffsetY = 1 * dpr;
-      const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, 0, x, y, r);
-      g.addColorStop(0, BOARD_COLORS.platinumLight);
-      g.addColorStop(0.6, BOARD_COLORS.platinum);
-      g.addColorStop(1, '#4c575e');
-      ctx.fillStyle = g;
+      const r = 3.2 * px;
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r, y);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(${BOARD_COLORS.grid}, 0.95)`;
       ctx.fill();
-      ctx.restore();
+      ctx.lineWidth = px;
+      ctx.strokeStyle = 'rgba(2, 6, 9, 0.8)';
+      ctx.stroke();
     }
   }
   ctx.restore();
+
+  // cornice: filo sottile, angolari e coordinate sui bordi
+  toScreen();
+  const x0 = view.x;
+  const y0 = view.y;
+  const x1 = view.x + W * view.scale;
+  const y1 = view.y + H * view.scale;
+  ctx.strokeStyle = `rgba(${BOARD_COLORS.grid}, 0.35)`;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0 - 0.5, y0 - 0.5, x1 - x0 + 1, y1 - y0 + 1);
+  const arm = 22;
+  ctx.strokeStyle = `rgba(${BOARD_COLORS.grid}, 0.9)`;
+  ctx.lineWidth = 2;
+  for (const [cx, cy, sx, sy] of [
+    [x0 - 5, y0 - 5, 1, 1],
+    [x1 + 5, y0 - 5, -1, 1],
+    [x0 - 5, y1 + 5, 1, -1],
+    [x1 + 5, y1 + 5, -1, -1],
+  ] as const) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + sy * arm);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx + sx * arm, cy);
+    ctx.stroke();
+  }
+  if (proj) {
+    const f = millerFrame(proj, W);
+    ctx.font = `500 10px ${BOARD_MONO}`;
+    ctx.fillStyle = `rgba(${BOARD_COLORS.grid}, 0.6)`;
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'center';
+    for (let lon = -180; lon < 180; lon += 30) {
+      const x = view.x + f.x(lon) * view.scale;
+      if (x < x0 + 20 || x > x1 - 20) continue;
+      ctx.fillText(lon === 0 ? '0°' : `${Math.abs(lon)}°${lon < 0 ? 'O' : 'E'}`, x, y0 - 8);
+    }
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let lat = -45; lat <= 75; lat += 15) {
+      const y = view.y + f.y(lat) * view.scale;
+      ctx.fillText(lat === 0 ? '0°' : `${Math.abs(lat)}°${lat < 0 ? 'S' : 'N'}`, x0 - 8, y);
+    }
+  }
 }
 
-/** Rettangoli occupati a schermo, per non sovrapporre nomi e pedine. */
+/** Rettangoli occupati a schermo, per non sovrapporre nomi e segnalini. */
 type Rect = [number, number, number, number];
 const overlaps = (a: Rect, b: Rect) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 
-/** Raggio delle pedine in pixel CSS. */
-export function tokenRadius(view: BoardView, fitScale: number): number {
-  return clamp(9.5 + (zoomLevel(view, fitScale) - 1) * 1.6, 9.5, 15);
+/** Freccia curva da `a` a `b` (pixel CSS), accorciata ai due capi. */
+function arrow(ctx: CanvasRenderingContext2D, a: [number, number], b: [number, number], color: string, enemy: boolean, trim: number) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy);
+  if (len < trim * 2.5) return;
+  const ux = dx / len;
+  const uy = dy / len;
+  const from: [number, number] = [a[0] + ux * trim, a[1] + uy * trim];
+  const to: [number, number] = [b[0] - ux * trim, b[1] - uy * trim];
+  const bendK = 0.18 * (len - 2 * trim);
+  const ctrl: [number, number] = [(from[0] + to[0]) / 2 - uy * bendK, (from[1] + to[1]) / 2 + ux * bendK];
+  // direzione d'arrivo, dalla tangente finale della curva
+  const tx = to[0] - ctrl[0];
+  const ty = to[1] - ctrl[1];
+  const tl = Math.hypot(tx, ty);
+  const hx = tx / tl;
+  const hy = ty / tl;
+  const head = enemy ? 11 : 8;
+  const base: [number, number] = [to[0] - hx * head, to[1] - hy * head];
+  const body = new Path2D();
+  body.moveTo(from[0], from[1]);
+  body.quadraticCurveTo(ctrl[0], ctrl[1], base[0], base[1]);
+  ctx.save();
+  ctx.lineCap = 'round';
+  if (!enemy) ctx.setLineDash([5, 4]);
+  ctx.lineWidth = enemy ? 6 : 4;
+  ctx.strokeStyle = 'rgba(2, 5, 8, 0.75)';
+  ctx.stroke(body);
+  ctx.lineWidth = enemy ? 3 : 1.6;
+  ctx.strokeStyle = enemy ? color : 'rgba(230, 238, 242, 0.85)';
+  if (enemy) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+  }
+  ctx.stroke(body);
+  ctx.setLineDash([]);
+  const tip = new Path2D();
+  tip.moveTo(to[0], to[1]);
+  tip.lineTo(base[0] - hy * head * 0.6, base[1] + hx * head * 0.6);
+  tip.lineTo(base[0] + hy * head * 0.6, base[1] - hx * head * 0.6);
+  tip.closePath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(2, 5, 8, 0.75)';
+  ctx.stroke(tip);
+  ctx.fillStyle = enemy ? color : 'rgba(230, 238, 242, 0.9)';
+  ctx.fill(tip);
+  ctx.restore();
 }
 
 /**
- * Strato mobile: territorio sotto il mouse, selezione e confinanti, pedine con le armate,
- * nomi dei territori dove c'è spazio. Disegna sopra quello che c'è già.
+ * Strato mobile: territorio sotto il mouse, selezione con le frecce verso i confinanti,
+ * segnalini con le armate e nomi dove c'è spazio. Disegna sopra quello che c'è già.
  */
 export function paintOverlay(
   ctx: CanvasRenderingContext2D,
@@ -428,155 +346,153 @@ export function paintOverlay(
   fitScale: number,
 ) {
   const z = zoomLevel(view, fitScale);
-  const k = clamp(z ** 0.45, 1, 2.6);
-  const toMap = () => ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
+  const px = 1 / view.scale;
   const sw = ctx.canvas.width / dpr;
   const sh = ctx.canvas.height / dpr;
+  const toMap = () => ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.x, dpr * view.y);
+  const screen = (p: readonly [number, number]): [number, number] => [p[0] * view.scale + view.x, p[1] * view.scale + view.y];
+  const colorOf = (id: string) => state.owners.get(id) ?? BOARD_COLORS.neutral;
 
   // evidenziazioni in coordinate mappa
   toMap();
-  const lighten = (id: string, a: number) => {
+  const outline = (id: string, width: number, alpha: number, dash: number[] = []) => {
     ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
-    ctx.fill(geo.paths.get(id)!, 'evenodd');
+    ctx.setLineDash(dash.map((d) => d * px));
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = width * px;
+    ctx.strokeStyle = `rgba(240, 246, 248, ${alpha})`;
+    ctx.stroke(geo.paths.get(id)!);
     ctx.restore();
   };
+  const tint = (id: string, a: number) => {
+    ctx.fillStyle = rgba(colorOf(id), a);
+    ctx.fill(geo.paths.get(id)!, 'evenodd');
+  };
   if (state.selected) {
-    const neighbours = geo.neighbours.get(state.selected) ?? [];
-    for (const n of neighbours) {
-      lighten(n, 0.1);
-      ctx.save();
-      ctx.setLineDash([5 / view.scale, 4 / view.scale]);
-      ctx.lineWidth = 1.6 / view.scale;
-      ctx.strokeStyle = 'rgba(243, 247, 249, 0.85)';
-      ctx.stroke(geo.paths.get(n)!);
-      ctx.restore();
-    }
-    lighten(state.selected, 0.16);
+    for (const n of geo.neighbours.get(state.selected) ?? []) outline(n, 1.2, 0.7, [4, 3]);
+    tint(state.selected, 0.22);
     ctx.save();
-    ctx.shadowColor = 'rgba(235, 245, 250, 0.85)';
-    ctx.shadowBlur = 12 * dpr;
-    wire(ctx, geo.paths.get(state.selected)!, 2.6 * k, view.scale, 1);
+    ctx.shadowColor = 'rgba(240, 246, 248, 0.9)';
+    ctx.shadowBlur = 10 * dpr;
+    outline(state.selected, 1.8, 0.95);
     ctx.restore();
   }
   if (state.hover && state.hover !== state.selected) {
-    lighten(state.hover, 0.09);
-    wire(ctx, geo.paths.get(state.hover)!, 1.8 * k, view.scale, 1);
+    tint(state.hover, 0.14);
+    outline(state.hover, 1.2, 0.8);
   }
 
-  // pedine e nomi in pixel CSS
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const r = tokenRadius(view, fitScale);
+  const plateH = clamp(17 + (z - 1) * 1.5, 17, 23);
+
+  // frecce dal territorio selezionato: piene verso i nemici, tratteggiate verso i propri
+  if (state.selected) {
+    const t = geo.board.territories.find((x) => x.id === state.selected)!;
+    const a = screen(t.anchor);
+    const mine = colorOf(t.id);
+    for (const n of geo.neighbours.get(t.id) ?? []) {
+      const other = geo.board.territories.find((x) => x.id === n)!;
+      const b = screen(other.anchor);
+      if (Math.abs(b[0] - a[0]) > (geo.width * view.scale) / 2) continue; // rotta che fa il giro del mondo
+      arrow(ctx, a, b, mine, colorOf(n) !== mine, plateH * 0.9);
+    }
+  }
+
+  // segnalini tattici
   const taken: Rect[] = [];
-  const screen = (p: readonly [number, number]): [number, number] => [p[0] * view.scale + view.x, p[1] * view.scale + view.y];
   const visible = geo.board.territories.filter((t) => {
     const [x, y] = screen(t.anchor);
-    return x > -40 && y > -40 && x < sw + 40 && y < sh + 40;
+    return x > -60 && y > -40 && x < sw + 60 && y < sh + 40;
   });
-
+  ctx.font = `600 ${plateH * 0.68}px ${BOARD_MONO}`;
   for (const t of visible) {
     const [x, y] = screen(t.anchor);
-    const color = state.owners.get(t.id);
-    const armies = state.armies.get(t.id) ?? 0;
-    taken.push([x - r - 2, y - r - 2, x + r + 2, y + r + 2]);
-    paintToken(ctx, x, y, r, color ?? '#7b868e', armies, dpr, t.id === state.selected || t.id === state.hover);
+    const label = String(state.armies.get(t.id) ?? 0);
+    const tw = ctx.measureText(label).width;
+    const sym = plateH * 1.25; // riquadro del simbolo
+    const w = sym + tw + plateH * 0.55;
+    const left = x - w / 2;
+    const top = y - plateH / 2;
+    taken.push([left - 2, top - 2, left + w + 2, top + plateH + 2]);
+    paintPlate(ctx, left, top, w, plateH, sym, colorOf(t.id), label, t.id === state.selected || t.id === state.hover);
   }
 
-  // nomi: prima i territori grandi; solo dove il nome sta dentro il territorio o la vista è vicina
-  const fontSize = clamp(10.5 + (z - 1) * 1.2, 10.5, 15);
+  // nomi: prima i territori grandi; solo dove il nome sta nel territorio o la vista è vicina
+  const fontSize = clamp(10 + (z - 1) * 0.9, 10, 13.5);
   ctx.font = `600 ${fontSize}px ${BOARD_FONT}`;
-  ctx.fontStretch = 'expanded';
-  ctx.letterSpacing = '0.2px';
+  ctx.letterSpacing = `${fontSize * 0.12}px`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   const area = (b: Box) => (b[2] - b[0]) * (b[3] - b[1]);
   const byArea = [...visible].sort((a, b) => area(geo.boxes.get(b.id)!) - area(geo.boxes.get(a.id)!));
   for (const t of byArea) {
     const [x, y] = screen(t.anchor);
+    const name = t.name.toUpperCase();
     const box = geo.boxes.get(t.id)!;
     const boxW = (box[2] - box[0]) * view.scale;
-    const tw = ctx.measureText(t.name).width;
+    const tw = ctx.measureText(name).width;
     const force = t.id === state.selected || t.id === state.hover;
     if (!force && tw > boxW * 0.95 && z < 2.6) continue;
-    const ty = y + r + 4;
+    const ty = y + plateH / 2 + 4;
     const rect: Rect = [x - tw / 2 - 3, ty - 1, x + tw / 2 + 3, ty + fontSize + 2];
     if (!force && taken.some((o) => overlaps(o, rect))) continue;
     taken.push(rect);
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 3.2;
-    ctx.strokeStyle = 'rgba(6, 12, 16, 0.82)';
-    ctx.strokeText(t.name, x, ty);
-    ctx.fillStyle = BOARD_COLORS.ink;
-    ctx.fillText(t.name, x, ty);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(2, 6, 9, 0.85)';
+    ctx.strokeText(name, x, ty);
+    ctx.fillStyle = force ? '#ffffff' : BOARD_COLORS.ink;
+    ctx.fillText(name, x, ty);
   }
   ctx.letterSpacing = '0px';
-  ctx.fontStretch = 'normal';
 }
 
-/** Medaglione smaltato con bordo di platino e il numero di armate. */
-function paintToken(
+/**
+ * Segnalino tattico: a sinistra il simbolo della fanteria (riquadro con la croce di
+ * Sant'Andrea, come nelle carte militari) nel colore del giocatore, a destra le armate.
+ */
+function paintPlate(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  r: number,
+  w: number,
+  h: number,
+  sym: number,
   color: string,
-  armies: number,
-  dpr: number,
-  lifted: boolean,
+  label: string,
+  active: boolean,
 ) {
   ctx.save();
-  // ombra portata
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-  ctx.shadowBlur = (lifted ? 10 : 6) * dpr;
-  ctx.shadowOffsetY = (lifted ? 3.5 : 2) * dpr;
-  const rim = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
-  rim.addColorStop(0, BOARD_COLORS.platinumLight);
-  rim.addColorStop(0.5, BOARD_COLORS.platinum);
-  rim.addColorStop(1, '#3f4a51');
-  ctx.fillStyle = rim;
-  ctx.beginPath();
-  ctx.arc(x, y - (lifted ? 1.5 : 0), r + 1.8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.shadowColor = active ? rgba(color, 0.9) : 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = active ? 12 : 6;
+  ctx.shadowOffsetY = active ? 0 : 1.5;
+  ctx.fillStyle = BOARD_COLORS.plate;
+  ctx.fillRect(x, y, w, h);
   ctx.restore();
-  const cy = y - (lifted ? 1.5 : 0);
-  // smalto a cupola
-  const enamel = ctx.createRadialGradient(x - r * 0.35, cy - r * 0.45, r * 0.1, x, cy, r * 1.05);
-  enamel.addColorStop(0, shade(color, 0.32));
-  enamel.addColorStop(0.55, color);
-  enamel.addColorStop(1, shade(color, -0.38));
-  ctx.fillStyle = enamel;
+  // simbolo
+  const pad = 2.5;
+  const sx = x + pad;
+  const sy = y + pad;
+  const sw = sym - pad * 2;
+  const sh = h - pad * 2;
+  ctx.fillStyle = color;
+  ctx.fillRect(sx, sy, sw, sh);
+  ctx.strokeStyle = 'rgba(2, 6, 9, 0.9)';
+  ctx.lineWidth = 1.3;
   ctx.beginPath();
-  ctx.arc(x, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  // filo interno scuro
-  ctx.lineWidth = 0.8;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.moveTo(sx + 2, sy + 2);
+  ctx.lineTo(sx + sw - 2, sy + sh - 2);
+  ctx.moveTo(sx + sw - 2, sy + 2);
+  ctx.lineTo(sx + 2, sy + sh - 2);
   ctx.stroke();
-  // riflesso in alto
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, cy, r, 0, Math.PI * 2);
-  ctx.clip();
-  const gloss = ctx.createLinearGradient(x, cy - r, x, cy);
-  gloss.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
-  gloss.addColorStop(1, 'rgba(255, 255, 255, 0)');
-  ctx.fillStyle = gloss;
-  ctx.beginPath();
-  ctx.ellipse(x, cy - r * 0.42, r * 0.78, r * 0.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  // numero
-  const light = luminance(color) > 0.36;
-  const label = String(armies);
-  const size = r * (label.length > 2 ? 0.9 : 1.08);
-  ctx.font = `700 ${size}px ${BOARD_FONT}`;
-  ctx.fontStretch = 'condensed';
+  ctx.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2);
+  // bordo
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = active ? '#ffffff' : rgba(color, 0.95);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  // armate
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = light ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.45)';
-  ctx.fillText(label, x, cy + r * 0.07 + 0.8);
-  ctx.fillStyle = light ? '#0d1418' : '#f6f8f9';
-  ctx.fillText(label, x, cy + r * 0.07);
-  ctx.fontStretch = 'normal';
+  ctx.fillStyle = '#f2f6f8';
+  ctx.fillText(label, x + sym + (w - sym) / 2 - 0.5, y + h / 2 + 0.5);
 }

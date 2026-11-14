@@ -1,9 +1,7 @@
 /**
- * Geometria del tabellone pronta per il disegno: percorsi dei territori, fili tra territori
- * (divisi in coste, confini interni e confini tra continenti), linee di profondità del mare
- * e rotte via mare. Si calcola una volta sola quando si carica il tabellone.
+ * Geometria del tabellone pronta per il disegno: percorsi dei territori, confini tra ogni
+ * coppia di territori, coste e rotte via mare. Si calcola una volta quando si carica il tabellone.
  */
-import { contours } from 'd3-contour';
 import type { BoardDef, Point } from '@onpeace/engine';
 
 export type Box = [number, number, number, number];
@@ -14,6 +12,15 @@ export interface SeaRoute {
   /** Una o due curve (due se la rotta esce da un bordo e rientra dall'altro). */
   curves: { from: Point; ctrl: Point; to: Point }[];
   ends: Point[];
+}
+
+/** Tratto di confine in comune tra due territori (a < b). */
+export interface Border {
+  a: string;
+  b: string;
+  path: Path2D;
+  /** Confine tra continenti diversi. */
+  frontier: boolean;
 }
 
 export interface BoardGeometry {
@@ -27,12 +34,9 @@ export interface BoardGeometry {
   neighbours: Map<string, string[]>;
   /** Tutte le terre insieme. */
   land: Path2D;
-  /** Fili: coste, confini tra territori dello stesso continente, confini tra continenti. */
+  borders: Border[];
+  /** Lati che danno sul mare. */
   coast: Path2D;
-  inner: Path2D;
-  frontier: Path2D;
-  /** Linee di profondità attorno alle coste, dalla più vicina alla più lontana. */
-  waterlines: Path2D[];
   routes: SeaRoute[];
 }
 
@@ -80,10 +84,9 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     land.addPath(path);
   }
 
-  // fili: lati consecutivi della stessa specie uniti in linee spezzate
+  // lati consecutivi della stessa specie uniti in linee spezzate
   const coast = new Path2D();
-  const inner = new Path2D();
-  const frontier = new Path2D();
+  const pairs = new Map<string, Border>();
   const eps = 0.6;
   const onFrame = (a: Point, b: Point) =>
     (Math.abs(a[0]) < eps && Math.abs(b[0]) < eps) ||
@@ -98,13 +101,20 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
         for (let i = 0; i < ring.length; i++) {
           const a = ring[i]!;
           const b = ring[(i + 1) % ring.length]!;
-          let target: Path2D | null;
-          if (onFrame(a, b)) target = null;
-          else {
+          let target: Path2D | null = null;
+          if (!onFrame(a, b)) {
             const other = owners.get(edgeKey(a, b))!.find((id) => id !== t.id);
             if (!other) target = coast;
-            else if (t.id > other) target = null; // lo disegna l'altro territorio
-            else target = continentOf.get(other) === t.continent ? inner : frontier;
+            else if (t.id < other) {
+              // ogni confine lo disegna una volta sola il territorio con l'id minore
+              const k = `${t.id}|${other}`;
+              let border = pairs.get(k);
+              if (!border) {
+                border = { a: t.id, b: other, path: new Path2D(), frontier: continentOf.get(other) !== t.continent };
+                pairs.set(k, border);
+              }
+              target = border.path;
+            }
           }
           if (!target) {
             current = null;
@@ -134,124 +144,14 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     continentOf,
     neighbours,
     land,
+    borders: [...pairs.values()],
     coast,
-    inner,
-    frontier,
-    waterlines: buildWaterlines(board, land, [26, 62, 112, 180, 270]),
     routes: buildRoutes(board),
   };
 }
 
-// ---------------------------------------------------------------- linee di profondità
-/** Distanza euclidea esatta (Felzenszwalb-Huttenlocher) su una griglia: 0 sulla terra. */
-function distanceField(mask: Uint8Array, w: number, h: number): Float32Array {
-  const INF = 1e20;
-  const n = Math.max(w, h);
-  const f = new Float64Array(n);
-  const d = new Float64Array(n);
-  const v = new Int32Array(n);
-  const z = new Float64Array(n + 1);
-  const grid = new Float64Array(w * h);
-  for (let i = 0; i < w * h; i++) grid[i] = mask[i] ? 0 : INF;
-
-  const pass = (len: number) => {
-    let k = 0;
-    v[0] = 0;
-    z[0] = -INF;
-    z[1] = INF;
-    for (let q = 1; q < len; q++) {
-      let s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!);
-      while (s <= z[k]!) {
-        k--;
-        s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!);
-      }
-      k++;
-      v[k] = q;
-      z[k] = s;
-      z[k + 1] = INF;
-    }
-    k = 0;
-    for (let q = 0; q < len; q++) {
-      while (z[k + 1]! < q) k++;
-      d[q] = (q - v[k]!) ** 2 + f[v[k]!]!;
-    }
-  };
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) f[y] = grid[y * w + x]!;
-    pass(h);
-    for (let y = 0; y < h; y++) grid[y * w + x] = d[y]!;
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) f[x] = grid[y * w + x]!;
-    pass(w);
-    for (let x = 0; x < w; x++) grid[y * w + x] = d[x]!;
-  }
-  const out = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) out[i] = Math.sqrt(grid[i]!);
-  return out;
-}
-
-/** Due passate di Chaikin: angoli smussati, linee morbide come incise a mano. */
-function chaikin(ring: Point[]): Point[] {
-  let pts = ring;
-  for (let it = 0; it < 2; it++) {
-    const out: Point[] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const a = pts[i]!;
-      const b = pts[(i + 1) % pts.length]!;
-      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
-    }
-    pts = out;
-  }
-  return pts;
-}
-
-function buildWaterlines(board: BoardDef, land: Path2D, levels: number[]): Path2D[] {
-  const cell = 8;
-  const gw = Math.ceil(board.width / cell);
-  const gh = Math.ceil(board.height / cell);
-  const canvas = document.createElement('canvas');
-  canvas.width = gw;
-  canvas.height = gh;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  ctx.scale(1 / cell, 1 / cell);
-  ctx.fill(land, 'evenodd');
-  const pixels = ctx.getImageData(0, 0, gw, gh).data;
-  const mask = new Uint8Array(gw * gh);
-  for (let i = 0; i < gw * gh; i++) mask[i] = pixels[i * 4 + 3]! > 100 ? 1 : 0;
-  const dist = distanceField(mask, gw, gh);
-  for (let i = 0; i < dist.length; i++) dist[i] = dist[i]! * cell;
-
-  const generator = contours().size([gw, gh]).thresholds(levels);
-  const edge = 1.5;
-  const nearEdge = (p: Point) => p[0] < edge || p[1] < edge || p[0] > gw - edge || p[1] > gh - edge;
-  return levels.map((level) => {
-    const path = new Path2D();
-    const geom = generator.contour(Array.from(dist), level);
-    for (const poly of geom.coordinates) {
-      for (const raw of poly) {
-        const ring = chaikin(raw.slice(0, -1) as unknown as Point[]);
-        let pen = false;
-        for (let i = 0; i <= ring.length; i++) {
-          const p = ring[i % ring.length]!;
-          // i tratti lungo i bordi della mappa non sono coste: si salta
-          if (nearEdge(p)) {
-            pen = false;
-            continue;
-          }
-          if (pen) path.lineTo(p[0] * cell, p[1] * cell);
-          else path.moveTo(p[0] * cell, p[1] * cell);
-          pen = true;
-        }
-      }
-    }
-    return path;
-  });
-}
-
 // ---------------------------------------------------------------- rotte via mare
 function buildRoutes(board: BoardDef): SeaRoute[] {
-  const routes: SeaRoute[] = [];
   /** Punto di controllo della curva: a metà strada, spostato di lato (verso nord) in proporzione alla lunghezza. */
   const bend = (from: Point, to: Point, amount: number): Point => {
     const dx = to[0] - from[0];
@@ -264,6 +164,7 @@ function buildRoutes(board: BoardDef): SeaRoute[] {
     }
     return [(from[0] + to[0]) / 2 + nx * amount, (from[1] + to[1]) / 2 + ny * amount];
   };
+  const routes: SeaRoute[] = [];
   for (const l of board.links) {
     if (!l.sea || !l.line) continue;
     const [p, q] = l.line;

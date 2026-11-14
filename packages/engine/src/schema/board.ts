@@ -40,6 +40,17 @@ export const BoardLinkDef = z.strictObject({
 });
 export type BoardLinkDef = z.infer<typeof BoardLinkDef>;
 
+/** Proiezione con cui è disegnato il tabellone: serve per la griglia e per le immagini della Terra. */
+export const BoardProjection = z.strictObject({
+  type: z.literal('miller'),
+  centralMeridian: z.number(),
+  latMin: z.number(),
+  latMax: z.number(),
+  /** Chilometri per unità della mappa (all'equatore). */
+  kmPerUnit: z.number().positive(),
+});
+export type BoardProjection = z.infer<typeof BoardProjection>;
+
 export const BoardDef = z.strictObject({
   $schema: z.string().optional(),
   id: Id,
@@ -52,6 +63,7 @@ export const BoardDef = z.strictObject({
   links: z.array(BoardLinkDef).min(1),
   /** Dove disegnare la rosa dei venti (facoltativo). */
   compass: PointS.optional(),
+  projection: BoardProjection.optional(),
 });
 export type BoardDef = z.infer<typeof BoardDef>;
 

@@ -78,6 +78,14 @@ const RANGE_SCALE = 16; // uguale a costruisci.ts: unità mappa per punto
 type Pt = [number, number];
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
+/** Proiezione della mappa base, da scrivere nel tabellone (solo Miller per ora). */
+function projectionOf(baseId: string): BoardDef['projection'] {
+  const cfg = ProjCfgS.parse(readJson(join(dataDir, 'mondo', 'mappe.json'))).mappe.find((m) => m.id === baseId);
+  if (!cfg || cfg.proiezione.tipo !== 'miller') return undefined;
+  const pr = cfg.proiezione;
+  return { type: 'miller', centralMeridian: pr.meridianoCentrale, latMin: pr.latMin, latMax: pr.latMax, kmPerUnit: cfg.kmPerPunto / RANGE_SCALE };
+}
+
 /** Da gradi a unità della mappa base, con la stessa proiezione usata per costruirla. */
 function pointProjector(baseId: string): (p: LonLat) => Pt {
   const cfg = ProjCfgS.parse(readJson(join(dataDir, 'mondo', 'mappe.json'))).mappe.find((m) => m.id === baseId);
@@ -252,6 +260,7 @@ function buildBoard(cfg: BoardCfg): BoardDef {
     territories,
     links: [...links.values()].sort((l, m) => l.a.localeCompare(m.a) || l.b.localeCompare(m.b)),
     ...(cfg.rosa ? { compass: toMap(cfg.rosa) } : {}),
+    ...(projectionOf(cfg.base) ? { projection: projectionOf(cfg.base) } : {}),
   });
 }
 

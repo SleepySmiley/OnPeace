@@ -1032,5 +1032,12 @@
   "compass": [
     919.2,
     4126
-  ]
+  ],
+  "projection": {
+    "type": "miller",
+    "centralMeridian": 11,
+    "latMin": -57,
+    "latMax": 84,
+    "kmPerUnit": 3.75
+  }
 }
