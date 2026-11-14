@@ -156,14 +156,26 @@ function interiorPoint(shape: MultiPolygon): Pt {
 }
 
 // ---------------------------------------------------------------- confini tra paesi
-/** Coppie di paesi che si toccano: almeno tre vertici dell'uno a meno di `tol` da vertici dell'altro. */
+/** Vertici di un anello più punti intermedi ogni `step`: i confini dritti (es. il 49° parallelo) hanno pochi vertici. */
+function densePoints(ring: readonly Pt[], step: number): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const [ax, ay] = ring[i]!;
+    const [bx, by] = ring[(i + 1) % ring.length]!;
+    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / step));
+    for (let k = 0; k < n; k++) out.push([ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n]);
+  }
+  return out;
+}
+
+/** Coppie di paesi che si toccano: almeno tre punti del contorno dell'uno a meno di `tol` da punti dell'altro. */
 function touchingCountries(map: MapDef, tol: number): Set<string> {
   const cell = (v: number) => Math.floor(v / tol);
   const grid = new Map<string, Set<string>>();
   for (const c of map.countries)
     for (const poly of c.shape)
       for (const ring of poly)
-        for (const [x, y] of ring) {
+        for (const [x, y] of densePoints(ring, tol)) {
           const k = `${cell(x)},${cell(y)}`;
           (grid.get(k) ?? grid.set(k, new Set()).get(k)!).add(c.id);
         }
@@ -172,7 +184,7 @@ function touchingCountries(map: MapDef, tol: number): Set<string> {
     const seenHere = new Map<string, number>();
     for (const poly of c.shape)
       for (const ring of poly)
-        for (const [x, y] of ring) {
+        for (const [x, y] of densePoints(ring, tol)) {
           const near = new Set<string>();
           for (let dx = -1; dx <= 1; dx++)
             for (let dy = -1; dy <= 1; dy++) for (const o of grid.get(`${cell(x) + dx},${cell(y) + dy}`) ?? []) near.add(o);

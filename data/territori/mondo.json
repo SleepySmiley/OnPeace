@@ -974,6 +974,7 @@
     {"a":"canada_est","b":"usa_est","sea":false},
     {"a":"canada_ovest","b":"pacifico_nord","sea":false},
     {"a":"canada_ovest","b":"usa_centro","sea":false},
+    {"a":"canada_ovest","b":"usa_ovest","sea":false},
     {"a":"centroamerica","b":"nord_andino","sea":false},
     {"a":"centroamerica","b":"usa_centro","sea":false},
     {"a":"centroamerica","b":"usa_est","sea":true,"line":[[2594.5,2703.5],[2621.2,2634.3]]},
