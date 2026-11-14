@@ -291,6 +291,44 @@ describe('partita', () => {
     expect(room.seats.find((s) => s.id === p)!.idleTurns).toBe(0);
   });
 
+  it(`ogni tiro di dadi ridà ${timers.battleSeconds} s a chi attacca, fino a ${timers.battleMaxSeconds} s per turno (anche a tempo fermo)`, () => {
+    const t = playing();
+    const { room, host } = t;
+    const state = room.state!;
+    const p = state.turn!.player;
+    const nb = boards.context(room.settings).neighbours;
+    // tutti i rinforzi su un territorio che confina con un nemico
+    const from = Object.keys(state.territories).find(
+      (id) => state.territories[id]!.owner === p && (nb.get(id) ?? []).some((n) => state.territories[n]!.owner !== p),
+    )!;
+    const to = nb.get(from)!.find((n) => state.territories[n]!.owner !== p)!;
+    room.handle(p, { t: 'act', action: { kind: 'reinforce', placements: { [from]: state.turn!.reinforcements } } });
+    // tante armate da tutte e due le parti: nessun tiro chiude l'attacco
+    room.state!.territories[from]!.armies = 50;
+    room.state!.territories[to]!.armies = 50;
+    const before = t.last(room.id, p, 'status')!;
+    t.advance(5_000);
+    expect(room.handle(p, { t: 'act', action: { kind: 'attack', from, to, dice: 1 } })).toBeNull();
+    const after = t.last(room.id, p, 'status')!;
+    expect(after.deadline).toBe(before.deadline! + timers.battleSeconds * 1000);
+    expect(after.total).toBe(before.total! + timers.battleSeconds * 1000);
+    // il tetto: oltre battleMaxSeconds nel turno non si ridà più niente
+    room.snapshot().clockBonus = timers.battleMaxSeconds * 1000 - 1000;
+    expect(room.handle(p, { t: 'act', action: { kind: 'attack', from, to, dice: 1 } })).toBeNull();
+    expect(t.last(room.id, p, 'status')!.deadline).toBe(after.deadline! + 1000);
+    expect(room.handle(p, { t: 'act', action: { kind: 'attack', from, to, dice: 1 } })).toBeNull();
+    expect(t.last(room.id, p, 'status')!.deadline).toBe(after.deadline! + 1000);
+    // a tempo fermo il tempo ridato va nel tempo che resta
+    room.snapshot().clockBonus = 0;
+    expect(room.handle(host.id, { t: 'pause', paused: true })).toBeNull();
+    const paused = t.last(room.id, p, 'status')!.paused!.remainingMs;
+    expect(room.handle(p, { t: 'act', action: { kind: 'attack', from, to, dice: 1 } })).toBeNull();
+    expect(t.last(room.id, p, 'status')!.paused!.remainingMs).toBe(paused + timers.battleSeconds * 1000);
+    // turno nuovo: il conto del tempo ridato riparte da zero
+    expect(room.handle(p, { t: 'act', action: { kind: 'end-turn' } })).toBeNull();
+    expect(room.snapshot().clockBonus).toBe(0);
+  });
+
   it('chi esce resta sul tabellone: il server muove al posto suo e la partita va avanti', () => {
     const t = playing(3);
     const { room } = t;

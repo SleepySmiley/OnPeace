@@ -67,6 +67,8 @@ export interface RoomSnapshot {
   clock: string | null;
   /** Chi ha fatto almeno una mossa da quando è partito il tempo in corso. */
   acted: string[];
+  /** Tempo restituito per le battaglie nel turno in corso (ms): ha un tetto. */
+  clockBonus?: number;
   chat: ChatLine[];
   nextSeat: number;
   updatedAt: number;
@@ -301,7 +303,10 @@ export class Room {
     seat.idleTurns = 0;
     if (!this.s.acted.includes(seat.id)) this.s.acted.push(seat.id);
     const from = this.s.nextSeq;
+    const clock = this.s.clock;
     this.advance(result);
+    // stesso turno: chi attacca riprende il tempo passato a guardare la battaglia
+    if (this.s.clock === clock) this.giveBattleTime(result.events);
     this.touch();
     this.broadcastGame(from, n === undefined ? undefined : { player: seat.id, n });
     this.broadcastStatus();
@@ -419,6 +424,7 @@ export class Room {
     if (key === this.s.clock) return;
     this.s.clock = key;
     this.s.acted = [];
+    this.s.clockBonus = 0;
     const { timers } = ctx.rules;
     const seconds =
       state.phase === 'briefing'
@@ -429,6 +435,23 @@ export class Room {
             ? timers.setupSeconds
             : timers.turnSeconds;
     this.setTimer(seconds * 1000);
+  }
+
+  /**
+   * Ogni tiro di dadi ridà qualche secondo (timers.battleSeconds) a chi attacca, fino a un tetto
+   * per turno (timers.battleMaxSeconds): la scena della battaglia non deve mangiargli il turno.
+   */
+  private giveBattleTime(events: readonly GameEvent[]): void {
+    const rolls = events.filter((e) => e.type === 'battle').length;
+    if (rolls === 0) return;
+    const { battleSeconds, battleMaxSeconds } = this.ctx.rules.timers;
+    const used = this.s.clockBonus ?? 0;
+    const add = Math.min(rolls * battleSeconds * 1000, battleMaxSeconds * 1000 - used);
+    if (add <= 0) return;
+    this.s.clockBonus = used + add;
+    this.s.clockTotal = (this.s.clockTotal ?? 0) + add;
+    if (this.s.paused) this.s.paused.remainingMs += add;
+    else if (this.s.deadline !== null) this.s.deadline += add;
   }
 
   /** Fa partire il tempo; se il tempo è fermo, lo mette da parte per la ripresa. */

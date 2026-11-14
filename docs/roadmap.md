@@ -19,20 +19,11 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.7 — una sola disposizione.** Tolte "plancia laterale" e "comandi in basso": resta l'essenziale, e il menu Aspetto sceglie solo il tema. Via anche il vecchio pannello della mossa e le versioni dei pannelli che servivano solo a quelle due.
 - **M12.8 — scena della battaglia coi carri armati (proposta E).** Su cinque proposte (tavolo, duello, mappa, riquadro, carri) hai scelto i carri: la camera vola sui due territori, su ciascuno i carri schierati (uno per armata, al massimo 8, le retrovie avanzano), i dadi 3D rotolano in primo piano, poi i carri si sparano: per ogni coppia di dadi spara chi la vince e il carro colpito esplode. Alla conquista tre carri entrano nel territorio preso. Clic salta, Esc chiude, Invio tira ancora; i comandi restano nella barra in basso. I carri della scena sono visti dall'alto: la torretta gira verso il bersaglio prima di sparare. Chi guarda una battaglia degli altri la vede in piccolo in alto. Suoni nuovi (dadi, colpo d'aria, cannonata). Corretto anche un bug dei suoni: il volume delle battaglie degli altri veniva preso come ritardo.
 - **M12.9 — carri armati al posto dei numeri (proposta D).** Su quattro modi (targa, squadra con bandierina, dall'alto, numero sulla fiancata) hai scelto la fiancata: ogni territorio ha un carro di lato nel colore del padrone col numero dipinto sullo scafo, girato verso il nemico confinante più vicino. A mappa intera i carri sono più piccoli e crescono avvicinandosi; sul vetro un'ombra scura li stacca dal territorio dello stesso colore. Via i dischi.
+- **M12.10 — battaglia: carri dall'alto e tempo restituito.** I carri della scena sono visti dall'alto (la torretta gira verso il bersaglio). Ogni tiro di dadi ridà 3 secondi a chi attacca, fino a 60 per turno (regole: `timers.battleSeconds`, `timers.battleMaxSeconds`), anche a tempo fermato: guardare la battaglia non mangia il turno. Restano com'erano "fino in fondo" tiro per tiro e la battaglia degli altri in piccolo (si possono ancora cambiare nella pagina di prova `battaglia.html`).
 
 ## Da fare
 
-### 1. Ultime scelte della battaglia
-
-I carri della battaglia sono quelli visti dall'alto (scelto il 14/11). Restano, nella pagina di prova `battaglia.html` (pannello in alto a destra, con le battaglie finte):
-- "fino in fondo": tiro per tiro, o col conto veloce delle perdite;
-- chi non combatte vede la battaglia in piccolo, intera o niente.
-
-Oggi: tiro per tiro, in piccolo.
-
-**Da sistemare:** il tempo del turno continua a scorrere durante la scena.
-
-### 2. Pesca della carta a fine turno
+### 1. Pesca della carta a fine turno
 
 Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazzo e ricevere la carta in modo scenico.
 
@@ -40,17 +31,17 @@ Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazz
 
 Servono 2-3 proposte: il mazzo, il gesto della pesca, la carta che si gira e vola nella mano.
 
-### 3. Mappa più leggibile
+### 2. Mappa più leggibile
 
 Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
 
 Le pedine ormai sono i carri (M12.9). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
 
-### 4. "Cosa devo fare adesso" e il resto dell'interfaccia
+### 3. "Cosa devo fare adesso" e il resto dell'interfaccia
 
 Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni, avvisi. Nell'essenziale vanno sistemati anche i cassetti "Carte e obiettivo" e "Registro e chat".
 
-### 5. Pulizia e chiusura di M12
+### 4. Pulizia e chiusura di M12
 
 - Togliere quello che resta del vecchio gioco in stile atWar:
   - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;

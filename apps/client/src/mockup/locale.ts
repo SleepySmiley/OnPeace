@@ -57,6 +57,8 @@ export class LocalGame {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private clock = '';
   private deadline: number | null = null;
+  /** Tempo restituito per le battaglie nel turno in corso (ms). */
+  private bonus = 0;
   private total: number | null = null;
   private paused: number | null = null;
   private botAttacks = 0;
@@ -152,16 +154,33 @@ export class LocalGame {
     }
     this.log.push(...added);
     this.deliver({ t: 'game', view: viewFor(this.ctx, this.state, ME), log: added, sync: false, ...(ack === undefined ? {} : { ack }) });
+    const clock = this.clock;
     this.syncClock();
+    // come il server: ogni tiro ridà a chi attacca qualche secondo, fino al tetto del turno
+    const rolls = r.events.filter((e) => e.type === 'battle').length;
+    if (this.clock === clock && rolls > 0 && this.deadline !== null && this.total !== null) {
+      const t = this.ctx.rules.timers;
+      const add = Math.min(rolls * t.battleSeconds * 1000, t.battleMaxSeconds * 1000 - this.bonus);
+      if (add > 0) {
+        this.bonus += add;
+        this.total += add;
+        if (this.paused !== null) this.paused += add;
+        else this.deadline += add;
+        this.status();
+      }
+    }
     this.schedule();
   }
 
   // ---------------------------------------------------------------- tempo (si vede, ma non scade)
   private syncClock(force = false): void {
     const s = this.state;
-    const key = `${s.phase}:${s.turn?.number ?? 0}:${s.setupPlayer ?? ''}`;
+    // come il server: durante i turni il tempo è uno solo per rinforzi, attacchi e spostamento
+    const turnPhase = s.phase === 'reinforce' || s.phase === 'attack' || s.phase === 'fortify';
+    const key = turnPhase ? `turn:${s.turn?.number ?? 0}` : `${s.phase}:${s.turn?.number ?? 0}:${s.setupPlayer ?? ''}`;
     if (!force && key === this.clock) return;
     this.clock = key;
+    this.bonus = 0;
     const t = this.ctx.rules.timers;
     const seconds =
       s.phase === 'briefing' ? t.briefingSeconds : s.phase === 'draft' ? t.pickSeconds : s.phase === 'setup' ? t.setupSeconds : t.turnSeconds;

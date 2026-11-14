@@ -79,6 +79,10 @@ export const ConquestRules = z.strictObject({
     briefingSeconds: Int.min(5),
     /** Tempo per ogni territorio scelto a turno (scaduto, sceglie il server). */
     pickSeconds: Int.min(5),
+    /** Secondi restituiti a chi attacca per ogni tiro di dadi: il tempo per guardare la battaglia. */
+    battleSeconds: Int.min(0),
+    /** Al massimo tanti secondi restituiti in un turno. */
+    battleMaxSeconds: Int.min(0),
   }),
   modes: z.array(GameMode).min(1),
 });

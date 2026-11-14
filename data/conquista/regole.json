@@ -17,6 +17,6 @@
     "inheritOnElimination": true
   },
   "elimination": { "protectedRounds": 4 },
-  "timers": { "turnSeconds": 180, "setupSeconds": 45, "briefingSeconds": 30, "pickSeconds": 15 },
+  "timers": { "turnSeconds": 180, "setupSeconds": 45, "briefingSeconds": 30, "pickSeconds": 15, "battleSeconds": 3, "battleMaxSeconds": 60 },
   "modes": ["objectives", "conquest"]
 }
