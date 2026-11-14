@@ -6,15 +6,15 @@
     <title>OnPeace · Tabellone</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Big+Shoulders+Stencil+Display:wght@700;800&family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IM+Fell+English+SC&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/board/preview.css" />
   </head>
   <body>
     <canvas id="board" aria-label="Tabellone del mondo"></canvas>
-    <header class="hud hud-title">
-      <h1>Teatro operativo: mondo</h1>
-      <p>47 territori, 6 continenti. Trascina per spostarti, rotellina per lo zoom, clic su un territorio per le direttrici d'attacco.</p>
-    </header>
+    <nav class="hud hud-styles" aria-label="Stile della mappa"></nav>
     <aside class="hud hud-players" aria-label="Giocatori (partita di prova)"></aside>
     <aside class="hud hud-card" hidden></aside>
     <script type="module" src="/src/board/preview.ts"></script>

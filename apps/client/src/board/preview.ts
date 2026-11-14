@@ -1,13 +1,18 @@
 /**
  * Pagina di prova del tabellone (/tabellone.html in sviluppo): il mondo a territori con una
- * partita finta, per giudicare la grafica e controllare i confini prima del gioco vero.
+ * partita finta e quattro stili grafici da confrontare (tasti 1-4 o il selettore in alto).
  */
 import boardJson from '@data/territori/mondo.json';
 import { BoardDef } from '@onpeace/engine';
-import { PLAYER_COLORS } from '@onpeace/protocol';
+import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from './common';
 import { buildGeometry } from './geometry';
-import { loadEarthBase } from './imagery';
-import { BOARD_COLORS, paintOverlay, paintStatic, type BoardState, type BoardView } from './paint';
+import { loadRelief } from './imagery';
+import { classico } from './styles/classico';
+import { plastico } from './styles/plastico';
+import { statoMaggiore } from './styles/stato-maggiore';
+import { vetro } from './styles/vetro';
+
+const STYLES: BoardStyle[] = [statoMaggiore, vetro, classico, plastico];
 
 // ---------------------------------------------------------------- partita di prova
 /** Generatore pseudo-casuale con seme: la partita finta è sempre la stessa. */
@@ -23,18 +28,23 @@ function mulberry32(seed: number) {
 
 const board = BoardDef.parse(boardJson);
 const geo = buildGeometry(board);
-const players = ['Matteo', 'Giulia', 'Lorenzo', 'Sofia', 'Pietro'].map((name, i) => ({ name, color: PLAYER_COLORS[i]! }));
+const names = ['Matteo', 'Giulia', 'Lorenzo', 'Sofia', 'Pietro'];
 const rand = mulberry32(20261114);
 const order = board.territories.map((t) => t.id).sort(() => rand() - 0.5);
 const ownerOf = new Map<string, number>();
-order.forEach((id, i) => ownerOf.set(id, i % players.length));
+order.forEach((id, i) => ownerOf.set(id, i % names.length));
+
+const fromUrl = new URLSearchParams(location.search).get('stile');
+let style = STYLES.find((s) => s.id === fromUrl) ?? STYLES[0]!;
+const colorOfPlayer = (p: number) => style.playerColors[p % style.playerColors.length]!;
 
 const state: BoardState = {
-  owners: new Map([...ownerOf].map(([id, p]) => [id, players[p]!.color])),
+  owners: new Map(),
   armies: new Map(board.territories.map((t) => [t.id, 1 + Math.floor(rand() ** 2.2 * 14)])),
   hover: null,
   selected: null,
 };
+const assets: BoardAssets = { relief: null };
 
 // ---------------------------------------------------------------- disegno
 const canvas = document.getElementById('board') as HTMLCanvasElement;
@@ -42,19 +52,20 @@ const ctx = canvas.getContext('2d')!;
 const cache = document.createElement('canvas');
 const cacheCtx = cache.getContext('2d')!;
 let cacheView: BoardView | null = null;
-let earth: HTMLCanvasElement | null = null;
 let dpr = 1;
 let view: BoardView = { scale: 1, x: 0, y: 0 };
 let fitScale = 1;
 let frameQueued = false;
 let idleTimer = 0;
 
+const env = (target: CanvasRenderingContext2D): PaintEnv => ({ ctx: target, geo, view, state, dpr, fit: fitScale, assets });
+
 function fitView(): BoardView {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  // spazio attorno per le coordinate e gli angolari della cornice
-  const scale = Math.min((w - 110) / geo.width, (h - 90) / geo.height);
-  return { scale, x: (w - geo.width * scale) / 2, y: (h - geo.height * scale) / 2 };
+  // spazio attorno per la cornice e i riferimenti della griglia
+  const scale = Math.min((w - 130) / geo.width, (h - 150) / geo.height);
+  return { scale, x: (w - geo.width * scale) / 2, y: (h - geo.height * scale) / 2 + 20 };
 }
 
 function resize() {
@@ -70,7 +81,7 @@ function resize() {
 }
 
 function renderStatic() {
-  paintStatic(cacheCtx, geo, view, state, dpr, fitScale, earth);
+  style.paintStatic(env(cacheCtx));
   cacheView = { ...view };
   requestFrame();
 }
@@ -78,15 +89,14 @@ function renderStatic() {
 function draw() {
   frameQueued = false;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = BOARD_COLORS.table;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (cacheView) {
     // finché si trascina o si ingrandisce si sposta l'ultima immagine; quella nitida arriva da ferma
     const s = view.scale / cacheView.scale;
     ctx.setTransform(s, 0, 0, s, (view.x - cacheView.x * s) * dpr, (view.y - cacheView.y * s) * dpr);
     ctx.drawImage(cache, 0, 0);
   }
-  paintOverlay(ctx, geo, view, state, dpr, fitScale);
+  style.paintOverlay(env(ctx));
 }
 
 function requestFrame() {
@@ -99,6 +109,20 @@ function viewChanged() {
   requestFrame();
   window.clearTimeout(idleTimer);
   idleTimer = window.setTimeout(renderStatic, 140);
+}
+
+async function useStyle(next: BoardStyle) {
+  style = next;
+  document.body.dataset.stile = next.id;
+  for (const [id, p] of ownerOf) state.owners.set(id, colorOfPlayer(p));
+  const url = new URL(location.href);
+  url.searchParams.set('stile', next.id);
+  history.replaceState(null, '', url);
+  for (const b of stylesEl.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.id === next.id));
+  await Promise.all(next.fonts.map((f) => document.fonts.load(f))).catch(() => undefined);
+  renderPlayers();
+  showCard(state.selected ?? state.hover);
+  renderStatic();
 }
 
 // ---------------------------------------------------------------- interazione
@@ -176,21 +200,33 @@ window.addEventListener('keydown', (e) => {
     view = fitView();
     viewChanged();
   }
+  const n = Number(e.key);
+  if (n >= 1 && n <= STYLES.length) void useStyle(STYLES[n - 1]!);
 });
 window.addEventListener('resize', resize);
 
 // ---------------------------------------------------------------- pannelli
+const stylesEl = document.querySelector('.hud-styles') as HTMLElement;
 const playersEl = document.querySelector('.hud-players') as HTMLElement;
 const cardEl = document.querySelector('.hud-card') as HTMLElement;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const chip = (color: string) => `<span class="chip" style="--c: ${color}"></span>`;
 
+stylesEl.innerHTML = STYLES.map(
+  (s, i) => `<button type="button" data-id="${s.id}" aria-pressed="false"><kbd>${i + 1}</kbd><span>${esc(s.name)}</span><small>${esc(s.tagline)}</small></button>`,
+).join('');
+stylesEl.addEventListener('click', (e) => {
+  const button = (e.target as HTMLElement).closest('button');
+  const next = STYLES.find((s) => s.id === button?.dataset.id);
+  if (next) void useStyle(next);
+});
+
 function renderPlayers() {
-  const rows = players
-    .map((p, i) => {
+  const rows = names
+    .map((name, i) => {
       const own = [...ownerOf].filter(([, o]) => o === i).map(([id]) => id);
       const armies = own.reduce((s, id) => s + (state.armies.get(id) ?? 0), 0);
-      return `<div class="player">${chip(p.color)}<span>${esc(p.name)}</span><span class="count"><b>${own.length}</b> terr.</span><span class="count"><b>${armies}</b> arm.</span></div>`;
+      return `<div class="player">${chip(colorOfPlayer(i))}<span>${esc(name)}</span><span class="count"><b>${own.length}</b> terr.</span><span class="count"><b>${armies}</b> arm.</span></div>`;
     })
     .join('');
   playersEl.innerHTML = `<h2>Partita di prova</h2>${rows}`;
@@ -203,7 +239,7 @@ function showCard(id: string | null) {
   }
   const t = board.territories.find((x) => x.id === id)!;
   const continent = board.continents.find((c) => c.id === t.continent)!;
-  const owner = players[ownerOf.get(id)!]!;
+  const owner = ownerOf.get(id)!;
   const seaWith = new Set(
     board.links.filter((l) => l.sea && (l.a === id || l.b === id)).map((l) => (l.a === id ? l.b : l.a)),
   );
@@ -211,33 +247,31 @@ function showCard(id: string | null) {
     .map((n) => board.territories.find((x) => x.id === n)!)
     .sort((a, b) => a.name.localeCompare(b.name, 'it'))
     .map((n) => {
-      const enemy = ownerOf.get(n.id) !== ownerOf.get(id);
-      const tags = [seaWith.has(n.id) ? 'via mare' : '', enemy ? `${state.armies.get(n.id) ?? 0} arm.` : 'tuo'].filter(Boolean).join(' · ');
-      return `<li>${chip(players[ownerOf.get(n.id)!]!.color)}<span>${esc(n.name)}</span><span class="tag${enemy ? ' enemy' : ''}">${tags}</span></li>`;
+      const enemy = ownerOf.get(n.id) !== owner;
+      const tags = [seaWith.has(n.id) ? 'via mare' : '', enemy ? `${state.armies.get(n.id) ?? 0} arm.` : 'tuo'].filter(Boolean).join(', ');
+      return `<li>${chip(colorOfPlayer(ownerOf.get(n.id)!))}<span>${esc(n.name)}</span><span class="tag${enemy ? ' enemy' : ''}">${tags}</span></li>`;
     })
     .join('');
   cardEl.innerHTML = `
     <p class="name">${esc(t.name)}</p>
     <p class="continent">${esc(continent.name)}, bonus +${continent.bonus}</p>
-    <div class="owner">${chip(owner.color)}<span>${esc(owner.name)}</span><span class="armies">${state.armies.get(id) ?? 0}</span></div>
+    <div class="owner">${chip(colorOfPlayer(owner))}<span>${esc(names[owner]!)}</span><span class="armies">${state.armies.get(id) ?? 0}</span></div>
     <h2>Confinanti</h2>
     <ul>${neighbours}</ul>`;
   cardEl.hidden = false;
 }
 
 // ---------------------------------------------------------------- avvio
-await Promise.all([
-  document.fonts.load('600 16px "IBM Plex Sans Condensed"'),
-  document.fonts.load('500 16px "IBM Plex Sans Condensed"'),
-  document.fonts.load('600 16px "IBM Plex Mono"'),
-  document.fonts.load('500 16px "IBM Plex Mono"'),
-]).catch(() => undefined);
-renderPlayers();
+await Promise.all(['500 16px "IBM Plex Sans Condensed"', '600 16px "IBM Plex Mono"'].map((f) => document.fonts.load(f))).catch(
+  () => undefined,
+);
+dpr = Math.min(2, window.devicePixelRatio || 1);
+await useStyle(style);
 resize();
-// la base satellitare arriva dopo: intanto si vede già il tabellone
-loadEarthBase(board)
+// il terreno arriva dopo: intanto si vede già il tabellone
+loadRelief(board)
   .then((canvas) => {
-    earth = canvas;
+    assets.relief = canvas;
     renderStatic();
   })
   .catch((err: unknown) => console.warn(err));

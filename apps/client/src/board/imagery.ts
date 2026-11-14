@@ -60,32 +60,19 @@ function reproject(img: HTMLImageElement, board: BoardDef, outWidth: number): HT
 }
 
 /**
- * Base satellitare del tabellone: la Terra di notte (luci delle città) con il rilievo della
- * foto di giorno sovrapposto in trasparenza, tutto spento e virato al freddo come su un
- * display da sala operativa.
+ * Terreno in scala di grigi dalla foto di giorno: montagne, deserti e foreste, da usare
+ * come trama sotto i colori (moltiplicato o in sovrapposizione, a seconda dello stile).
  */
-export async function loadEarthBase(board: BoardDef, outWidth = 4096): Promise<HTMLCanvasElement | null> {
+export async function loadRelief(board: BoardDef, outWidth = 4096): Promise<HTMLCanvasElement | null> {
   if (!board.projection) return null;
-  const [night, day] = await Promise.all([loadImage('/terra/notte.jpg'), loadImage('/terra/giorno.jpg')]);
-  const nightP = reproject(night, board, outWidth);
+  const day = await loadImage('/terra/giorno.jpg');
   const dayP = reproject(day, board, outWidth);
   const out = document.createElement('canvas');
-  out.width = nightP.width;
-  out.height = nightP.height;
+  out.width = dayP.width;
+  out.height = dayP.height;
   const ctx = out.getContext('2d')!;
-  // foto di giorno quasi in bianco e nero, spenta: si leggono rilievi, deserti, foreste
-  ctx.filter = 'grayscale(0.75) brightness(0.62) contrast(1.3)';
+  ctx.filter = 'grayscale(1) contrast(1.25) brightness(1.15)';
   ctx.drawImage(dayP, 0, 0);
-  // viraggio freddo da display notturno
-  ctx.filter = 'none';
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = '#7fa3b8';
-  ctx.fillRect(0, 0, out.width, out.height);
-  // luci delle città: dalla foto notturna si tengono solo i punti luminosi
-  ctx.globalCompositeOperation = 'screen';
-  ctx.filter = 'brightness(1.25) contrast(4.5) saturate(1.3)';
-  ctx.drawImage(nightP, 0, 0);
-  ctx.globalCompositeOperation = 'source-over';
   ctx.filter = 'none';
   return out;
 }
