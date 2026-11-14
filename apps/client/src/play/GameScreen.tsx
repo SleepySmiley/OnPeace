@@ -123,13 +123,11 @@ function Board({ onPainter }: { onPainter: (p: BoardPainter | null) => void }) {
 interface Props {
   /** In più nella barra in alto (pagina di prova). */
   topbarExtra?: ReactNode;
-  /** Per chi sta sopra il tabellone e deve muoverne la vista (pagina di prova). */
-  onPainter?: (p: BoardPainter | null) => void;
   /** In più sopra il tabellone (pagina di prova). */
   extra?: ReactNode;
 }
 
-export function GameScreen({ topbarExtra, onPainter, extra }: Props = {}) {
+export function GameScreen({ topbarExtra, extra }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
   const online = useSession((s) => s.online);
@@ -168,8 +166,6 @@ export function GameScreen({ topbarExtra, onPainter, extra }: Props = {}) {
       setBattleSoundsByScene(false);
     };
   }, []);
-
-  useEffect(() => onPainter?.(painter), [painter, onPainter]);
 
   // in sviluppo, per le prove automatiche: il tabellone e la sessione raggiungibili dalla console
   useEffect(() => {

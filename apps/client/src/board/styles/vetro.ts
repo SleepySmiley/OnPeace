@@ -1,19 +1,17 @@
 /**
  * Stile "Vetro": pulito e scuro, qualità da prodotto. Territori pieni e luminosi in leggero
- * rilievo sul mare grafite, terreno appena accennato, pedine rotonde con ombra morbida,
+ * rilievo sul mare grafite, terreno appena accennato, carri armati con ombra morbida,
  * messa a fuoco del territorio selezionato (il resto si spegne).
  */
-import { drawTankToken, tankTokens, type TankTheme } from '../tanks';
+import { drawTankToken, type TankTheme } from '../tanks';
 import {
   clamp,
   dimmed,
   flashLevel,
-  luminance,
   pendingBadge,
   placeLabels,
   rgba,
   routePath,
-  screenOf,
   selectionArrows,
   shade,
   toMap,
@@ -27,15 +25,13 @@ import {
 
 const FONT = '"Geist", system-ui, sans-serif';
 
-/** Carri sul vetro: contorno chiaro, cingoli quasi neri, alone del colore del giocatore. */
+/** Carri sul vetro: contorno chiaro, cingoli quasi neri, ombra scura (i territori sono del colore del padrone). */
 const TANK_THEME: TankTheme = {
   line: 'rgba(255, 255, 255, 0.85)',
   track: '#15171c',
   wheel: '#5d6068',
-  glow: true,
+  deepShadow: true,
   font: FONT,
-  plate: 'rgba(20, 22, 28, 0.92)',
-  plateInk: '#ffffff',
 };
 
 export const vetro: BoardStyle = {
@@ -241,55 +237,23 @@ export const vetro: BoardStyle = {
       ctx.restore();
     }
 
-    // pedine rotonde, o carri armati
+    // pedine: carri armati col numero sulla fiancata
     const taken: Rect[] = [];
-    const tanks = tankTokens() !== 'pedine';
     for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
       if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
-      const [x, y] = screenOf(env, t.anchor);
-      const color = colorOf(t.id);
       const active = t.id === state.selected || t.id === state.hover;
-      if (tanks) {
-        const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, color, r, active, TANK_THEME);
-        taken.push(box);
-        const add = state.pending?.get(t.id);
-        if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
-        continue;
-      }
-      const rr = active ? r + 1.5 : r;
-      taken.push([x - rr - 2, y - rr - 2, x + rr + 2, y + rr + 2]);
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-      ctx.shadowBlur = active ? 16 : 10;
-      ctx.shadowOffsetY = active ? 6 : 3;
-      ctx.beginPath();
-      ctx.arc(x, y, rr, 0, Math.PI * 2);
-      const g = ctx.createLinearGradient(x, y - rr, x, y + rr);
-      g.addColorStop(0, shade(color, 0.18));
-      g.addColorStop(1, shade(color, -0.12));
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.restore();
-      ctx.beginPath();
-      ctx.arc(x, y, rr - 0.75, 0, Math.PI * 2);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.stroke();
-      ctx.font = `700 ${rr * 1.02}px ${FONT}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = luminance(color) > 0.5 ? '#111214' : '#ffffff';
-      ctx.fillText(String(state.armies.get(t.id) ?? 0), x, y + rr * 0.06);
+      const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, colorOf(t.id), r, active, TANK_THEME);
+      taken.push(box);
       const add = state.pending?.get(t.id);
-      if (add) pendingBadge(env, x + rr * 0.45, y - rr - 3, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
+      if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
     }
 
     const fs = clamp(11 + (z - 1) * 0.9, 11, 14);
     placeLabels(env, taken, {
       font: `600 ${fs}px ${FONT}`,
       size: fs,
-      offsetY: tanks ? r * 1.55 + 5 : r + 5,
+      offsetY: r * 1.55 + 5,
       letterSpacing: -0.1,
       draw: (text, x, y, active) => {
         ctx.save();

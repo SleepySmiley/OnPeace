@@ -1,15 +1,13 @@
 /**
  * Pagina di prova della battaglia (/battaglia.html in sviluppo): la partita vera che gira nel
  * browser contro quattro avversari automatici, con la scena dei carri armati com'è nel gioco. Dal
- * pannello in alto a destra si provano le scelte ancora aperte: le pedine sulla mappa (i dischi di
- * oggi o i carri, in quattro modi), i carri di lato o dall'alto, "fino in fondo" tiro per tiro o col
- * conto veloce, che cosa vede chi non combatte; e si fanno partire battaglie finte senza giocare.
+ * pannello in alto a destra si provano le scelte ancora aperte: i carri della battaglia di lato o
+ * dall'alto, "fino in fondo" tiro per tiro o col conto veloce, che cosa vede chi non combatte; e si
+ * fanno partire battaglie finte senza giocare.
  */
-import { StrictMode, useEffect, useRef, useState } from 'react';
+import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
-import type { BoardPainter } from '../board/painter';
-import { setTankTokens, tankTokens, type TankTokens } from '../board/tanks';
 import { feedRoll, fighter, useBattle, type BlitzMode, type Role, type Roll, type TankLook, type Watch } from '../play/battle';
 import { GameScreen } from '../play/GameScreen';
 import { setLinkFactory, useSession } from '../store';
@@ -32,21 +30,6 @@ Storage.prototype.removeItem = function (key: string) {
 const params = new URLSearchParams(location.search);
 const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
 
-/** Pedine sulla mappa: i dischi di oggi o i carri armati, in quattro modi. */
-const TOKENS: { id: TankTokens; name: string }[] = [
-  { id: 'pedine', name: 'Pedine di oggi (dischi)' },
-  { id: 'targa', name: 'A · Carro con la targa' },
-  { id: 'squadra', name: 'B · Squadra e bandierina' },
-  { id: 'alto', name: "C · Carro dall'alto" },
-  { id: 'scafo', name: 'D · Numero sulla fiancata' },
-];
-setTankTokens(
-  pick(
-    params.get('pedine'),
-    TOKENS.map((t) => t.id),
-    'targa',
-  ),
-);
 useBattle.getState().setOptions({
   tankLook: pick(params.get('carro'), ['lato', 'alto'] as const, 'lato'),
   blitzMode: pick(params.get('fino'), ['tiri', 'conto'] as const, 'tiri'),
@@ -57,7 +40,6 @@ useBattle.getState().setOptions({
 function saveChoices() {
   const s = useBattle.getState();
   const url = new URLSearchParams(location.search);
-  url.set('pedine', tankTokens());
   url.set('carro', s.tankLook);
   url.set('fino', s.blitzMode);
   url.set('altri', s.watch);
@@ -160,16 +142,15 @@ function startDemo(kind: DemoKind): boolean {
 }
 
 // per le prove automatiche dalla console
-if (import.meta.env.DEV) Object.assign(window, { __battaglia: useBattle, __pedine: setTankTokens, __demo: startDemo });
+if (import.meta.env.DEV) Object.assign(window, { __battaglia: useBattle, __demo: startDemo });
 
 // ---------------------------------------------------------------- pannello delle scelte
 
-function Controls({ painter }: { painter: BoardPainter | null }) {
+function Controls() {
   const tankLook = useBattle((s) => s.tankLook);
   const blitzMode = useBattle((s) => s.blitzMode);
   const watch = useBattle((s) => s.watch);
   const setOptions = useBattle((s) => s.setOptions);
-  const [tokens, setTokens] = useState<TankTokens>(tankTokens());
   const choose = (patch: Parameters<typeof setOptions>[0]) => {
     setOptions(patch);
     saveChoices();
@@ -177,27 +158,8 @@ function Controls({ painter }: { painter: BoardPainter | null }) {
   return (
     <aside className="bt-dock panel" aria-label="Prova della battaglia">
       <span className="bt-dock-title">
-        <span className="mock-tag">Prova</span> Battaglia e carri
+        <span className="mock-tag">Prova</span> Battaglia
       </span>
-      <select
-        className="mock-restart"
-        aria-label="Pedine sulla mappa"
-        value={tokens}
-        onChange={(e) => {
-          e.target.blur();
-          const v = e.target.value as TankTokens;
-          setTankTokens(v);
-          setTokens(v);
-          painter?.redraw();
-          saveChoices();
-        }}
-      >
-        {TOKENS.map((t) => (
-          <option key={t.id} value={t.id}>
-            Mappa: {t.name}
-          </option>
-        ))}
-      </select>
       <select
         className="mock-restart"
         aria-label="Come sono i carri nella battaglia"
@@ -277,7 +239,6 @@ function Page() {
   const lobby = useSession((s) => s.online.lobby);
   const board = useSession((s) => s.board);
   const joined = useSession((s) => s.online.game);
-  const [painter, setPainter] = useState<BoardPainter | null>(null);
   const booted = useRef(false);
   const wasIn = useRef(false);
 
@@ -299,7 +260,7 @@ function Page() {
       </div>
     );
   }
-  return <GameScreen onPainter={setPainter} extra={<Controls painter={painter} />} />;
+  return <GameScreen extra={<Controls />} />;
 }
 
 createRoot(document.getElementById('root')!).render(

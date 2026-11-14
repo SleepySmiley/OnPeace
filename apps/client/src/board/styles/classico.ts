@@ -3,18 +3,16 @@
  * zero. Continenti in tinte da atlante, mare chiaro con le increspature incise, nomi in
  * maiuscoletto antico, pedine dei giocatori come dischi di plastica impilati.
  */
-import { drawTankToken, tankTokens, type TankTheme } from '../tanks';
+import { drawTankToken, type TankTheme } from '../tanks';
 import {
   clamp,
   dimmed,
   flashLevel,
-  luminance,
   noiseTile,
   pendingBadge,
   placeLabels,
   qPoint,
   routePath,
-  screenOf,
   selectionArrows,
   shade,
   toMap,
@@ -35,10 +33,8 @@ const TANK_THEME: TankTheme = {
   line: INK,
   track: '#3a3026',
   wheel: '#8a7f6e',
-  glow: false,
+  deepShadow: false,
   font: 'Georgia, serif',
-  plate: '#f3ead2',
-  plateInk: INK,
 };
 /** Tinte dei continenti (nostre, da atlante): anche la carta dell'obiettivo le usa. */
 export const CONTINENT: Record<string, string> = {
@@ -424,79 +420,23 @@ export const classico: BoardStyle = {
       ctx.restore();
     }
 
-    // pedine: dischi di plastica impilati (più armate, pila più alta), o carri armati
+    // pedine: carri armati col numero sulla fiancata
     const taken: Rect[] = [];
-    const tanks = tankTokens() !== 'pedine';
     for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
       if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
       if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
-      const [x, y] = screenOf(env, t.anchor);
-      const color = colorOf(t.id);
-      const armies = state.armies.get(t.id) ?? 0;
       const active = t.id === state.selected || t.id === state.hover;
-      if (tanks) {
-        const box = drawTankToken(env, t.id, armies, color, r, active, TANK_THEME);
-        taken.push(box);
-        const add = state.pending?.get(t.id);
-        if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
-        continue;
-      }
-      const discs = clamp(Math.ceil(armies / 4), 1, 4);
-      const th = r * 0.32; // spessore di un disco
-      const ry = r * 0.55;
-      const lift = active ? 3 : 0;
-      const topY = y - (discs - 1) * th * 0.5 - lift;
-      taken.push([x - r - 2, topY - ry - 2, x + r + 2, y + (discs - 1) * th * 0.5 + th + ry + 2]);
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-      ctx.shadowBlur = 5;
-      ctx.shadowOffsetY = 3 + lift;
-      ctx.beginPath();
-      ctx.ellipse(x, y + (discs - 1) * th * 0.5 + th, r, ry, 0, 0, Math.PI * 2);
-      ctx.fillStyle = shade(color, -0.4);
-      ctx.fill();
-      ctx.restore();
-      for (let i = discs - 1; i >= 0; i--) {
-        const cy = topY + i * th;
-        // fianco
-        ctx.beginPath();
-        ctx.ellipse(x, cy + th, r, ry, 0, 0, Math.PI);
-        ctx.lineTo(x - r, cy);
-        ctx.ellipse(x, cy, r, ry, 0, Math.PI, 0, true);
-        ctx.closePath();
-        const side = ctx.createLinearGradient(x - r, 0, x + r, 0);
-        side.addColorStop(0, shade(color, -0.35));
-        side.addColorStop(0.4, shade(color, -0.05));
-        side.addColorStop(1, shade(color, -0.45));
-        ctx.fillStyle = side;
-        ctx.fill();
-        ctx.lineWidth = 0.8;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.stroke();
-        // faccia superiore
-        ctx.beginPath();
-        ctx.ellipse(x, cy, r, ry, 0, 0, Math.PI * 2);
-        const top = ctx.createLinearGradient(x, cy - ry, x, cy + ry);
-        top.addColorStop(0, shade(color, 0.22));
-        top.addColorStop(1, color);
-        ctx.fillStyle = top;
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.font = `700 ${r * 0.95}px Georgia, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = luminance(color) > 0.4 ? '#1b1510' : '#ffffff';
-      ctx.fillText(String(armies), x, topY + 0.5);
+      const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, colorOf(t.id), r, active, TANK_THEME);
+      taken.push(box);
       const add = state.pending?.get(t.id);
-      if (add) pendingBadge(env, x + r * 0.55, topY - ry - 4, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
+      if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
     }
 
     const fs = clamp(11 + (z - 1) * 1, 11, 15);
     placeLabels(env, taken, {
       font: `400 ${fs}px ${SERIF}`,
       size: fs,
-      offsetY: tanks ? r * 1.55 + 6 : r + 6,
+      offsetY: r * 1.55 + 6,
       draw: (text, x, y) => {
         ctx.lineJoin = 'round';
         ctx.lineWidth = 3;

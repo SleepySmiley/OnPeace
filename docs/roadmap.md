@@ -18,22 +18,20 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.6 — barra dei comandi in basso (proposta A).** Nell'essenziale il pannello che si attaccava al territorio cliccato non c'è più: una barra fissa in basso al centro dice cosa fare, mostra il contatore o chi contro chi, dadi e armate, con Conferma e Ricomincia sempre lì. La mappa le lascia spazio, i bottoni e gli avvisi in basso stanno sopra. Esc nei rinforzi toglie le armate non confermate.
 - **M12.7 — una sola disposizione.** Tolte "plancia laterale" e "comandi in basso": resta l'essenziale, e il menu Aspetto sceglie solo il tema. Via anche il vecchio pannello della mossa e le versioni dei pannelli che servivano solo a quelle due.
 - **M12.8 — scena della battaglia coi carri armati (proposta E).** Su cinque proposte (tavolo, duello, mappa, riquadro, carri) hai scelto i carri: la camera vola sui due territori, su ciascuno i carri schierati (uno per armata, al massimo 8, le retrovie avanzano), i dadi 3D rotolano in primo piano, poi i carri si sparano: per ogni coppia di dadi spara chi la vince e il carro colpito esplode. Alla conquista tre carri entrano nel territorio preso. Clic salta, Esc chiude, Invio tira ancora; i comandi restano nella barra in basso. Chi guarda una battaglia degli altri la vede in piccolo in alto. Suoni nuovi (dadi, colpo d'aria, cannonata). Corretto anche un bug dei suoni: il volume delle battaglie degli altri veniva preso come ritardo.
+- **M12.9 — carri armati al posto dei numeri (proposta D).** Su quattro modi (targa, squadra con bandierina, dall'alto, numero sulla fiancata) hai scelto la fiancata: ogni territorio ha un carro di lato nel colore del padrone col numero dipinto sullo scafo, girato verso il nemico confinante più vicino. A mappa intera i carri sono più piccoli e crescono avvicinandosi; sul vetro un'ombra scura li stacca dal territorio dello stesso colore. Via i dischi.
 
 ## Da fare
 
-### 1. Carri sulla mappa e ultime scelte della battaglia
+### 1. Ultime scelte della battaglia
 
-Hai chiesto: al posto del numero di armate sui territori, i carri armati. Pagina di prova: `battaglia.html`, pannello in alto a destra, voce "Mappa". Quattro modi, da confrontare con i dischi di oggi:
-- **A · Carro con la targa**: un carro di lato, il numero su una targhetta sotto;
-- **B · Squadra e bandierina**: più armate, più carri (fino a 4), il numero su una bandierina;
-- **C · Carro dall'alto**: visto dall'alto, il numero sulla torretta, il cannone verso il nemico più vicino;
-- **D · Numero sulla fiancata**: un carro di lato più grosso, il numero dipinto sullo scafo.
+Pagina di prova: `battaglia.html`, pannello in alto a destra (con le battaglie finte per vederle subito).
+- carri della battaglia di lato (come le pedine) o visti dall'alto;
+- "fino in fondo": tiro per tiro, o col conto veloce delle perdite;
+- chi non combatte vede la battaglia in piccolo, intera o niente.
 
-I carri crescono avvicinandosi alla mappa (a mappa intera sono più piccoli, se no l'Europa si accavalla).
+Oggi: di lato, tiro per tiro, in piccolo.
 
-**Da scegliere ancora per la battaglia** (stessa pagina): carri di lato o dall'alto; "fino in fondo" tiro per tiro o col conto veloce; chi non combatte vede la battaglia in piccolo, intera o niente. Oggi: di lato, tiro per tiro, in piccolo.
-
-**Da sistemare dopo la scelta:** il tempo del turno continua a scorrere durante la scena.
+**Da sistemare:** il tempo del turno continua a scorrere durante la scena.
 
 ### 2. Pesca della carta a fine turno
 
@@ -47,7 +45,7 @@ Servono 2-3 proposte: il mazzo, il gesto della pesca, la carta che si gira e vol
 
 Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
 
-Le pedine le decide il punto 1 (i carri). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
+Le pedine ormai sono i carri (M12.9). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
 
 ### 4. "Cosa devo fare adesso" e il resto dell'interfaccia
 
