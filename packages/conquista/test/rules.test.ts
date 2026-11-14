@@ -7,6 +7,7 @@ import {
   describeObjective,
   eventsFor,
   objectiveMet,
+  objectiveView,
   ownedBy,
   playersToAct,
   reinforcementsFor,
@@ -486,6 +487,26 @@ describe('obiettivi', () => {
     expect(r.events.at(-1)).toMatchObject({ type: 'victory', player: me, reason: 'objective' });
   });
 
+  it('al giocatore arrivano tipo e numeri dell’obiettivo, per disegnarlo, oltre alla frase', () => {
+    const s = newGame(3, 'objectives', 5);
+    const target = s.players[1]!;
+    expect(objectiveView(ctx, s, { id: 'europa_sudamerica_altro' })).toEqual({
+      kind: 'continents',
+      continents: ['europa', 'sudamerica'],
+      plusAny: 1,
+      text: "Conquista l'Europa, il Sud America e un terzo continente a tua scelta.",
+    });
+    expect(objectiveView(ctx, s, { id: 'asia_africa' })).toMatchObject({ kind: 'continents', plusAny: 0 });
+    expect(objectiveView(ctx, s, { id: 'territori_20_presidiati' })).toMatchObject({ kind: 'territories', count: 20, minArmies: 2 });
+    expect(objectiveView(ctx, s, { id: 'territori_26' })).toMatchObject({ kind: 'territories', count: 26, minArmies: null });
+    expect(objectiveView(ctx, s, { id: 'elimina', target: target.id })).toEqual({
+      kind: 'eliminate',
+      target: target.id,
+      fallback: { kind: 'territories', count: 26, minArmies: null, text: 'Conquista 26 territori.' },
+      text: expect.stringContaining(target.name),
+    });
+  });
+
   it('il nome del bersaglio entra nel testo così com’è, anche con simboli come $&', () => {
     const s = newGame(3, 'objectives', 5);
     s.players[1]!.name = '$&$`';
@@ -566,7 +587,7 @@ describe('vista', () => {
     expect(vb.cards).toBeNull();
     expect(vb.cardCount).toBe(2);
     expect(vb.objective).toBeNull();
-    expect(v.players.find((p) => p.id === a)!.objective).toMatch(/\S/);
+    expect(v.players.find((p) => p.id === a)!.objective!.text).toMatch(/\S/);
     expect('deck' in v).toBe(false);
     expect('seed' in v).toBe(false);
   });

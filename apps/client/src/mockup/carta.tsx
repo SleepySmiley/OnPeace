@@ -1,33 +1,26 @@
 /**
- * Pagina di prova della carta dell'obiettivo (/carta.html in sviluppo): le tre proposte sopra il
- * tabellone vero, nei due temi e con ogni tipo di obiettivo. Tasti: 1-3 proposta, T tema,
- * frecce obiettivo, R rifà l'animazione.
+ * Pagina di prova della carta dell'obiettivo (/carta.html in sviluppo): la carta del gioco sopra il
+ * tabellone vero, nei due temi e con ogni tipo di obiettivo, senza dover avviare una partita.
+ * Tasti: T tema, frecce obiettivo, R rifà l'animazione.
  */
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import boardJson from '@data/territori/mondo.json';
 import objectivesJson from '@data/conquista/obiettivi/mondo.json';
 import { BoardDef } from '@onpeace/engine';
-import { ObjectivesFile } from '@onpeace/conquista';
+import { ObjectivesFile, type FallbackObjectiveView } from '@onpeace/conquista';
 import { BoardCanvas } from '../board/BoardCanvas';
 import type { BoardState } from '../board/common';
 import { buildGeometry } from '../board/geometry';
 import { classico } from '../board/styles/classico';
 import { vetro } from '../board/styles/vetro';
-import type { ObjectiveInfo, Skin } from './art';
-import { CardA, CardB, CardC, type CardProps } from './cards';
+import { CONQUEST_TEXT, ObjectiveSheet, type ObjectiveInfo, type Skin } from '../play/objective';
 import '../styles.css';
 import './carta.css';
 
 const board = BoardDef.parse(boardJson);
 const geo = buildGeometry(board);
 const STYLES = { classico, vetro };
-
-const DIRECTIONS = [
-  { id: 'a', name: 'Carta del mazzo', Card: CardA },
-  { id: 'b', name: 'Ordine sigillato', Card: CardB },
-  { id: 'c', name: 'Mappa che si accende', Card: CardC },
-] as const;
 
 const CASES = [
   { id: 'asia_africa', name: 'Due continenti' },
@@ -41,17 +34,21 @@ const CASES = [
 
 const defs = ObjectivesFile.parse(objectivesJson).objectives;
 
+/** Come la vede il giocatore: quello che arriverebbe dal server, col bersaglio "Marco". */
 function infoFor(caseId: string, skin: Skin): ObjectiveInfo {
-  const colors = STYLES[skin].playerColors;
-  if (caseId === 'conquest') return { kind: 'conquest', text: 'Conquista tutto il mondo: elimina tutti gli avversari.' };
+  if (caseId === 'conquest') return { kind: 'conquest', text: CONQUEST_TEXT };
+  const asView = (id: string): FallbackObjectiveView => {
+    const d = defs.find((x) => x.id === id)!;
+    if (d.kind === 'continents') return { kind: 'continents', continents: d.continents, plusAny: d.plusAny ?? 0, text: d.text };
+    if (d.kind === 'territories') return { kind: 'territories', count: d.count, minArmies: d.minArmies ?? null, text: d.text };
+    throw new Error(`${id}: "elimina" non ha una vista di riserva`);
+  };
   const d = defs.find((x) => x.id === caseId)!;
-  if (d.kind === 'continents') return { kind: 'continents', continents: d.continents, plusAny: d.plusAny ?? 0, text: d.text };
-  if (d.kind === 'territories') return { kind: 'territories', count: d.count, minArmies: d.minArmies ?? null, text: d.text };
-  const fallback = defs.find((x) => x.id === d.fallback);
+  if (d.kind !== 'eliminate') return asView(d.id);
   return {
     kind: 'eliminate',
-    target: { name: 'Marco', color: colors[4]! },
-    fallback: fallback && fallback.kind === 'territories' ? fallback.count : 26,
+    target: { name: 'Marco', color: STYLES[skin].playerColors[4]! },
+    fallback: asView(d.fallback),
     text: d.text.replace('{giocatore}', 'Marco'),
   };
 }
@@ -61,28 +58,26 @@ const INSETS = { top: 52, right: 0, bottom: 0, left: 0 };
 
 function readUrl() {
   const q = new URLSearchParams(location.search);
-  const dir = DIRECTIONS.find((d) => d.id === q.get('v'))?.id ?? 'a';
   const skin: Skin = q.get('stile') === 'vetro' ? 'vetro' : 'classico';
   const obj = CASES.find((c) => c.id === q.get('obiettivo'))?.id ?? CASES[0].id;
-  return { dir, skin, obj };
+  return { skin, obj };
 }
 
 function Page() {
-  const [{ dir, skin, obj }, setState] = useState(readUrl);
+  const [{ skin, obj }, setState] = useState(readUrl);
   const [replay, setReplay] = useState(0);
-  const set = (patch: Partial<{ dir: string; skin: Skin; obj: string }>) => setState((s) => ({ ...s, ...patch }) as typeof s);
+  const set = (patch: Partial<{ skin: Skin; obj: string }>) => setState((s) => ({ ...s, ...patch }) as typeof s);
 
   useEffect(() => {
     document.body.dataset.stile = skin;
-    history.replaceState(null, '', `?v=${dir}&stile=${skin}&obiettivo=${obj}`);
-  }, [dir, skin, obj]);
+    history.replaceState(null, '', `?stile=${skin}&obiettivo=${obj}`);
+  }, [skin, obj]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('select')) return;
       const i = CASES.findIndex((c) => c.id === obj);
-      if (/^[1-3]$/.test(e.key)) set({ dir: DIRECTIONS[Number(e.key) - 1]!.id });
-      else if (e.key === 't' || e.key === 'T') set({ skin: skin === 'classico' ? 'vetro' : 'classico' });
+      if (e.key === 't' || e.key === 'T') set({ skin: skin === 'classico' ? 'vetro' : 'classico' });
       else if (e.key === 'ArrowRight') set({ obj: CASES[(i + 1) % CASES.length]!.id });
       else if (e.key === 'ArrowLeft') set({ obj: CASES[(i - 1 + CASES.length) % CASES.length]!.id });
       else if (e.key === 'r' || e.key === 'R') setReplay((n) => n + 1);
@@ -94,8 +89,7 @@ function Page() {
   });
 
   const info = useMemo(() => infoFor(obj, skin), [obj, skin]);
-  const props: CardProps = { info, geo, board, skin, me: { name: 'Lupo', color: STYLES[skin].playerColors[0]! } };
-  const { Card } = DIRECTIONS.find((d) => d.id === dir)!;
+  const me = STYLES[skin].playerColors[0]!;
 
   return (
     <>
@@ -104,13 +98,6 @@ function Page() {
       </div>
       <header className="mock-bar">
         <span className="mock-name">Prova: carta dell'obiettivo</span>
-        <div className="segmented mock-seg" role="tablist" aria-label="Proposta">
-          {DIRECTIONS.map((d, i) => (
-            <button key={d.id} type="button" role="tab" aria-selected={dir === d.id} onClick={() => set({ dir: d.id })}>
-              <span className="num">{i + 1}</span> {d.name}
-            </button>
-          ))}
-        </div>
         <div className="segmented mock-seg" role="tablist" aria-label="Tema">
           {(['classico', 'vetro'] as const).map((s) => (
             <button key={s} type="button" role="tab" aria-selected={skin === s} onClick={() => set({ skin: s })}>
@@ -132,17 +119,21 @@ function Page() {
           Rifai l'animazione
         </button>
       </header>
-      <div className={`oc-reveal oc-reveal-${dir}`} role="dialog" aria-modal="true" aria-labelledby="oc-title" key={`${dir}-${skin}-${obj}-${replay}`}>
-        <Card {...props} />
-        <div className="oc-actions">
+      <div className="objective-reveal" role="dialog" aria-modal="true" aria-labelledby="objective-title" key={`${skin}-${obj}-${replay}`}>
+        <ObjectiveSheet info={info} geo={geo} board={board} skin={skin} me={me} titleId="objective-title" />
+        <div className="objective-actions">
           <button type="button" className="primary">
             Ho capito
           </button>
-          <p className="oc-wait">
-            La scelta dei territori comincia tra 
-            <b className="num">0:25</b>
+          <p className="objective-wait">
+            Si parte tra <b className="countdown num">0:25</b>
+            <span>· altri 2 stanno leggendo</span>
           </p>
         </div>
+        <p className="objective-hint">Lo ritrovi sempre insieme alle tue carte. Subito dopo si scelgono i territori a turno: pensa a quali ti servono.</p>
+        <aside className="mock-compact" aria-label="Come appare tra le carte">
+          <ObjectiveSheet info={info} geo={geo} board={board} skin={skin} me={me} compact />
+        </aside>
       </div>
     </>
   );

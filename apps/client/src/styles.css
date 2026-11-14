@@ -1285,190 +1285,585 @@ body[data-stile='vetro'] .topbar.my-move .whose b {
   }
 }
 
-/* --- carta dell'obiettivo a inizio partita: arriva coperta e si gira */
-/* sotto la barra in alto, che resta usabile (pausa, guida, uscita) */
+/* --- carta dell'obiettivo: a inizio partita al centro, sotto la barra in alto (che resta usabile:
+   pausa, guida, uscita); poi piccola e ferma tra le carte */
 .objective-reveal {
   position: fixed;
   inset: 52px 0 0;
   z-index: 55;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px 16px;
   background: var(--veil);
 }
 
-/* l'entrata (dissolvenza) e la rotazione stanno su due elementi: l'opacità appiattirebbe il 3D */
-.objective-card {
-  width: min(400px, 100%);
-  height: min(560px, calc(100vh - 48px));
-  perspective: 1600px;
-  animation: card-in 450ms ease-out 150ms both;
+.objective-actions,
+.objective-hint {
+  animation: objective-rise 420ms ease-out 1700ms both;
 }
 
-.card-flip {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  animation: card-turn 800ms cubic-bezier(0.3, 0.7, 0.2, 1) 700ms both;
+.objective-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 4px;
 }
 
-@keyframes card-in {
+.objective-actions .primary {
+  min-height: 42px;
+  padding: 10px 26px;
+  font-size: 15px;
+}
+
+body[data-stile='classico'] .objective-actions .primary {
+  background: var(--accent);
+  border-color: rgba(246, 239, 220, 0.35);
+  color: var(--accent-ink);
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+}
+
+body[data-stile='classico'] .objective-actions .primary:not(:disabled):hover {
+  background: #a33426;
+}
+
+.objective-wait {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: rgba(241, 233, 212, 0.82);
+}
+
+.objective-wait .countdown {
+  min-width: 0;
+}
+
+.objective-wait .countdown:not(.urgent, .paused) {
+  color: #fff7e4;
+}
+
+.objective-hint {
+  max-width: 720px;
+  margin: -6px 0 0;
+  text-align: center;
+  text-wrap: balance;
+  font-size: 12.5px;
+  color: rgba(241, 233, 212, 0.62);
+}
+
+body[data-stile='vetro'] .objective-wait {
+  color: rgba(245, 245, 247, 0.72);
+}
+
+body[data-stile='vetro'] .objective-hint {
+  color: rgba(245, 245, 247, 0.5);
+}
+
+@keyframes objective-rise {
   from {
     opacity: 0;
-    transform: translateY(40px) scale(0.9);
+    transform: translateY(10px);
   }
 }
 
-@keyframes card-turn {
-  from {
-    transform: rotateY(0deg);
-  }
-  to {
-    transform: rotateY(180deg);
-  }
+/* superficie "carta": carta stampata nel classico, lastra nel vetro */
+body[data-stile='classico'] .paper {
+  color: var(--ink);
+  background-color: #fbf5e4;
+  background-image:
+    radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(122, 86, 38, 0.13) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.36 0 0 0 0 0.27 0 0 0 0 0.15 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.objective-card .face {
-  position: absolute;
-  inset: 0;
+body[data-stile='vetro'] .paper {
+  color: var(--ink);
+  background: linear-gradient(165deg, rgba(48, 51, 60, 0.97), rgba(24, 26, 31, 0.97));
+}
+
+/* la carta: mappa che si accende sopra, fascia con frase e numeri sotto */
+.objective-sheet {
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100vh - 52px - 150px);
   display: flex;
   flex-direction: column;
-  border-radius: calc(var(--radius) * 2);
-  border: 1px solid var(--card-edge);
-  box-shadow: var(--shadow);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+  animation: objective-in 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 60ms both;
 }
 
-.objective-card .back {
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  background: var(--card-back);
-  color: var(--card-back-ink);
+@keyframes objective-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(6px);
+  }
 }
 
-.objective-card .back::before {
-  content: '';
+.os-map {
+  position: relative;
+  flex: none;
+  aspect-ratio: 2.15;
+  max-height: 52vh;
+}
+
+.os-map .mini-map {
   position: absolute;
-  inset: 14px;
-  border: 1.5px solid currentColor;
-  border-radius: var(--radius);
-  opacity: 0.55;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.back-mark {
-  font-family: var(--display);
-  font-size: 44px;
-  letter-spacing: 0.04em;
+.os-label {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 3;
+  padding: 6px 12px;
+  font-size: 17px;
+  animation: objective-rise 380ms ease-out 260ms both;
 }
 
-.back-sub {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  opacity: 0.85;
+.os-band {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 20px;
+  row-gap: 12px;
+  padding: 18px 24px;
+  animation: objective-band 520ms cubic-bezier(0.2, 0.8, 0.25, 1) 1050ms both;
 }
 
-.objective-card .front {
-  transform: rotateY(180deg);
-  padding: 34px 32px 26px;
-  background: var(--card-bg);
-  color: var(--ink);
+@keyframes objective-band {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
 }
 
-.card-kicker {
+.os-text {
   margin: 0;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--accent);
-}
-
-body[data-stile='vetro'] .card-kicker {
-  color: #64d2ff;
-}
-
-.card-text {
-  margin: auto 0;
-  font-family: var(--display);
-  font-size: 30px;
+  font-size: 23px;
   line-height: 1.22;
   text-wrap: balance;
 }
 
-body[data-stile='vetro'] .card-text {
-  font-weight: 600;
-  font-size: 28px;
-  letter-spacing: -0.01em;
-}
-
-.card-note {
-  margin: 0 0 18px;
+.os-note {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-size: 12px;
   color: var(--ink-dim);
-  font-size: 14px;
-  line-height: 1.45;
+  white-space: nowrap;
 }
 
-.card-foot {
+.os-band .facts {
+  grid-column: 1 / -1;
+}
+
+/* classico: tavola d'atlante con cartiglio */
+body[data-stile='classico'] .objective-sheet {
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 5px #fbf5e4,
+    0 0 0 6px rgba(43, 34, 25, 0.75),
+    0 30px 60px rgba(0, 0, 0, 0.5);
+}
+
+body[data-stile='classico'] .os-map {
+  border-bottom: 1px solid var(--ink);
+}
+
+body[data-stile='classico'] .os-map::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-shadow: inset 0 0 30px rgba(43, 34, 25, 0.35);
+  pointer-events: none;
+}
+
+body[data-stile='classico'] .os-label {
+  background: #fbf5e4;
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 0 0 0 2px #fbf5e4,
+    inset 0 0 0 3px rgba(43, 34, 25, 0.5),
+    0 3px 8px rgba(43, 34, 25, 0.3);
+  letter-spacing: 0.04em;
+}
+
+body[data-stile='classico'] .os-text {
+  font-family: 'IM Fell English', Georgia, serif;
+  font-size: 25px;
+}
+
+body[data-stile='classico'] .os-note {
+  font-family: var(--display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* vetro: schermo di comando */
+body[data-stile='vetro'] .objective-sheet {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 30px 70px rgba(0, 0, 0, 0.6);
+}
+
+body[data-stile='vetro'] .os-map::after {
+  /* righe di scansione appena accennate */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+  pointer-events: none;
+}
+
+body[data-stile='vetro'] .os-label {
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #64d2ff;
+  background: rgba(10, 14, 20, 0.7);
+  border: 1px solid rgba(100, 210, 255, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+body[data-stile='vetro'] .os-band {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body[data-stile='vetro'] .os-text {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* un continente da prendere che si accende */
+.map-layer {
+  animation: map-light 650ms ease-out both;
+}
+
+@keyframes map-light {
+  0% {
+    opacity: 0;
+    filter: brightness(2.2) saturate(0.4);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+/* pedine da contare (i cq vanno sulle pedine: sul contenitore stesso guarderebbero la finestra) */
+.token-field {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  container-type: size;
   display: flex;
-  align-items: center;
-  gap: 14px;
   flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  padding: 0 30%;
 }
 
-.card-foot .primary {
-  padding: 10px 22px;
+.tok {
+  --s: clamp(6px, 5cqw, 20px);
+  display: block;
+  width: var(--s);
+  height: calc(var(--s) * 0.78);
+  margin: calc(var(--s) * 0.14);
+  border-radius: 3px;
+  background: var(--tok);
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 2px 3px rgba(0, 0, 0, 0.35);
+  animation: tok-drop 320ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+/* due pedine una sull'altra: almeno 2 armate in ciascun territorio */
+.tok-stack {
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 calc(var(--s) * -0.28) 0 -1px color-mix(in srgb, var(--tok) 80%, #fff),
+    0 calc(var(--s) * -0.28) 0 0 rgba(0, 0, 0, 0.55),
+    0 2px 3px rgba(0, 0, 0, 0.35);
+  margin-top: calc(var(--s) * 0.42);
+}
+
+body[data-stile='vetro'] .tok {
+  height: var(--s);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.85),
+    0 0 10px color-mix(in srgb, var(--tok) 70%, transparent);
+}
+
+body[data-stile='vetro'] .tok-stack {
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.85),
+    3px -3px 0 -1px color-mix(in srgb, var(--tok) 60%, #000),
+    3px -3px 0 0.5px rgba(255, 255, 255, 0.5),
+    0 0 10px color-mix(in srgb, var(--tok) 70%, transparent);
+  margin: calc(var(--s) * 0.14 + 2px);
+}
+
+@keyframes tok-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-140%) scale(1.25);
+  }
+}
+
+/* il giocatore da eliminare nel mirino */
+.target-token {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.target-sight {
+  --sight: #a3271d;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 46cqmin;
+  height: 46cqmin;
+  border-radius: 50%;
+  border: 2px solid var(--sight);
+  animation: sight-lock 700ms cubic-bezier(0.2, 0.8, 0.25, 1) 1100ms both;
+}
+
+.target-sight::before,
+.target-sight::after {
+  content: '';
+  position: absolute;
+  inset: -16%;
+  background:
+    linear-gradient(var(--sight) 0 0) 50% 0 / 2px 26% no-repeat,
+    linear-gradient(var(--sight) 0 0) 50% 100% / 2px 26% no-repeat,
+    linear-gradient(var(--sight) 0 0) 0 50% / 26% 2px no-repeat,
+    linear-gradient(var(--sight) 0 0) 100% 50% / 26% 2px no-repeat;
+}
+
+.target-sight::after {
+  inset: 18%;
+  border-radius: 50%;
+  border: 1px dashed var(--sight);
+  background: none;
+  opacity: 0.7;
+}
+
+body[data-stile='vetro'] .target-sight {
+  --sight: #ff453a;
+  filter: drop-shadow(0 0 6px rgba(255, 69, 58, 0.7));
+}
+
+.tok-big {
+  --s: 17cqmin;
+  margin: 0;
+  animation: none;
+}
+
+.target-name {
+  margin-top: 6cqmin;
+  padding: 2px 10px;
+  font-size: clamp(11px, 7cqmin, 16px);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 245, 228, 0.92);
+  color: #2b2219;
+  border: 1px solid rgba(43, 34, 25, 0.5);
+  animation: objective-rise 300ms ease-out 1500ms both;
+}
+
+body[data-stile='vetro'] .target-name {
+  color: var(--ink);
+  background: rgba(10, 14, 20, 0.8);
+  border-color: rgba(255, 69, 58, 0.55);
+}
+
+@keyframes sight-lock {
+  0% {
+    opacity: 0;
+    transform: scale(2.2) rotate(-60deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.94) rotate(4deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* numeri in fila sotto la frase */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.facts li {
+  white-space: nowrap;
+}
+
+.fact-extra {
+  color: var(--ink-dim);
+}
+
+.fact-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.fact-swatch.round {
+  border-radius: 50%;
+}
+
+.fact-swatch.hatch {
+  background: repeating-linear-gradient(-45deg, currentColor 0 1px, transparent 1px 4px);
+  opacity: 0.8;
+}
+
+body[data-stile='classico'] .facts b {
+  font-weight: 400;
+  font-variant: small-caps;
   font-size: 15px;
+  letter-spacing: 0.03em;
 }
 
-.card-clock {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
+body[data-stile='vetro'] .facts b {
+  font-weight: 600;
+}
+
+body[data-stile='vetro'] .fact-swatch {
+  box-shadow: 0 0 8px rgba(47, 140, 255, 0.6);
+}
+
+/* piccola e ferma, tra le carte */
+.objective-sheet.compact {
+  width: auto;
+  max-height: none;
+  margin-bottom: 12px;
+  animation: none;
+}
+
+.objective-sheet.compact .os-map {
+  max-height: none;
+}
+
+.objective-sheet.compact .os-label,
+.objective-sheet.compact .os-band,
+.objective-sheet.compact .tok,
+.objective-sheet.compact .target-sight,
+.objective-sheet.compact .target-name {
+  animation: none;
+}
+
+.objective-sheet.compact .os-label {
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  font-size: 12px;
+}
+
+.objective-sheet.compact .os-band {
+  display: block;
+  padding: 8px 10px 10px;
+}
+
+.objective-sheet.compact .os-text {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.objective-sheet.compact .facts {
+  gap: 2px 12px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.objective-sheet.compact .facts li {
+  white-space: normal;
+}
+
+.objective-sheet.compact .token-field {
+  padding: 0 12%;
+}
+
+body[data-stile='classico'] .objective-sheet.compact {
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(43, 34, 25, 0.25);
+}
+
+body[data-stile='classico'] .objective-sheet.compact .os-map::after {
+  box-shadow: inset 0 0 12px rgba(43, 34, 25, 0.3);
+}
+
+body[data-stile='classico'] .objective-sheet.compact .os-text {
+  font-size: 16px;
+}
+
+body[data-stile='classico'] .objective-sheet.compact .facts b {
   font-size: 13px;
 }
 
-.card-clock .countdown {
-  min-width: 0;
-  font-size: 13px;
+body[data-stile='vetro'] .objective-sheet.compact {
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+body[data-stile='vetro'] .objective-sheet.compact .os-label {
+  padding: 3px 8px;
+  font-size: 9.5px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .objective-card {
-    animation: none;
-  }
-  .card-flip {
-    animation: none;
-    transform: rotateY(180deg);
+  .objective-reveal *,
+  .objective-actions,
+  .objective-hint {
+    animation: none !important;
   }
 }
 
 /* --- carte e obiettivo */
-.objective {
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--edge);
-  margin-bottom: 10px;
-}
-
-.objective-kicker {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-}
-
-body[data-stile='vetro'] .objective-kicker {
-  color: #64d2ff;
-}
-
-.objective p {
-  margin: 2px 0 0;
-  font-weight: 600;
-}
-
 .hand-head {
   display: flex;
   justify-content: space-between;
@@ -1760,9 +2155,16 @@ button.card:hover {
   min-height: 0;
 }
 
-.layout-comandi .dock-hand .objective {
+.layout-comandi .dock-hand .objective-sheet.compact {
+  display: grid;
+  grid-template-columns: 170px 1fr;
   margin-bottom: 6px;
-  padding: 5px 8px;
+}
+
+.layout-comandi .dock-hand .objective-sheet.compact .os-map {
+  aspect-ratio: auto;
+  min-height: 80px;
+  border-bottom: 0;
 }
 
 .layout-comandi .dock-battle .battle-panel {

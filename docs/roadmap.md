@@ -13,25 +13,11 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.3 — niente più lag.** La mappa si ridisegna in 10-45 ms invece di ~800.
 - **M12.4 — nuovo inizio partita.** Prima la carta dell'obiettivo al centro, poi i territori scelti a turno, poi il piazzamento.
 - **M12.4b — due bug.** "Esci" ora torna alla home; la barra in alto resta cliccabile mentre la carta è aperta.
+- **M12.5 — carta dell'obiettivo (proposta C).** La mappa accende i continenti da prendere, oppure cadono le pedine da contare o il bersaglio finisce nel mirino; sotto, la frase e i numeri. Il server manda l'obiettivo con i suoi dati, non solo la frase. La stessa carta, piccola e ferma, sta tra le carte. Pagina di prova: `carta.html`.
 
 ## Da fare
 
-### 1. Carta dell'obiettivo fatta bene — in corso
-
-Hai chiesto: una "schedina carina", fatta per bene. Quella attuale è un rettangolo con una frase.
-
-Tre proposte, ognuna nei due temi e per ogni tipo di obiettivo (continenti, uno a scelta, numero di territori, eliminare un giocatore, conquista del mondo):
-- **A. Carta del mazzo.** Carta stampata con cornice; si gira. Nella finestra in alto la mappa con i continenti da prendere; sotto la frase e una tabellina con territori e bonus di ogni continente.
-- **B. Ordine sigillato.** Busta con sigillo di ceralacca. Il sigillo si rompe ed esce la lettera "Ordini per te", con una mini-mappa a forma di francobollo.
-- **C. Mappa che si accende.** Carta orizzontale con la mappa grande; i continenti bersaglio si accendono uno alla volta e sotto compare una fascia con la frase.
-
-Quando l'obiettivo è un numero di territori si vedono le pedine da contare. Quando è eliminare qualcuno si vede la sua pedina nel mirino.
-
-**Stato.** Le tre proposte si provano su `carta.html` (con `npm run dev`: http://localhost:5173/carta.html). Tasti: 1-3 proposta, T tema, frecce per cambiare obiettivo, R rifà l'animazione. Si aspetta la scelta.
-
-**Dopo la scelta.** Il server deve mandare l'obiettivo con i suoi dati (tipo, continenti, numeri, bersaglio), non solo la frase, perché la carta li deve disegnare. La versione piccola nel pannello delle carte usa lo stesso disegno.
-
-### 2. Pannello comandi dell'essenziale
+### 1. Pannello comandi dell'essenziale
 
 Il problema: durante i rinforzi il pannello si attacca al territorio cliccato, si riapre a ogni clic e copre proprio la zona su cui stai lavorando.
 
@@ -43,7 +29,7 @@ Proposte da preparare (3-4), con questi vincoli: non copre dove clicchi, si vede
 
 **Da decidere dopo.** Se togliere i layout "plancia laterale" e "comandi in basso". Prima di toglierli si chiede.
 
-### 3. Scena della battaglia
+### 2. Scena della battaglia
 
 Hai chiesto: quando si combatte, una schermata dedicata con una transizione d'ingresso e i dadi messi in scena, molto più strutturata e "figa", sempre con i dadi.
 
@@ -59,7 +45,7 @@ Idee di partenza:
 - il duello tra le due pedine;
 - la mappa che zooma sui due territori, con i dadi in primo piano.
 
-### 4. Pesca della carta a fine turno
+### 3. Pesca della carta a fine turno
 
 Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazzo e ricevere la carta in modo scenico.
 
@@ -67,17 +53,17 @@ Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazz
 
 Servono 2-3 proposte: il mazzo, il gesto della pesca, la carta che si gira e vola nella mano.
 
-### 5. Mappa più leggibile
+### 4. Mappa più leggibile
 
 Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
 
 Servono 3-4 proposte su: forma e dimensione delle pedine e dei numeri, colori dei giocatori, territori attivi o spenti, confini tra continenti.
 
-### 6. "Cosa devo fare adesso" e il resto dell'interfaccia
+### 5. "Cosa devo fare adesso" e il resto dell'interfaccia
 
-Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni, avvisi. Nell'essenziale vanno sistemati anche i cassetti "Carte e obiettivo" e "Registro e chat". In parte si chiude insieme al punto 2.
+Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni, avvisi. Nell'essenziale vanno sistemati anche i cassetti "Carte e obiettivo" e "Registro e chat". In parte si chiude insieme al punto 1.
 
-### 7. Pulizia e chiusura di M12
+### 6. Pulizia e chiusura di M12
 
 - Togliere quello che resta del vecchio gioco in stile atWar:
   - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;

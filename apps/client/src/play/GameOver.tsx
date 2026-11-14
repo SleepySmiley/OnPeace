@@ -51,7 +51,7 @@ export function GameOver({ onClose }: { onClose: () => void }) {
                 {p.id === me && <span className="dim"> (tu)</span>}
               </span>
               <span className="num">{totals(view, p).territories} terr.</span>
-              {p.objective && <span className="objective-text">{p.objective}</span>}
+              {p.objective && <span className="objective-text">{p.objective.text}</span>}
             </li>
           ))}
         </ul>

@@ -1,11 +1,13 @@
 /** Pannelli della partita: giocatori, ultima battaglia, carte e obiettivo, registro, scheda del territorio. */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { possibleSets, type Card, type GameEvent } from '@onpeace/conquista';
+import { useLook } from '../look';
 import { useSession } from '../store';
 import { ChatPanel } from '../ui/ChatPanel';
 import { CardView, Chip, Die } from './bits';
 import { describeEvent, isHighlight, namesFor } from './describe';
 import { actingPlayer, owned, totals } from './logic';
+import { ObjectiveSheet, objectiveInfo, skinOf } from './objective';
 import { useGame } from './useGame';
 
 // ---------------------------------------------------------------- giocatori
@@ -114,7 +116,8 @@ export function BattlePanel() {
 // ---------------------------------------------------------------- carte e obiettivo
 
 export function HandPanel({ fan = false }: { fan?: boolean }) {
-  const { view, lobby, me, move, territory } = useGame();
+  const { view, lobby, board, me, move, territory, colorOf, playerName } = useGame();
+  const skin = useLook((s) => skinOf(s.style.id));
   const sending = useSession((s) => s.sending);
   const playSet = useSession((s) => s.playSet);
   const mine = view.players.find((p) => p.id === me);
@@ -123,6 +126,7 @@ export function HandPanel({ fan = false }: { fan?: boolean }) {
   // le carte giocate spariscono dalla mano: si tolgono anche dalla scelta
   useEffect(() => setChosen((c) => c.filter((id) => cards.some((x) => x.id === id))), [cards]);
   if (!mine) return null;
+  const objective = objectiveInfo(view, me, colorOf, playerName);
   const rules = lobby.rules;
   const ownedSet = new Set(me ? owned(view, me) : []);
   const bonusOf = (cs: Card[]) => cs.filter((c) => c.territory && ownedSet.has(c.territory)).length * rules.cards.ownedTerritoryBonus;
@@ -137,18 +141,7 @@ export function HandPanel({ fan = false }: { fan?: boolean }) {
 
   return (
     <section className={`hand-panel${fan ? ' fan' : ''}`} aria-label="Le tue carte e il tuo obiettivo">
-      {mine.objective && (
-        <div className="objective">
-          <span className="objective-kicker">Obiettivo segreto</span>
-          <p>{mine.objective}</p>
-        </div>
-      )}
-      {view.mode === 'conquest' && (
-        <div className="objective">
-          <span className="objective-kicker">Obiettivo</span>
-          <p>Conquista tutto il mondo.</p>
-        </div>
-      )}
+      {objective && me && <ObjectiveSheet info={objective} geo={board.geo} board={board.def} skin={skin} me={colorOf(me)} compact />}
       <div className="hand-head">
         <h2 className="section-title">
           Carte <span className="dim num">{cards.length}</span>

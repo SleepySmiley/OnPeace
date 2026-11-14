@@ -252,7 +252,7 @@ describe('partita', () => {
     expect(seen.log.map((e) => e.event.type)).toEqual(['setup-place']);
     const me = seen.view.players.find((p) => p.id === other)!;
     const them = seen.view.players.find((p) => p.id === first)!;
-    expect(me.objective).toEqual(expect.any(String));
+    expect(me.objective).toEqual(expect.objectContaining({ text: expect.any(String) }));
     expect(them.objective).toBeNull();
     expect(them.cards).toBeNull();
   });

@@ -1,8 +1,11 @@
 /**
- * Pezzi della carta dell'obiettivo: la mappa in piccolo con i continenti da prendere, le pedine
- * da contare, la pedina del giocatore da eliminare e i dati che servono per giocare.
+ * La carta dell'obiettivo: una mappa del mondo dove si accendono, uno alla volta, i continenti da
+ * prendere (oppure cadono le pedine da contare, o il giocatore da eliminare finisce nel mirino), e
+ * sotto una fascia con la frase e i numeri che servono per giocare. La stessa carta, piccola e
+ * ferma, sta tra le carte del giocatore.
  */
 import { useEffect, useRef, type CSSProperties } from 'react';
+import type { FallbackObjectiveView, GameView, ObjectiveView } from '@onpeace/conquista';
 import type { BoardDef } from '@onpeace/engine';
 import { shade } from '../board/common';
 import { geometryAt, type BoardGeometry } from '../board/geometry';
@@ -10,15 +13,33 @@ import { CONTINENT } from '../board/styles/classico';
 
 export type Skin = 'classico' | 'vetro';
 
-/** L'obiettivo come lo serve la carta: il tipo, i numeri e la frase. */
+export const skinOf = (styleId: string): Skin => (styleId === 'vetro' ? 'vetro' : 'classico');
+
+/** L'obiettivo pronto per la carta: come arriva dal server, col bersaglio già in nome e colore. */
 export type ObjectiveInfo =
-  | { kind: 'continents'; continents: string[]; plusAny: number; text: string }
-  | { kind: 'territories'; count: number; minArmies: number | null; text: string }
-  | { kind: 'eliminate'; target: { name: string; color: string }; fallback: number; text: string }
+  | Exclude<ObjectiveView, { kind: 'eliminate' }>
+  | { kind: 'eliminate'; target: { name: string; color: string }; fallback: FallbackObjectiveView; text: string }
   | { kind: 'conquest'; text: string };
 
-/** Colore di un continente bersaglio nella carta. */
-export const targetColor = (skin: Skin, continent: string) => (skin === 'classico' ? (CONTINENT[continent] ?? '#bbbbbb') : '#2f8cff');
+export const CONQUEST_TEXT = 'Conquista tutto il mondo: elimina tutti gli avversari.';
+
+/** L'obiettivo di un giocatore (null se non lo si può vedere: è segreto e la partita non è finita). */
+export function objectiveInfo(
+  view: GameView,
+  player: string | null,
+  colorOf: (id: string) => string,
+  nameOf: (id: string) => string,
+): ObjectiveInfo | null {
+  if (view.mode === 'conquest') return { kind: 'conquest', text: CONQUEST_TEXT };
+  const o = view.players.find((p) => p.id === player)?.objective;
+  if (!o) return null;
+  if (o.kind !== 'eliminate') return o;
+  const target = o.target ? { name: nameOf(o.target), color: colorOf(o.target) } : { name: 'il bersaglio', color: '#888888' };
+  return { ...o, target };
+}
+
+/** Colore di un continente da prendere. */
+const targetColor = (skin: Skin, continent: string) => (skin === 'classico' ? (CONTINENT[continent] ?? '#bbbbbb') : '#2f8cff');
 
 // ---------------------------------------------------------------- mappa in piccolo
 interface MapProps {
@@ -28,7 +49,7 @@ interface MapProps {
   targets?: readonly string[];
   /** Continenti tra cui sceglierne altri: tratteggiati. */
   choice?: readonly string[];
-  /** Solo questo continente, su fondo trasparente (per gli strati che si accendono uno alla volta). */
+  /** Solo questo continente, su fondo trasparente (gli strati che si accendono uno alla volta). */
   only?: string;
   /** Terre più spente, per metterci sopra le pedine. */
   faded?: boolean;
@@ -36,6 +57,7 @@ interface MapProps {
   style?: CSSProperties;
 }
 
+/** Ogni territorio di un continente un po' più chiaro o scuro del vicino. */
 const VARIANTS = [0, 0.08, -0.06, 0.14, -0.1];
 
 function paintMap(ctx: CanvasRenderingContext2D, p: MapProps, w: number, h: number, dpr: number) {
@@ -54,13 +76,8 @@ function paintMap(ctx: CanvasRenderingContext2D, p: MapProps, w: number, h: numb
   if (!p.only) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const sea = ctx.createLinearGradient(0, 0, 0, h);
-    if (classic) {
-      sea.addColorStop(0, '#b7d4dc');
-      sea.addColorStop(1, '#9cc0cc');
-    } else {
-      sea.addColorStop(0, '#12161d');
-      sea.addColorStop(1, '#0b0e13');
-    }
+    sea.addColorStop(0, classic ? '#b7d4dc' : '#12161d');
+    sea.addColorStop(1, classic ? '#9cc0cc' : '#0b0e13');
     ctx.fillStyle = sea;
     ctx.fillRect(0, 0, w, h);
   }
@@ -71,13 +88,11 @@ function paintMap(ctx: CanvasRenderingContext2D, p: MapProps, w: number, h: numb
   const counter = new Map<string, number>();
   const land = classic ? (p.faded ? '#e2d7ba' : '#ece2c6') : p.faded ? '#22252c' : '#2b2f37';
 
-  // terre: i bersagli nel loro colore, ognuno un po' diverso dal vicino; le altre neutre
   for (const t of g.board.territories) {
     const k = counter.get(t.continent) ?? 0;
     counter.set(t.continent, k + 1);
     const hit = targets.has(t.continent);
     if (p.only && !hit) continue;
-    const path = g.paths.get(t.id)!;
     if (hit) {
       ctx.fillStyle = shade(targetColor(skin, t.continent), VARIANTS[k % VARIANTS.length]! * (classic ? 1 : 0.6));
       if (!classic) {
@@ -85,7 +100,7 @@ function paintMap(ctx: CanvasRenderingContext2D, p: MapProps, w: number, h: numb
         ctx.shadowBlur = 9 * dpr;
       }
     } else ctx.fillStyle = land;
-    ctx.fill(path, 'evenodd');
+    ctx.fill(g.paths.get(t.id)!, 'evenodd');
     ctx.shadowBlur = 0;
   }
 
@@ -123,7 +138,7 @@ function paintMap(ctx: CanvasRenderingContext2D, p: MapProps, w: number, h: numb
   }
 }
 
-export function MiniMap(props: MapProps) {
+function MiniMap(props: MapProps) {
   const ref = useRef<HTMLCanvasElement>(null);
   const { geo, skin, only, faded } = props;
   const targets = (props.targets ?? []).join();
@@ -150,19 +165,19 @@ export function MiniMap(props: MapProps) {
 }
 
 // ---------------------------------------------------------------- pedine
-/** Tante pedine quante i territori da tenere (a pile di `stack` se ci vogliono più armate). */
-export function TokenField({ count, stack = 1, color, delay = 0 }: { count: number; stack?: number; color: string; delay?: number }) {
+/** Tante pedine quanti i territori da tenere (a coppie se in ciascuno servono più armate). */
+function TokenField({ count, stack, color, delay }: { count: number; stack: boolean; color: string; delay: number }) {
   return (
     <div className="token-field" style={{ ['--tok' as string]: color }} aria-hidden>
       {Array.from({ length: count }, (_, i) => (
-        <span key={i} className={`tok${stack > 1 ? ' tok-stack' : ''}`} style={{ animationDelay: `${delay + i * 28}ms` }} />
+        <span key={i} className={`tok${stack ? ' tok-stack' : ''}`} style={{ animationDelay: `${delay + i * 28}ms` }} />
       ))}
     </div>
   );
 }
 
 /** La pedina del giocatore da eliminare, nel mirino. */
-export function TargetToken({ name, color }: { name: string; color: string }) {
+function TargetToken({ name, color }: { name: string; color: string }) {
   return (
     <div className="target-token" aria-hidden>
       <span className="target-sight">
@@ -173,27 +188,26 @@ export function TargetToken({ name, color }: { name: string; color: string }) {
   );
 }
 
-// ---------------------------------------------------------------- dati
-interface FactsProps {
-  info: ObjectiveInfo;
-  board: BoardDef;
-  skin: Skin;
-  /** In fila (fascia sotto la mappa) invece che in tabella. */
-  inline?: boolean;
-}
-
+// ---------------------------------------------------------------- numeri
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** I numeri che servono per giocare l'obiettivo: territori e bonus dei continenti, armate, bersaglio. */
-export function Facts({ info, board, skin, inline = false }: FactsProps) {
+function fallbackLabel(fb: FallbackObjectiveView, board: BoardDef): string {
+  if (fb.kind === 'territories') return `${fb.count} territori${fb.minArmies ? ` con almeno ${plural(fb.minArmies, 'armata', 'armate')}` : ''}`;
+  const names = fb.continents.map((id) => board.continents.find((c) => c.id === id)?.name ?? id);
+  if (fb.plusAny > 0) names.push(fb.plusAny === 1 ? 'un altro a scelta' : `altri ${fb.plusAny} a scelta`);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names.at(-1)}` : names[0]!;
+}
+
+/** In fila sotto la frase: territori e bonus dei continenti, armate, bersaglio. */
+function Facts({ info, board, skin }: { info: ObjectiveInfo; board: BoardDef; skin: Skin }) {
   const total = board.territories.length;
   const count = (c: string) => board.territories.filter((t) => t.continent === c).length;
   type Row = { key: string; swatch?: string; hatch?: boolean; chip?: string; label: string; value: string; extra?: string };
   let rows: Row[];
   if (info.kind === 'continents') {
     rows = info.continents.map((id) => {
-      const c = board.continents.find((x) => x.id === id)!;
-      return { key: id, swatch: targetColor(skin, id), label: c.name, value: plural(count(id), 'territorio', 'territori'), extra: `+${c.bonus} a turno` };
+      const c = board.continents.find((x) => x.id === id);
+      return { key: id, swatch: targetColor(skin, id), label: c?.name ?? id, value: plural(count(id), 'territorio', 'territori'), extra: c ? `+${c.bonus} a turno` : undefined };
     });
     if (info.plusAny > 0) {
       rows.push({ key: 'any', hatch: true, label: info.plusAny === 1 ? 'Un altro a scelta' : `Altri ${info.plusAny} a scelta`, value: 'quello che ti conviene' });
@@ -204,7 +218,7 @@ export function Facts({ info, board, skin, inline = false }: FactsProps) {
   } else if (info.kind === 'eliminate') {
     rows = [
       { key: 't', chip: info.target.color, label: 'Bersaglio', value: info.target.name },
-      { key: 'f', label: 'Se lo batte un altro', value: `${info.fallback} territori` },
+      { key: 'f', label: 'Se lo elimina un altro', value: fallbackLabel(info.fallback, board) },
     ];
   } else {
     rows = [
@@ -212,55 +226,32 @@ export function Facts({ info, board, skin, inline = false }: FactsProps) {
       { key: 'p', label: 'Avversari', value: 'tutti eliminati' },
     ];
   }
-
-  const mark = (r: Row) =>
-    r.swatch ? (
-      <span className="fact-swatch" style={{ background: r.swatch }} />
-    ) : r.hatch ? (
-      <span className="fact-swatch hatch" />
-    ) : r.chip ? (
-      <span className="fact-swatch round" style={{ background: r.chip }} />
-    ) : null;
-
-  if (inline) {
-    return (
-      <ul className="facts-inline">
-        {rows.map((r) => (
-          <li key={r.key}>
-            {mark(r)}
-            <b>{r.label}</b> {r.value}
-            {r.extra && <span className="fact-extra">, {r.extra}</span>}
-          </li>
-        ))}
-      </ul>
-    );
-  }
   return (
-    <table className="facts">
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.key}>
-            <th scope="row">
-              {mark(r)}
-              {r.label}
-            </th>
-            <td>{r.value}</td>
-            <td className="fact-extra">{r.extra ?? ''}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ul className="facts">
+      {rows.map((r) => (
+        <li key={r.key}>
+          {r.swatch ? (
+            <span className="fact-swatch" style={{ background: r.swatch }} />
+          ) : r.hatch ? (
+            <span className="fact-swatch hatch" />
+          ) : r.chip ? (
+            <span className="fact-swatch round" style={{ background: r.chip }} />
+          ) : null}
+          <b>{r.label}</b> {r.value}
+          {r.extra && <span className="fact-extra">, {r.extra}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-/** L'illustrazione dell'obiettivo: mappa con i bersagli, pedine da contare o pedina da eliminare. */
-export function ObjectiveArt({ info, geo, skin, me, layered = false }: { info: ObjectiveInfo; geo: BoardGeometry; skin: Skin; me: string; layered?: boolean }) {
-  const all = geo.board.continents.map((c) => c.id);
+// ---------------------------------------------------------------- la carta
+function Art({ info, geo, skin, me, still }: { info: ObjectiveInfo; geo: BoardGeometry; skin: Skin; me: string; still: boolean }) {
   if (info.kind === 'territories') {
     return (
       <>
         <MiniMap geo={geo} skin={skin} faded />
-        <TokenField count={info.count} stack={info.minArmies ?? 1} color={me} delay={layered ? 700 : 1300} />
+        <TokenField count={info.count} stack={(info.minArmies ?? 1) > 1} color={me} delay={700} />
       </>
     );
   }
@@ -272,16 +263,49 @@ export function ObjectiveArt({ info, geo, skin, me, layered = false }: { info: O
       </>
     );
   }
+  const all = geo.board.continents.map((c) => c.id);
   const targets = info.kind === 'conquest' ? all : info.continents;
   const choice = info.kind === 'continents' && info.plusAny > 0 ? all.filter((c) => !info.continents.includes(c)) : [];
-  if (!layered) return <MiniMap geo={geo} skin={skin} targets={targets} choice={choice} />;
-  // i bersagli si accendono uno alla volta sopra la mappa spenta
+  if (still) return <MiniMap geo={geo} skin={skin} targets={targets} choice={choice} />;
+  // i continenti da prendere si accendono uno alla volta sopra la mappa spenta
+  const step = info.kind === 'conquest' ? 140 : 320;
   return (
     <>
       <MiniMap geo={geo} skin={skin} choice={choice} />
       {targets.map((c, i) => (
-        <MiniMap key={c} geo={geo} skin={skin} only={c} className="map-layer" style={{ animationDelay: `${500 + i * (info.kind === 'conquest' ? 140 : 320)}ms` }} />
+        <MiniMap key={c} geo={geo} skin={skin} only={c} className="map-layer" style={{ animationDelay: `${500 + i * step}ms` }} />
       ))}
     </>
+  );
+}
+
+interface SheetProps {
+  info: ObjectiveInfo;
+  geo: BoardGeometry;
+  board: BoardDef;
+  skin: Skin;
+  /** Colore delle proprie pedine. */
+  me: string;
+  /** Versione piccola e ferma, tra le carte. */
+  compact?: boolean;
+  titleId?: string;
+}
+
+export function ObjectiveSheet({ info, geo, board, skin, me, compact = false, titleId }: SheetProps) {
+  const secret = info.kind !== 'conquest';
+  return (
+    <article className={`objective-sheet${compact ? ' compact' : ''}`} aria-labelledby={titleId}>
+      <div className="os-map">
+        <Art info={info} geo={geo} skin={skin} me={me} still={compact} />
+        <h2 className="os-label" id={titleId}>
+          {secret ? 'Obiettivo segreto' : 'Obiettivo'}
+        </h2>
+      </div>
+      <div className="os-band paper">
+        <p className="os-text">{info.text}</p>
+        <Facts info={info} board={board} skin={skin} />
+        {!compact && <p className="os-note">{secret ? 'Lo vedi solo tu' : 'Lo stesso per tutti'}</p>}
+      </div>
+    </article>
   );
 }
