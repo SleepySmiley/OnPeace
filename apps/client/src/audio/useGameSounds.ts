@@ -1,7 +1,7 @@
 /** Suoni legati a quello che succede nella partita (non ai clic): turni, battaglie, tempo, chat. */
 import { useEffect, useRef } from 'react';
 import type { GameState, PlayerId, TurnEvent } from '@onpeace/engine';
-import type { ChatLine } from '@onpeace/protocol';
+import type { ChatLine } from '@onpeace/protocol/atwar';
 import { sfx } from './sfx';
 
 /** Avviso singolo quando mancano questi secondi. */

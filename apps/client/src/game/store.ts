@@ -35,7 +35,7 @@ import {
   type MapSummary,
   type RoomPhase,
   type ServerMsg,
-} from '@onpeace/protocol';
+} from '@onpeace/protocol/atwar';
 
 export type PauseInfo = NonNullable<Extract<ServerMsg, { t: 'status' }>['paused']>;
 import { rules, testMap } from '../data';

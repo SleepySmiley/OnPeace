@@ -101,7 +101,7 @@ describe('preparazione a giri', () => {
     const mineA = ownedBy(s, a)[0]!;
     expect(() => applyAction(ctx, s, b, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/Non tocca a te/);
     expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2 } })).toThrow(/esattamente 3/);
-    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/non è tuo/);
+    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/non è un tuo territorio/);
     const before = s.players.find((p) => p.id === a)!.setupLeft;
     const r = applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2, [ownedBy(s, a)[1]!]: 1 } });
     s = r.state;

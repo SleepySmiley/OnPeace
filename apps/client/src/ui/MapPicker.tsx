@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MapSummary } from '@onpeace/protocol';
+import type { MapSummary } from '@onpeace/protocol/atwar';
 import { fetchMapList, useSession } from '../game/store';
 
 /** Mappa proposta se non se ne sceglie un'altra. */

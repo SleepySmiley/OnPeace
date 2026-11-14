@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@onpeace/conquista": "*",
     "@onpeace/engine": "*",
     "@onpeace/protocol": "*",
     "ws": "^8.18.0"

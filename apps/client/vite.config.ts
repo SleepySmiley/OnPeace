@@ -22,6 +22,7 @@ export default defineConfig({
     proxy: {
       '/ws': { target: `ws://localhost:${serverPort}`, ws: true },
       '/mappe': { target: `http://localhost:${serverPort}` },
+      '/tabelloni': { target: `http://localhost:${serverPort}` },
     },
   },
 });

@@ -53,7 +53,7 @@ function checkPlacements(ctx: GameContext, state: GameState, id: string, placeme
   for (const [tid, n] of Object.entries(placements)) {
     const t = state.territories[tid];
     assertRule(t, `Territorio sconosciuto: ${tid}.`);
-    assertRule(t.owner === id, `${territoryName(ctx, tid)} non è tuo.`);
+    assertRule(t.owner === id, `${territoryName(ctx, tid)} non è un tuo territorio.`);
     assertRule(Number.isInteger(n) && n > 0, 'Le armate da piazzare devono essere numeri interi positivi.');
     sum += n;
   }
@@ -430,33 +430,52 @@ function autoPlace(ctx: GameContext, state: GameState, id: string, total: number
   return out;
 }
 
+/** Chi deve muoversi adesso: chi piazza (uno a giri, tutti quelli che non hanno confermato se tutti insieme) o chi ha il turno. */
+export function playersToAct(ctx: GameContext, state: GameState): string[] {
+  if (state.phase === 'over') return [];
+  if (state.phase === 'setup') {
+    if (ctx.rules.setup.placement === 'rounds') return state.setupPlayer ? [state.setupPlayer] : [];
+    return state.players.filter((p) => !p.setupDone).map((p) => p.id);
+  }
+  return state.turn ? [state.turn.player] : [];
+}
+
 /**
- * Tempo scaduto: in preparazione piazza a caso le armate di chi non ha confermato; durante un
- * turno chiude quello che manca (rinforzi, occupazione) e passa al prossimo.
+ * Fa al posto di un giocatore quello che gli manca adesso (tempo scaduto, o è uscito dalla
+ * partita): in preparazione piazza a caso le armate di questo passo; nel suo turno chiude
+ * rinforzi e occupazione e passa al prossimo. Se adesso non deve muoversi lui non fa nulla.
  */
-export function timeout(ctx: GameContext, prev: GameState): ActionResult {
+export function passFor(ctx: GameContext, prev: GameState, id: string): ActionResult {
   let state = clone(prev);
   const events: GameEvent[] = [];
-  if (state.phase === 'over') return { state, events };
-  if (state.phase === 'setup') {
-    // a giri scade solo il giro di chi deve piazzare; tutti insieme, quello di chi non ha confermato
-    const late = state.setupPlayer ? [state.setupPlayer] : state.players.filter((x) => !x.setupDone).map((x) => x.id);
-    for (const pid of late) {
-      const placements = autoPlace(ctx, state, pid, setupStep(ctx, state, pid));
-      const r = applyAction(ctx, state, pid, { kind: 'setup-place', placements });
-      state = r.state;
-      events.push(...r.events);
-    }
-    return { state, events };
-  }
-  const id = state.turn!.player;
+  if (!playersToAct(ctx, state).includes(id)) return { state, events };
   const run = (action: Action) => {
     const r = applyAction(ctx, state, id, action);
     state = r.state;
     events.push(...r.events);
   };
+  if (state.phase === 'setup') {
+    run({ kind: 'setup-place', placements: autoPlace(ctx, state, id, setupStep(ctx, state, id)) });
+    return { state, events };
+  }
   if (state.phase === 'reinforce') run({ kind: 'reinforce', placements: autoPlace(ctx, state, id, state.turn!.reinforcements) });
   if (state.phase === 'attack' && state.turn!.occupation) run({ kind: 'occupy', armies: state.turn!.occupation.min });
   if (state.phase === 'attack' || state.phase === 'fortify') run({ kind: 'end-turn' });
   return { state, events };
+}
+
+/**
+ * Tempo scaduto: in preparazione piazza a caso le armate di chi non ha confermato; durante un
+ * turno chiude quello che manca (rinforzi, occupazione) e passa al prossimo.
+ */
+export function timeout(ctx: GameContext, prev: GameState): ActionResult {
+  let state = prev;
+  const events: GameEvent[] = [];
+  // a giri scade solo il giro di chi deve piazzare; tutti insieme, quello di chi non ha confermato
+  for (const id of playersToAct(ctx, prev)) {
+    const r = passFor(ctx, state, id);
+    state = r.state;
+    events.push(...r.events);
+  }
+  return { state: state === prev ? clone(prev) : state, events };
 }

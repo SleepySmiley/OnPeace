@@ -1,95 +1,111 @@
 /**
- * Una partita online: sala d'attesa, scelta dei paesi, turni con timer.
+ * Una partita online del gioco di conquista: sala d'attesa, mosse una alla volta con il tempo
+ * che scorre per chi deve giocare, chi esce resta sul tabellone e il server muove al posto suo.
  * Non sa nulla di socket: riceve messaggi già validati e risponde tramite `deps.send`.
  */
 import { randomBytes } from 'node:crypto';
+import { RuleError } from '@onpeace/engine';
 import {
-  RuleError,
-  affordableCountries,
-  checkDoctrine,
+  applyAction,
   createGame,
-  defaultSettings,
-  eliminate,
   eventsFor,
-  finishSelection,
-  getPlayer,
-  nextPicker,
-  resolveTurn,
-  selectCountry,
-  setDoctrine,
+  passFor,
+  playersToAct,
+  timeout,
   viewFor,
   type Action,
-  type Doctrine,
+  type ActionResult,
+  type GameContext,
+  type GameEvent,
   type GameState,
-  type PlayerId,
-  type TurnEvent,
-} from '@onpeace/engine';
+} from '@onpeace/conquista';
 import {
   PLAYER_COLORS,
-  asActions,
   type ChatLine,
   type ClientMsg,
   type LobbyInfo,
   type LobbySettings,
+  type LoggedEvent,
   type PauseReason,
   type RoomPhase,
+  type RoomSettings,
   type ServerMsg,
 } from '@onpeace/protocol';
+import type { BoardProvider } from './boards';
 import { describeError, type Logger } from './log';
-import type { MapProvider, MapWorld } from './maps';
 
 export interface Seat {
-  id: PlayerId;
+  id: string;
   token: string;
   name: string;
   color: string;
-  inactiveTurns: number;
-  /** Strategia e Generale scelti in sala d'attesa (assente nei salvataggi vecchi). */
-  doctrine?: Doctrine;
+  /** Turni di fila in cui gli è scaduto il tempo senza che facesse nulla. */
+  idleTurns: number;
+  /** Uscito dalla partita o tolto dall'host: le sue armate restano, il server muove al posto suo. */
+  left?: boolean;
 }
 
-const NO_DOCTRINE: Doctrine = { strategy: null, general: [] };
-
 export interface RoomSnapshot {
-  version: 1;
+  version: 2;
   id: string;
-  hostId: PlayerId;
+  hostId: string;
   phase: RoomPhase;
   seats: Seat[];
   settings: LobbySettings;
+  /** Tabellone della partita e impronta del suo file quando è cominciata (null in sala d'attesa). */
+  board: string | null;
+  boardHash: string | null;
   state: GameState | null;
-  plans: Record<PlayerId, Action[]>;
-  done: PlayerId[];
-  skipped: PlayerId[];
+  /** Ultimi eventi della partita, tutti: a ciascuno si mandano filtrati al momento dell'invio. */
+  log: LoggedEvent[];
+  nextSeq: number;
   deadline: number | null;
-  /** Tempo fermo (assente nei salvataggi vecchi): perché, e quanto ne resterà alla ripresa. */
-  paused?: { reason: PauseReason; remainingMs: number } | null;
-  events: TurnEvent[];
-  eventsTurn: number;
+  paused: { reason: PauseReason; remainingMs: number } | null;
+  /** Durata intera del tempo in corso (ms). */
+  clockTotal: number | null;
+  /** Che cosa misura il tempo in corso: cambia a ogni turno o giro di piazzamento. */
+  clock: string | null;
+  /** Chi ha fatto almeno una mossa da quando è partito il tempo in corso. */
+  acted: string[];
   chat: ChatLine[];
   nextSeat: number;
   updatedAt: number;
 }
 
 export interface RoomDeps {
-  /** Le mappe: ogni stanza usa quella scelta dall'host. */
-  maps: MapProvider;
+  /** I tabelloni con regole e obiettivi. */
+  boards: BoardProvider;
   now: () => number;
-  send: (player: PlayerId, msg: ServerMsg) => void;
+  send: (player: string, msg: ServerMsg) => void;
   /** Lo stato della stanza è cambiato: va salvato. */
   changed: (room: Room) => void;
-  isConnected: (player: PlayerId) => boolean;
+  isConnected: (player: string) => boolean;
   /** Chiude le connessioni del giocatore. */
-  disconnect: (player: PlayerId) => void;
+  disconnect: (player: string) => void;
   log: Logger;
 }
 
-export const MAX_PLAYERS = 8;
 const CHAT_KEEP = 200;
+/** Eventi tenuti nella partita (per chi rientra e per le segnalazioni). */
+const LOG_KEEP = 300;
+/** Eventi mandati a chi entra o rientra. */
+const LOG_SYNC = 120;
 /** Alla ripresa dopo una pausa restano almeno questi millisecondi. */
 const RESUME_MIN_MS = 15_000;
+/** L'host può togliere dalla partita chi ha saltato tanti turni di fila. */
+export const KICK_AFTER_IDLE = 2;
 
 export const newToken = () => randomBytes(18).toString('base64url');
+
+/** Che cosa misura il tempo: un giro di piazzamento (a giri), tutto il piazzamento (tutti insieme) o un turno. */
+function clockKey(ctx: GameContext, state: GameState): string {
+  if (state.phase === 'setup') {
+    if (ctx.rules.setup.placement !== 'rounds') return 'setup';
+    const left = state.players.reduce((n, p) => n + p.setupLeft, 0);
+    return `setup:${state.setupPlayer}:${left}`;
+  }
+  return `turn:${state.turn?.number ?? 0}`;
+}
 
 export class Room {
   private s: RoomSnapshot;
@@ -100,20 +116,22 @@ export class Room {
     snapshot?: RoomSnapshot,
   ) {
     this.s = snapshot ?? {
-      version: 1,
+      version: 2,
       id,
       hostId: '',
       phase: 'lobby',
       seats: [],
       settings: {},
+      board: null,
+      boardHash: null,
       state: null,
-      plans: {},
-      done: [],
-      skipped: [],
+      log: [],
+      nextSeq: 1,
       deadline: null,
       paused: null,
-      events: [],
-      eventsTurn: 0,
+      clockTotal: null,
+      clock: null,
+      acted: [],
       chat: [],
       nextSeat: 1,
       updatedAt: deps.now(),
@@ -136,16 +154,37 @@ export class Room {
     return this.s;
   }
 
+  /** Opzioni in vigore: quelle dell'host, il resto dalle regole; in partita il tabellone è quello con cui è cominciata. */
+  get settings(): RoomSettings {
+    const { boards } = this.deps;
+    const s = this.s.settings;
+    return {
+      board: this.s.board ?? (s.board && boards.has(s.board) ? s.board : boards.defaultId),
+      mode: s.mode && boards.rules.modes.includes(s.mode) ? s.mode : boards.rules.modes[0]!,
+      placement: s.placement ?? boards.rules.setup.placement,
+      turnSeconds: s.turnSeconds ?? boards.rules.timers.turnSeconds,
+    };
+  }
+
+  /** Tabellone, regole (con le opzioni dell'host) e obiettivi della partita. */
+  private get ctx(): GameContext {
+    return this.deps.boards.context(this.settings);
+  }
+
+  private seat(id: string): Seat | undefined {
+    return this.s.seats.find((x) => x.id === id);
+  }
+
   // ---------------------------------------------------------------- posti
 
   /** Nuovo giocatore nella sala d'attesa. Restituisce il posto o un messaggio d'errore. */
   addSeat(name: string, color?: string): Seat | string {
     if (this.s.phase !== 'lobby') return 'La partita è già cominciata';
-    if (this.s.seats.length >= MAX_PLAYERS) return 'La partita è piena';
+    if (this.s.seats.length >= this.deps.boards.rules.players.max) return 'La partita è piena';
     if (this.s.seats.some((x) => x.name.toLowerCase() === name.toLowerCase())) return 'Nome già usato in questa partita';
     const used = new Set(this.s.seats.map((x) => x.color));
-    const chosen = color && !used.has(color) ? color : PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0]!;
-    const seat: Seat = { id: `p${this.s.nextSeat++}`, token: newToken(), name, color: chosen, inactiveTurns: 0 };
+    const chosen = color && !used.has(color) ? color : (PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0]!);
+    const seat: Seat = { id: `p${this.s.nextSeat++}`, token: newToken(), name, color: chosen, idleTurns: 0 };
     this.s.seats.push(seat);
     if (!this.s.hostId) this.s.hostId = seat.id;
     this.touch();
@@ -159,43 +198,20 @@ export class Room {
 
   // ---------------------------------------------------------------- messaggi
 
-  /** Mappa della partita: quella della partita in corso, altrimenti quella scelta nella sala d'attesa. */
-  get mapId(): string {
-    const id = this.s.state?.mapId ?? this.s.settings.map;
-    return id && this.deps.maps.has(id) ? id : this.deps.maps.defaultId;
-  }
-
-  /** Contesto delle regole e griglia di navigazione della mappa della partita. */
-  private get world(): MapWorld {
-    return this.deps.maps.get(this.mapId);
-  }
-
   /** Gestisce un messaggio del giocatore. Restituisce un errore da mostrargli, o null. */
-  handle(player: PlayerId, msg: ClientMsg): string | null {
-    const seat = this.s.seats.find((x) => x.id === player);
+  handle(player: string, msg: ClientMsg): string | null {
+    const seat = this.seat(player);
     if (!seat) return 'Non fai parte di questa partita';
     try {
       switch (msg.t) {
         case 'color':
           return this.setColor(seat, msg.color);
         case 'settings':
-          if (player !== this.s.hostId) return "Solo chi ha creato la partita può cambiare le opzioni";
-          if (this.s.phase !== 'lobby') return 'Le opzioni si cambiano solo prima di cominciare';
-          if (msg.settings.map !== undefined && !this.deps.maps.has(msg.settings.map)) return 'Mappa sconosciuta';
-          this.s.settings = { ...this.s.settings, ...msg.settings };
-          this.touch();
-          this.broadcastLobby();
-          return null;
+          return this.setSettings(player, msg.settings);
         case 'start':
           return this.start(player);
-        case 'pick':
-          return this.pick(player, msg.country);
-        case 'doctrine':
-          return this.setDoctrine(seat, { strategy: msg.strategy, general: msg.general });
-        case 'plan':
-          return this.setPlan(player, asActions(msg.actions));
-        case 'ready':
-          return this.setReady(player, msg.done);
+        case 'act':
+          return this.act(seat, msg.action, msg.n);
         case 'chat':
           this.s.chat.push({ from: player, name: seat.name, color: seat.color, text: msg.text, at: this.deps.now() });
           if (this.s.chat.length > CHAT_KEEP) this.s.chat.splice(0, this.s.chat.length - CHAT_KEEP);
@@ -226,178 +242,184 @@ export class Room {
     return null;
   }
 
-  /** In sala d'attesa la dottrina resta nel posto; durante la scelta dei paesi va nello stato. */
-  private setDoctrine(seat: Seat, doctrine: Doctrine): string | null {
-    const { ctx } = this.world;
-    if (this.s.phase === 'lobby') {
-      const errors = checkDoctrine(ctx, { ...defaultSettings(ctx), ...this.s.settings }, doctrine);
-      if (errors.length > 0) return errors.join('; ');
-      seat.doctrine = doctrine;
-      this.touch();
-      this.deps.send(seat.id, { t: 'lobby', lobby: this.lobbyInfo(seat.id) });
-      return null;
-    }
-    if (this.s.phase !== 'selection' || !this.s.state) return 'Strategia e Generale si scelgono prima del turno 1';
-    setDoctrine(this.s.state, ctx, seat.id, doctrine);
-    seat.doctrine = doctrine;
+  private setSettings(player: string, settings: LobbySettings): string | null {
+    if (player !== this.s.hostId) return 'Solo chi ha creato la partita può cambiare le opzioni';
+    if (this.s.phase !== 'lobby') return 'Le opzioni si cambiano solo prima di cominciare';
+    const { boards } = this.deps;
+    if (settings.board !== undefined && !boards.has(settings.board)) return 'Tabellone sconosciuto';
+    if (settings.mode !== undefined && !boards.rules.modes.includes(settings.mode)) return 'Modalità non disponibile';
+    this.s.settings = { ...this.s.settings, ...settings };
     this.touch();
-    this.deps.send(seat.id, { t: 'lobby', lobby: this.lobbyInfo(seat.id) });
-    const game = this.gameMsg(seat.id);
-    if (game) this.deps.send(seat.id, game);
+    this.broadcastLobby();
     return null;
   }
 
-  private start(player: PlayerId): string | null {
+  private start(player: string): string | null {
     if (player !== this.s.hostId) return 'Solo chi ha creato la partita può cominciare';
     if (this.s.phase !== 'lobby') return 'La partita è già cominciata';
-    if (this.s.seats.length < 2) return 'Servono almeno due giocatori';
-    const { ctx } = this.world;
-    const { map: _map, ...settings } = this.s.settings;
-    this.s.state = createGame(ctx, {
-      id: this.id,
-      seed: randomBytes(4).readUInt32LE(0),
-      players: this.s.seats.map((x) => ({
-        id: x.id,
-        name: x.name,
-        color: x.color,
-        ...(x.doctrine ? { doctrine: x.doctrine } : {}),
-      })),
-      settings,
-    });
-    this.s.phase = 'selection';
-    this.s.skipped = [];
-    this.setTimer(ctx.rules.game.countrySelectSeconds * 1000);
-    this.deps.log.info(`Partita ${this.id}: comincia con ${this.s.seats.map((x) => x.name).join(', ')}`);
-    this.touch();
-    this.broadcastAll();
-    return null;
-  }
-
-  private picker(): PlayerId | null {
-    if (this.s.phase !== 'selection' || !this.s.state) return null;
-    return nextPicker(this.s.state, this.world.ctx, new Set(this.s.skipped));
-  }
-
-  private pick(player: PlayerId, country: string): string | null {
-    if (this.s.phase !== 'selection' || !this.s.state) return 'Non è il momento di scegliere i paesi';
-    if (this.picker() !== player) return 'Non tocca a te scegliere';
-    selectCountry(this.s.state, this.world.ctx, player, country);
-    this.afterPick();
-    return null;
-  }
-
-  private afterPick(): void {
-    const { ctx } = this.world;
-    if (this.picker() === null) {
-      finishSelection(this.s.state!, ctx);
-      this.s.phase = 'playing';
-      this.setTimer(this.turnSeconds() * 1000);
-    } else {
-      this.setTimer(ctx.rules.game.countrySelectSeconds * 1000);
+    const settings = this.settings;
+    const ctx = this.ctx;
+    const { players } = ctx.rules;
+    if (this.s.seats.length < players.min) return `Servono almeno ${players.min} giocatori`;
+    if (settings.mode === 'objectives' && this.s.seats.length < players.objectivesMin) {
+      return `Con gli obiettivi segreti servono almeno ${players.objectivesMin} giocatori: in meno si gioca alla conquista del mondo.`;
     }
+    // 128 bit veri: dalla distribuzione iniziale, che è pubblica, non si ricavano obiettivi, mazzo e dadi
+    const bytes = randomBytes(16);
+    const seed = [0, 4, 8, 12].map((o) => bytes.readUInt32LE(o));
+    const state = createGame(
+      ctx,
+      this.s.seats.map(({ id, name, color }) => ({ id, name, color })),
+      settings.mode,
+      seed,
+    );
+    this.s.board = settings.board;
+    this.s.boardHash = this.deps.boards.hash(settings.board);
+    this.s.phase = 'playing';
+    this.s.log = [];
+    this.s.clock = null;
+    this.s.acted = [];
+    for (const x of this.s.seats) x.idleTurns = 0;
+    this.deps.log.info(`Partita ${this.id}: comincia con ${this.s.seats.map((x) => x.name).join(', ')}`);
+    const from = this.s.nextSeq;
+    this.advance({ state, events: [] });
     this.touch();
-    this.broadcastAll();
-  }
-
-  private turnSeconds(): number {
-    return this.s.state?.settings.turnSeconds ?? this.world.ctx.rules.turn.defaultSeconds;
-  }
-
-  private activePlayers(): PlayerId[] {
-    return this.s.state ? this.s.state.players.filter((p) => p.status === 'active').map((p) => p.id) : [];
-  }
-
-  private setPlan(player: PlayerId, actions: Action[]): string | null {
-    if (this.s.phase !== 'playing') return 'La partita non è in corso';
-    if (!this.activePlayers().includes(player)) return 'Non sei più in gioco';
-    this.s.plans[player] = actions;
-    this.touch();
+    this.broadcastAll(from);
     return null;
   }
 
-  private setReady(player: PlayerId, done: boolean): string | null {
-    if (this.s.phase !== 'playing') return 'La partita non è in corso';
-    if (!this.activePlayers().includes(player)) return 'Non sei più in gioco';
-    const set = new Set(this.s.done);
-    if (done) set.add(player);
-    else set.delete(player);
-    this.s.done = [...set];
+  private act(seat: Seat, action: Action, n?: number): string | null {
+    if (this.s.phase !== 'playing' || !this.s.state) return 'La partita non è in corso';
+    if (seat.left) return 'Sei uscito dalla partita';
+    const result = applyAction(this.ctx, this.s.state, seat.id, action);
+    seat.idleTurns = 0;
+    if (!this.s.acted.includes(seat.id)) this.s.acted.push(seat.id);
+    const from = this.s.nextSeq;
+    this.advance(result);
     this.touch();
-    if (!this.resolveIfAllDone()) this.broadcastStatus();
+    this.broadcastGame(from, n === undefined ? undefined : { player: seat.id, n });
+    this.broadcastStatus();
     return null;
   }
 
-  /** Se tutti quelli ancora in gioco hanno finito, il turno si risolve subito. */
-  private resolveIfAllDone(): boolean {
-    const active = this.activePlayers();
-    if (this.s.phase !== 'playing' || active.length === 0) return false;
-    const done = new Set(this.s.done);
-    if (!active.every((p) => done.has(p))) return false;
-    this.resolve();
-    return true;
+  /**
+   * Applica il risultato di una mossa: stato, registro, fine partita, tempo. Se adesso deve
+   * muoversi qualcuno che è uscito, il server fa al posto suo quello che farebbe il tempo scaduto.
+   */
+  private advance(result: ActionResult): void {
+    let r = result;
+    for (let guard = 0; ; guard++) {
+      this.s.state = r.state;
+      this.record(r.events);
+      if (r.state.phase === 'over') return this.finish();
+      const gone = new Set(this.s.seats.filter((x) => x.left).map((x) => x.id));
+      if (r.state.players.every((p) => !p.alive || gone.has(p.id))) return this.finish();
+      const ctx = this.ctx;
+      const due = playersToAct(ctx, r.state).filter((id) => gone.has(id));
+      if (due.length === 0) break;
+      if (guard > 1000) {
+        this.deps.log.error(`Partita ${this.id}: le mosse automatiche per chi è uscito non finiscono`);
+        break;
+      }
+      let state = r.state;
+      const events: GameEvent[] = [];
+      try {
+        for (const id of due) {
+          const p = passFor(ctx, state, id);
+          state = p.state;
+          events.push(...p.events);
+        }
+      } catch (err) {
+        this.stuck(err, 'la mossa automatica per chi è uscito è fallita');
+        break;
+      }
+      r = { state, events };
+    }
+    this.syncClock();
   }
 
-  private kick(by: PlayerId, target: PlayerId): string | null {
-    if (by !== this.s.hostId) return "Solo chi ha creato la partita può espellere";
-    if (by === target) return 'Non puoi espellere te stesso';
-    const seat = this.s.seats.find((x) => x.id === target);
+  private record(events: readonly GameEvent[]): void {
+    const at = this.deps.now();
+    for (const event of events) this.s.log.push({ seq: this.s.nextSeq++, at, event });
+    if (this.s.log.length > LOG_KEEP) this.s.log.splice(0, this.s.log.length - LOG_KEEP);
+  }
+
+  private finish(): void {
+    this.s.phase = 'ended';
+    this.s.deadline = null;
+    this.s.paused = null;
+    this.s.clock = null;
+    this.s.clockTotal = null;
+    const state = this.s.state;
+    const winner = state?.players.find((p) => p.id === state.winner)?.name;
+    this.deps.log.info(`Partita ${this.id}: ${winner ? `vince ${winner}` : 'chiusa, sono usciti tutti'}`);
+  }
+
+  private kick(by: string, target: string): string | null {
+    if (by !== this.s.hostId) return 'Solo chi ha creato la partita può togliere un giocatore';
+    if (by === target) return 'Non puoi toglierti da solo';
+    const seat = this.seat(target);
     if (!seat) return 'Giocatore inesistente';
+    const from = this.s.nextSeq;
     if (this.s.phase === 'lobby') {
       this.s.seats = this.s.seats.filter((x) => x !== seat);
     } else {
-      const need = this.world.ctx.rules.game.kickAfterInactiveTurns;
-      if (seat.inactiveTurns < need) return `Si può espellere solo chi è inattivo da ${need} turni`;
-      this.removeFromGame(target);
+      if (this.s.phase === 'ended') return 'La partita è finita';
+      if (seat.left) return 'Ha già lasciato la partita';
+      if (seat.idleTurns < KICK_AFTER_IDLE) return `Si può togliere solo chi ha saltato ${KICK_AFTER_IDLE} turni di fila`;
       seat.token = newToken(); // il vecchio token non fa più rientrare
+      this.markLeft(seat);
+      this.advance({ state: this.s.state!, events: [] });
     }
-    this.deps.send(target, { t: 'kicked', reason: 'Sei stato espulso dalla partita' });
+    this.deps.send(target, { t: 'kicked', reason: 'Sei stato tolto dalla partita' });
     this.deps.disconnect(target); // non aspetta che sia il suo browser a chiudere
-    this.deps.log.info(`Partita ${this.id}: espulso ${seat.name}`);
+    this.deps.log.info(`Partita ${this.id}: tolto ${seat.name}`);
     this.touch();
-    this.broadcastAll();
-    this.resolveIfAllDone();
+    this.broadcastAll(from);
     return null;
   }
 
-  private leave(player: PlayerId): string | null {
-    const name = this.s.seats.find((x) => x.id === player)?.name ?? player;
+  private leave(player: string): string | null {
+    const seat = this.seat(player)!;
+    const from = this.s.nextSeq;
     if (this.s.phase === 'lobby') {
-      this.s.seats = this.s.seats.filter((x) => x.id !== player);
+      this.s.seats = this.s.seats.filter((x) => x !== seat);
       if (this.s.hostId === player) this.s.hostId = this.s.seats[0]?.id ?? '';
+    } else if (this.s.phase === 'playing' && !seat.left) {
+      this.markLeft(seat);
+      this.advance({ state: this.s.state!, events: [] });
     } else {
-      this.removeFromGame(player);
-      if (this.s.hostId === player) {
-        this.s.hostId = this.s.state!.players.find((p) => p.status === 'active')?.id ?? this.s.hostId;
-      }
+      return null; // a partita finita (o già uscito) non cambia più nulla
     }
-    this.deps.log.info(`Partita ${this.id}: esce ${name}`);
+    this.deps.log.info(`Partita ${this.id}: esce ${seat.name}`);
     this.touch();
-    this.broadcastAll();
-    this.resolveIfAllDone();
+    this.broadcastAll(from);
     return null;
   }
 
-  private removeFromGame(player: PlayerId): void {
-    const state = this.s.state;
-    // a partita finita uscire non cambia più nulla
-    if (!state || this.s.phase === 'ended' || getPlayer(state, player).status !== 'active') return;
-    const wasPicking = this.picker() === player;
-    const events: TurnEvent[] = [];
-    eliminate(state, player, events);
-    getPlayer(state, player).status = 'left';
-    delete this.s.plans[player];
-    this.s.done = this.s.done.filter((x) => x !== player);
-    if (this.s.phase === 'selection') {
-      this.s.skipped.push(player);
-      // se toccava a lui (o non resta nessuno da aspettare) la scelta va avanti, col tempo che riparte
-      if (wasPicking || this.picker() === null) this.afterPick();
-    }
+  private markLeft(seat: Seat): void {
+    seat.left = true;
+    if (this.s.hostId === seat.id) this.s.hostId = this.s.seats.find((x) => !x.left)?.id ?? this.s.hostId;
   }
 
   // ---------------------------------------------------------------- tempo
 
-  /** Fa partire il tempo della fase in corso; se il tempo è fermo, lo mette da parte per la ripresa. */
+  /** Il tempo riparte quando cambia quello che misura (nuovo turno, nuovo giro di piazzamento). */
+  private syncClock(): void {
+    const state = this.s.state;
+    if (!state || this.s.phase !== 'playing') return;
+    const ctx = this.ctx;
+    const key = clockKey(ctx, state);
+    if (key === this.s.clock) return;
+    this.s.clock = key;
+    this.s.acted = [];
+    const { timers } = ctx.rules;
+    this.setTimer((state.phase === 'setup' ? timers.setupSeconds : timers.turnSeconds) * 1000);
+  }
+
+  /** Fa partire il tempo; se il tempo è fermo, lo mette da parte per la ripresa. */
   private setTimer(ms: number): void {
+    this.s.clockTotal = ms;
     if (this.s.paused) {
       this.s.paused.remainingMs = ms;
       this.s.deadline = null;
@@ -406,9 +428,9 @@ export class Room {
     }
   }
 
-  private setPaused(player: PlayerId, paused: boolean): string | null {
+  private setPaused(player: string, paused: boolean): string | null {
     if (player !== this.s.hostId) return 'Solo chi ha creato la partita può fermare il tempo';
-    if (this.s.phase !== 'selection' && this.s.phase !== 'playing') return 'Non c’è un tempo da fermare';
+    if (this.s.phase !== 'playing') return 'Non c’è un tempo da fermare';
     const { now } = this.deps;
     if (paused === Boolean(this.s.paused)) return null;
     if (paused) {
@@ -424,115 +446,53 @@ export class Room {
     return null;
   }
 
-  /** Da chiamare ogni secondo: scadenze della scelta e dei turni. */
+  /** Da chiamare ogni secondo: tempo scaduto per chi doveva muoversi. */
   tick(): void {
     const { now } = this.deps;
-    const { ctx } = this.world;
-    if (this.s.paused || this.s.deadline === null || now() < this.s.deadline) return;
-    if (this.s.phase === 'selection' && this.s.state) {
-      const who = this.picker();
-      if (!who) return;
-      const options = affordableCountries(this.s.state, ctx, who);
-      if (options.length === 0) {
-        this.s.skipped.push(who);
-      } else {
-        // scelta automatica: un paese a caso tra quelli alla sua portata
-        selectCountry(this.s.state, ctx, who, options[Math.floor(Math.random() * options.length)]!);
-      }
-      this.afterPick();
-    } else if (this.s.phase === 'playing') {
-      this.resolve();
-    }
-  }
-
-  private resolve(): void {
     const state = this.s.state;
-    if (!state || this.s.phase !== 'playing') return;
-    const { log } = this.deps;
-    const started = performance.now();
-    const outcome = this.tryResolve(state);
-    if (!outcome) {
-      // non si risolve nemmeno senza ordini: la partita resta ferma finché non si corregge il motore
-      this.s.paused = { reason: 'error', remainingMs: this.turnSeconds() * 1000 };
-      this.s.deadline = null;
+    if (this.s.phase !== 'playing' || !state || this.s.paused || this.s.deadline === null || now() < this.s.deadline) return;
+    const ctx = this.ctx;
+    let result: ActionResult;
+    try {
+      result = timeout(ctx, state);
+    } catch (err) {
+      this.stuck(err, 'il tempo scaduto non si riesce a chiudere');
       this.touch();
-      for (const x of this.s.seats) {
-        this.deps.send(x.id, {
-          t: 'error',
-          message: 'Il server non riesce a risolvere il turno: partita ferma. L’errore è stato registrato.',
-        });
-      }
       this.broadcastStatus();
       return;
     }
-    const { result, dropped } = outcome;
-    const done = new Set(this.s.done);
-    for (const id of this.activePlayers()) {
-      const seat = this.s.seats.find((x) => x.id === id);
-      if (!seat) continue;
-      const idle = (this.s.plans[id]?.length ?? 0) === 0 && !done.has(id);
-      seat.inactiveTurns = idle ? seat.inactiveTurns + 1 : 0;
+    // chi doveva muoversi e non ha fatto nulla: un turno saltato in più
+    for (const id of playersToAct(ctx, state)) {
+      const seat = this.seat(id);
+      if (seat && !seat.left && !this.s.acted.includes(id)) seat.idleTurns++;
     }
-    for (const p of dropped) {
-      this.deps.send(p, {
-        t: 'error',
-        message: `Errore del server: i tuoi ordini del turno ${state.turn} sono stati annullati. Il problema è stato registrato.`,
-      });
+    const from = this.s.nextSeq;
+    this.advance(result);
+    // per sicurezza: se il tempo non è ripartito, altrimenti scatterebbe a ogni secondo
+    if (this.s.phase === 'playing' && this.s.deadline !== null && now() >= this.s.deadline) {
+      this.s.clock = null;
+      this.syncClock();
     }
-    this.s.events = result.events;
-    this.s.eventsTurn = state.turn;
-    this.s.state = result.state;
-    this.s.plans = {};
-    this.s.done = [];
-    if (this.s.paused?.reason === 'error') this.s.paused = null;
-    if (result.state.phase === 'ended') {
-      this.s.phase = 'ended';
-      this.s.deadline = null;
-      this.s.paused = null;
-      log.info(`Partita ${this.id}: finita al turno ${state.turn}`);
-    } else {
-      this.setTimer(this.turnSeconds() * 1000);
-    }
-    log.info(`Partita ${this.id}: turno ${state.turn} risolto in ${Math.round(performance.now() - started)} ms`);
     this.touch();
-    this.broadcastAll();
+    this.broadcastAll(from);
   }
 
   /**
-   * Risolve il turno. Se il motore va in errore, salva tutto per riprodurlo e riprova togliendo
-   * gli ordini di un giocatore alla volta, poi senza ordini: un errore del motore costa al massimo
-   * gli ordini di un turno, non la serata.
+   * Il motore è andato in errore: la partita si ferma (tempo in pausa) invece di cadere, con
+   * tutto il necessario per riprodurre l'errore. L'host può riprovare facendo ripartire il tempo.
    */
-  private tryResolve(state: GameState): { result: ReturnType<typeof resolveTurn>; dropped: PlayerId[] } | null {
+  private stuck(err: unknown, what: string): void {
     const { log } = this.deps;
-    const { ctx, nav } = this.world;
-    const run = (plans: Record<PlayerId, Action[]>) => resolveTurn(state, ctx, nav, plans);
-    try {
-      return { result: run(this.s.plans), dropped: [] };
-    } catch (err) {
-      log.error(`Partita ${this.id}: la risoluzione del turno ${state.turn} è fallita`, err);
-      const file = log.dump(`${this.id}-turno${state.turn}`, { error: describeError(err), state, plans: this.s.plans });
-      if (file) log.info(`Dati per riprodurre l'errore: ${file}`);
-    }
-    const withOrders = Object.keys(this.s.plans).filter((p) => (this.s.plans[p]?.length ?? 0) > 0);
-    for (const p of withOrders) {
-      const rest = { ...this.s.plans };
-      delete rest[p];
-      try {
-        const result = run(rest);
-        log.info(`Partita ${this.id}: turno ${state.turn} risolto senza gli ordini di ${p}`);
-        return { result, dropped: [p] };
-      } catch {
-        // non erano i suoi ordini: si prova con il prossimo
-      }
-    }
-    try {
-      const result = run({});
-      log.info(`Partita ${this.id}: turno ${state.turn} risolto senza ordini`);
-      return { result, dropped: withOrders };
-    } catch (err) {
-      log.error(`Partita ${this.id}: il turno ${state.turn} non si risolve neanche senza ordini`, err);
-      return null;
+    log.error(`Partita ${this.id}: ${what}`, err);
+    const file = log.dump(`${this.id}-bloccata`, { error: describeError(err), state: this.s.state });
+    if (file) log.info(`Dati per riprodurre l'errore: ${file}`);
+    this.s.paused = { reason: 'error', remainingMs: (this.s.clockTotal ?? 60_000) };
+    this.s.deadline = null;
+    for (const x of this.s.seats) {
+      this.deps.send(x.id, {
+        t: 'error',
+        message: 'Il server non riesce ad andare avanti: partita ferma. L’errore è stato registrato.',
+      });
     }
   }
 
@@ -543,58 +503,53 @@ export class Room {
     this.deps.changed(this);
   }
 
-  /** Le informazioni della sala d'attesa come le vede il giocatore (con la sua dottrina). */
-  lobbyInfo(player?: PlayerId): LobbyInfo {
-    const seat = this.s.seats.find((x) => x.id === player);
-    const statePlayer = this.s.state?.players.find((p) => p.id === player);
-    const doctrine: Doctrine = statePlayer
-      ? { strategy: statePlayer.strategy, general: statePlayer.generalUpgrades ?? [] }
-      : (seat?.doctrine ?? NO_DOCTRINE);
+  /** Le informazioni della sala d'attesa (valgono anche durante la partita). */
+  lobbyInfo(): LobbyInfo {
+    const { boards } = this.deps;
+    const settings = this.settings;
+    const summary = boards.summaries().find((b) => b.id === settings.board)!;
     return {
       id: this.id,
       hostId: this.s.hostId,
       phase: this.s.phase,
-      mapId: this.mapId,
-      mapName: this.world.ctx.map.name,
-      maps: this.deps.maps.summaries(),
+      board: { ...summary, hash: boards.hash(settings.board) },
+      boards: boards.summaries(),
       players: this.s.seats.map((x) => ({
         id: x.id,
         name: x.name,
         color: x.color,
         connected: this.deps.isConnected(x.id),
-        inactiveTurns: x.inactiveTurns,
+        left: Boolean(x.left),
+        idleTurns: x.idleTurns,
       })),
-      settings: this.s.state?.settings ?? this.s.settings,
-      doctrine,
+      settings,
+      rules: this.ctx.rules,
+      kickAfterIdle: KICK_AFTER_IDLE,
     };
   }
 
   private statusMsg(): ServerMsg {
-    const done = new Set(this.s.done);
     return {
       t: 'status',
       deadline: this.s.deadline,
-      paused: this.s.paused ?? null,
-      waiting: this.s.phase === 'playing' ? this.activePlayers().filter((p) => !done.has(p)) : [],
-      picker: this.picker(),
+      paused: this.s.paused,
+      total: this.s.clockTotal,
       now: this.deps.now(),
     };
   }
 
-  private gameMsg(player: PlayerId): ServerMsg | null {
+  /** La partita vista da un giocatore, con gli eventi da `since` in poi (null: gli ultimi, per riallinearsi). */
+  private gameMsg(player: string, since: number | null): Extract<ServerMsg, { t: 'game' }> | null {
     const state = this.s.state;
     if (!state) return null;
-    return {
-      t: 'game',
-      view: viewFor(state, this.world.ctx, player),
-      plan: this.s.plans[player] ?? [],
-      events: eventsFor(this.s.events, state, this.world.ctx, player),
-      eventsTurn: this.s.eventsTurn,
-    };
+    const entries = since === null ? this.s.log.slice(-LOG_SYNC) : this.s.log.filter((e) => e.seq >= since);
+    const log = entries.flatMap((e) => eventsFor([e.event], player).map((event) => ({ seq: e.seq, at: e.at, event })));
+    return { t: 'game', view: viewFor(this.ctx, state, player), log, sync: since === null };
   }
 
   broadcastLobby(): void {
-    for (const x of this.s.seats) this.deps.send(x.id, { t: 'lobby', lobby: this.lobbyInfo(x.id) });
+    const lobby = this.lobbyInfo();
+    for (const x of this.s.seats) this.deps.send(x.id, { t: 'lobby', lobby });
   }
 
   broadcastStatus(): void {
@@ -602,19 +557,24 @@ export class Room {
     for (const x of this.s.seats) this.deps.send(x.id, status);
   }
 
-  broadcastAll(): void {
-    this.broadcastLobby();
+  /** La partita a tutti; a chi ha fatto la mossa con il numero della mossa (`ack`). */
+  private broadcastGame(since: number, ack?: { player: string; n: number }): void {
     for (const x of this.s.seats) {
-      const game = this.gameMsg(x.id);
-      if (game) this.deps.send(x.id, game);
+      const game = this.gameMsg(x.id, since);
+      if (game) this.deps.send(x.id, ack?.player === x.id ? { ...game, ack: ack.n } : game);
     }
+  }
+
+  private broadcastAll(since: number): void {
+    this.broadcastLobby();
+    this.broadcastGame(since);
     this.broadcastStatus();
   }
 
   /** Tutto ciò che serve a un giocatore che si (ri)collega. */
-  syncPlayer(player: PlayerId): void {
-    this.deps.send(player, { t: 'lobby', lobby: this.lobbyInfo(player) });
-    const game = this.gameMsg(player);
+  syncPlayer(player: string): void {
+    this.deps.send(player, { t: 'lobby', lobby: this.lobbyInfo() });
+    const game = this.gameMsg(player, null);
     if (game) this.deps.send(player, game);
     this.deps.send(player, this.statusMsg());
     this.deps.send(player, { t: 'chat', lines: this.s.chat.slice(-50) });

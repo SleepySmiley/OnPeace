@@ -1,5 +1,5 @@
 /** Collegamento WebSocket al server, con riconnessione automatica e coda dei messaggi. */
-import type { ClientMsg, ServerMsg } from '@onpeace/protocol';
+import type { ClientMsg, ServerMsg } from '@onpeace/protocol/atwar';
 
 const SESSION_KEY = 'onpeace.session';
 
