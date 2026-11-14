@@ -7,7 +7,7 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - Per tutto quello che si vede: prima 3-4 proposte da confrontare dal vivo su una pagina di prova (come `tabellone.html`), poi si sceglie, poi si fa per bene nel gioco.
 - Per provare il gioco senza server e senza altri browser c'è `prova.html`: una partita vera che gira nel browser contro quattro avversari automatici (`?da=inizio` per partire dall'obiettivo, `?stile=vetro` per l'altro tema).
 - Un punto è chiuso quando funziona nel gioco vero, nei due temi, con i test verdi, provato nel browser e salvato su git.
-- Il layout di riferimento è **essenziale**: tutto si progetta prima per quello.
+- C'è una sola disposizione, l'**essenziale**: mappa a tutto schermo, giocatori in alto a sinistra, barra dei comandi in basso, carte e registro nei cassetti.
 
 ## Già fatto (14/11)
 
@@ -16,6 +16,7 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.4b — due bug.** "Esci" ora torna alla home; la barra in alto resta cliccabile mentre la carta è aperta.
 - **M12.5 — carta dell'obiettivo (proposta C).** La mappa accende i continenti da prendere, oppure cadono le pedine da contare o il bersaglio finisce nel mirino; sotto, la frase e i numeri. Il server manda l'obiettivo con i suoi dati, non solo la frase. La stessa carta, piccola e ferma, sta tra le carte. Pagina di prova: `carta.html`.
 - **M12.6 — barra dei comandi in basso (proposta A).** Nell'essenziale il pannello che si attaccava al territorio cliccato non c'è più: una barra fissa in basso al centro dice cosa fare, mostra il contatore o chi contro chi, dadi e armate, con Conferma e Ricomincia sempre lì. La mappa le lascia spazio, i bottoni e gli avvisi in basso stanno sopra. Esc nei rinforzi toglie le armate non confermate.
+- **M12.7 — una sola disposizione.** Tolte "plancia laterale" e "comandi in basso": resta l'essenziale, e il menu Aspetto sceglie solo il tema. Via anche il vecchio pannello della mossa e le versioni dei pannelli che servivano solo a quelle due.
 
 ## Da fare
 
@@ -58,7 +59,6 @@ Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni,
 - Togliere quello che resta del vecchio gioco in stile atWar:
   - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;
   - eliminare `data/maps`, `data/rules` e gli strumenti delle vecchie mappe.
-- Decidere se togliere le disposizioni "plancia laterale" e "comandi in basso" (prima si chiede).
 - Riscrivere `docs/progetto.md`, che descrive ancora il vecchio gioco.
 - Unire `m12-partita` in `main`.
 

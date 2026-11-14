@@ -1,13 +1,30 @@
 /**
- * Barra dei comandi della disposizione essenziale: fissa in basso al centro, su una riga dice
+ * Barra dei comandi della partita: fissa in basso al centro, su una riga dice
  * che cosa fare adesso e ha quello che serve per farlo (contatore, chi contro chi, dadi, armate
  * da spostare, conferma). Non copre mai il territorio su cui si clicca. Invio conferma, Esc annulla.
  */
 import type { ReactNode } from 'react';
 import { useSession } from '../store';
-import { Stepper } from './ActionPanel';
 import { Chip } from './bits';
 import { useCommand, type Btn, type Command, type Side } from './command';
+
+/** Numero con − e + (e il cursore se l'intervallo è ampio). */
+export function Stepper({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
+  return (
+    <div className="stepper" role="group" aria-label={label}>
+      <button type="button" className="ghost" aria-label="Meno" disabled={value <= min} onClick={() => onChange(value - 1)}>
+        −
+      </button>
+      {max - min > 2 && (
+        <input type="range" min={min} max={max} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} />
+      )}
+      <span className="num stepper-value">{value}</span>
+      <button type="button" className="ghost" aria-label="Più" disabled={value >= max} onClick={() => onChange(value + 1)}>
+        +
+      </button>
+    </div>
+  );
+}
 
 function Kbd({ k }: { k?: string | undefined }) {
   return k ? <kbd className="kbd">{k}</kbd> : null;

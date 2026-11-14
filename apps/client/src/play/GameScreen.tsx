@@ -1,18 +1,17 @@
 /**
- * La schermata della partita: il tabellone a tutto schermo e i pannelli, sistemati secondo la
- * disposizione scelta (plancia laterale, comandi in basso, essenziale). Tasti: Esc annulla,
- * Invio conferma, 1-3 dadi, 0 vista d'insieme.
+ * La schermata della partita: il tabellone a tutto schermo, i giocatori in alto a sinistra, la
+ * barra dei comandi in basso, carte e registro in due cassetti. Tasti: Esc annulla (nei rinforzi
+ * toglie le armate non confermate), Invio conferma, 1-3 dadi, 0 vista d'insieme.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useGameSounds } from '../audio/useGameSounds';
 import { BoardCanvas } from '../board/BoardCanvas';
 import type { BoardState } from '../board/common';
 import type { BoardPainter, Insets } from '../board/painter';
-import { useLook, type Layout } from '../look';
+import { useLook } from '../look';
 import { useSession } from '../store';
 import { GuideModal } from '../ui/GuideModal';
 import { ReportModal } from '../ui/ReportModal';
-import { ActionPanel } from './ActionPanel';
 import { CommandBar } from './CommandBar';
 import { describeEvent, isHighlight, namesFor } from './describe';
 import { GameOver } from './GameOver';
@@ -22,12 +21,8 @@ import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './
 import { TopBar } from './TopBar';
 import { useGame } from './useGame';
 
-const INSETS: Record<Layout, Insets> = {
-  plancia: { top: 56, right: 384, bottom: 0, left: 0 },
-  comandi: { top: 112, right: 0, bottom: 210, left: 0 },
-  // la barra dei comandi in basso: la mappa si adatta sopra
-  essenziale: { top: 56, right: 0, bottom: 110, left: 0 },
-};
+/** Spazio coperto da barra in alto e barra dei comandi: la mappa si adatta nel resto. */
+const INSETS: Insets = { top: 56, right: 0, bottom: 110, left: 0 };
 
 /** Il tabellone con lo stato della partita, le scelte in corso e i lampi delle ultime battaglie. */
 function useBoardState(): BoardState {
@@ -80,7 +75,7 @@ function useBoardState(): BoardState {
   }, [view, board, me, move, lobby, colorOf, draft, hover, fresh]);
 }
 
-/** Eventi importanti appena successi, in basso a destra per qualche secondo (disposizione essenziale). */
+/** Eventi importanti appena successi, in basso a destra per qualche secondo. */
 function EventToasts() {
   const { view, territory, me } = useGame();
   const fresh = useSession((s) => s.fresh);
@@ -111,13 +106,13 @@ function EventToasts() {
 }
 
 /** Il tabellone, a parte: spostare la vista o passare col mouse sui territori non ridisegna i pannelli. */
-function Board({ insets, onPainter }: { insets: Insets; onPainter: (p: BoardPainter | null) => void }) {
+function Board({ onPainter }: { onPainter: (p: BoardPainter | null) => void }) {
   const board = useSession((s) => s.board)!;
   const style = useLook((s) => s.style);
   const state = useBoardState();
   const onClick = useCallback((id: string | null, how: { shift: boolean; right: boolean }) => useSession.getState().clickTerritory(id, how), []);
   const onHover = useCallback((id: string | null) => useSession.getState().setHover(id), []);
-  return <BoardCanvas geo={board.geo} style={style} state={state} insets={insets} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
+  return <BoardCanvas geo={board.geo} style={style} state={state} insets={INSETS} onClick={onClick} onHover={onHover} painterRef={onPainter} />;
 }
 
 interface Props {
@@ -128,7 +123,6 @@ interface Props {
 export function GameScreen({ topbarExtra }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
-  const layout = useLook((s) => s.layout);
   const online = useSession((s) => s.online);
   const fresh = useSession((s) => s.fresh);
   const notice = useSession((s) => s.notice);
@@ -198,70 +192,36 @@ export function GameScreen({ topbarExtra }: Props = {}) {
   const cardCount = view.players.find((p) => p.id === me)?.cardCount ?? 0;
 
   return (
-    <div className={`game layout-${layout}`}>
-      <Board insets={INSETS[layout]} onPainter={setPainter} />
+    <div className="game">
+      <Board onPainter={setPainter} />
       <TopBar onGuide={() => setOverlay('guide')} onReport={() => setOverlay('report')}>
         {topbarExtra}
       </TopBar>
 
-      {layout === 'plancia' && (
-        <aside className="side panel">
-          <PlayersPanel />
-          <ActionPanel />
-          <BattlePanel />
+      <div className="corner-players panel">
+        <PlayersPanel />
+      </div>
+      {move.kind !== 'briefing' && <CommandBar />}
+      <div className="corner-tools">
+        <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
+          Carte e obiettivo <span className="count">{cardCount}</span>
+        </button>
+        <button type="button" className="pill panel" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>
+          Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
+        </button>
+      </div>
+      {cardsOpen && (
+        <div className="drawer drawer-left panel">
           <HandPanel />
+        </div>
+      )}
+      {chatOpen && (
+        <div className="drawer drawer-right panel">
+          <BattlePanel />
           <LogChat />
-        </aside>
+        </div>
       )}
-
-      {layout === 'comandi' && (
-        <>
-          <div className="players-strip panel">
-            <PlayersPanel compact />
-          </div>
-          <div className="dock">
-            <div className="dock-hand panel">
-              <HandPanel fan />
-            </div>
-            <div className="dock-action panel">
-              <ActionPanel />
-            </div>
-            <div className="dock-battle panel">
-              <BattlePanel />
-              <LogChat />
-            </div>
-          </div>
-        </>
-      )}
-
-      {layout === 'essenziale' && (
-        <>
-          <div className="corner-players panel">
-            <PlayersPanel compact />
-          </div>
-          {move.kind !== 'briefing' && <CommandBar />}
-          <div className="corner-tools">
-            <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
-              Carte e obiettivo <span className="count">{cardCount}</span>
-            </button>
-            <button type="button" className="pill panel" aria-expanded={chatOpen} onClick={() => setChatOpen((o) => !o)}>
-              Registro e chat {online.unread > 0 && <span className="count">{online.unread}</span>}
-            </button>
-          </div>
-          {cardsOpen && (
-            <div className="drawer drawer-left panel">
-              <HandPanel />
-            </div>
-          )}
-          {chatOpen && (
-            <div className="drawer drawer-right panel">
-              <BattlePanel />
-              <LogChat />
-            </div>
-          )}
-          {!chatOpen && <EventToasts />}
-        </>
-      )}
+      {!chatOpen && <EventToasts />}
 
       <TerritoryInfo />
 

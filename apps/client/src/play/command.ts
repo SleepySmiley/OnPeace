@@ -1,7 +1,7 @@
 /**
  * Che cosa dice e offre il comando della mossa in ogni momento del turno (cosa fare, il numero
  * da tenere d'occhio, chi contro chi, dadi, armate, bottoni), senza decidere come si disegna:
- * la barra in basso della disposizione essenziale lo mostra su una riga.
+ * la barra dei comandi in basso lo mostra su una riga.
  */
 import { useSession } from '../store';
 import { PHASES } from './describe';

@@ -7,7 +7,6 @@
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
-import { useLook, type Layout } from '../look';
 import { GameScreen } from '../play/GameScreen';
 import { setLinkFactory, useSession } from '../store';
 import { LocalGame, localBoard, type Start } from './locale';
@@ -25,11 +24,7 @@ Storage.prototype.removeItem = function (key: string) {
   if (key !== SESSION_KEY) removeItem.call(this, key);
 };
 
-// disposizione: quella dell'indirizzo, altrimenti l'essenziale (senza cambiare la preferenza salvata)
 const params = new URLSearchParams(location.search);
-const layout = (['plancia', 'comandi', 'essenziale'] as Layout[]).find((l) => l === params.get('disposizione')) ?? 'essenziale';
-useLook.setState({ layout });
-document.body.dataset.disposizione = layout;
 
 let game: LocalGame | null = null;
 function boot(start: Start) {

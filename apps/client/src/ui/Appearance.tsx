@@ -1,9 +1,9 @@
-/** Menu "Aspetto": stile del tabellone e disposizione dei comandi, da provare durante la partita. */
+/** Menu "Aspetto": lo stile del tabellone e dell'interfaccia, da cambiare anche durante la partita. */
 import { useEffect, useRef, useState } from 'react';
-import { LAYOUTS, STYLES, useLook } from '../look';
+import { STYLES, useLook } from '../look';
 
 export function AppearanceMenu() {
-  const { style, layout, setStyle, setLayout } = useLook();
+  const { style, setStyle } = useLook();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -34,15 +34,6 @@ export function AppearanceMenu() {
               <button key={s.id} type="button" aria-pressed={s.id === style.id} onClick={() => setStyle(s.id)}>
                 <span>{s.name}</span>
                 <small>{s.tagline}</small>
-              </button>
-            ))}
-          </div>
-          <h2 className="section-title">Disposizione dei comandi</h2>
-          <div className="choice-list">
-            {LAYOUTS.map((l) => (
-              <button key={l.id} type="button" aria-pressed={l.id === layout} onClick={() => setLayout(l.id)}>
-                <span>{l.name}</span>
-                <small>{l.tagline}</small>
               </button>
             ))}
           </div>

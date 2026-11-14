@@ -12,14 +12,14 @@ import { useGame } from './useGame';
 
 // ---------------------------------------------------------------- giocatori
 
-export function PlayersPanel({ compact = false }: { compact?: boolean }) {
+/** Giocatori in ordine di turno: chi muove, territori e carte; lo stato (uscito, non collegato) nel suggerimento. */
+export function PlayersPanel() {
   const { view, lobby, me, colorOf } = useGame();
   const acting = actingPlayer(view);
   const seats = new Map(lobby.players.map((p) => [p.id, p]));
   const players = view.order.map((id) => view.players.find((p) => p.id === id)!);
   return (
-    <section className={`players-panel${compact ? ' compact' : ''}`} aria-label="Giocatori">
-      {!compact && <h2 className="section-title">Giocatori</h2>}
+    <section className="players-panel" aria-label="Giocatori">
       <ol>
         {players.map((p) => {
           const seat = seats.get(p.id);
@@ -39,18 +39,11 @@ export function PlayersPanel({ compact = false }: { compact?: boolean }) {
               <span className="player-name">
                 {p.name}
                 {p.id === me && <span className="dim"> (tu)</span>}
-                {status && !compact && <span className="status-tag">{status}</span>}
               </span>
               <span className="stat num" title="Territori">
                 {t.territories}
                 <small>terr.</small>
               </span>
-              {!compact && (
-                <span className="stat num" title="Armate">
-                  {t.armies}
-                  <small>arm.</small>
-                </span>
-              )}
               <span className="stat num" title="Carte in mano">
                 {p.cardCount}
                 <small>carte</small>
@@ -115,7 +108,7 @@ export function BattlePanel() {
 
 // ---------------------------------------------------------------- carte e obiettivo
 
-export function HandPanel({ fan = false }: { fan?: boolean }) {
+export function HandPanel() {
   const { view, lobby, board, me, move, territory, colorOf, playerName } = useGame();
   const skin = useLook((s) => skinOf(s.style.id));
   const sending = useSession((s) => s.sending);
@@ -140,7 +133,7 @@ export function HandPanel({ fan = false }: { fan?: boolean }) {
   const toggle = (id: string) => setChosen((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? [...c.slice(1), id] : [...c, id]));
 
   return (
-    <section className={`hand-panel${fan ? ' fan' : ''}`} aria-label="Le tue carte e il tuo obiettivo">
+    <section className="hand-panel" aria-label="Le tue carte e il tuo obiettivo">
       {objective && me && <ObjectiveSheet info={objective} geo={board.geo} board={board.def} skin={skin} me={colorOf(me)} compact />}
       <div className="hand-head">
         <h2 className="section-title">

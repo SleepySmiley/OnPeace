@@ -2,7 +2,7 @@
  * Interfaccia di OnPeace. Due stili (gli stessi del tabellone): "Tavolo classico" (carta,
  * inchiostro, maiuscoletto antico) e "Vetro" (scuro, pulito, vetro smerigliato). Ogni stile
  * definisce i suoi colori e caratteri qui sotto; tutto il resto usa solo queste variabili.
- * Tre disposizioni dei comandi in partita: plancia laterale, comandi in basso, essenziale.
+ * In partita il tabellone è a tutto schermo: giocatori in un angolo, comandi in una barra in basso.
  */
 
 /* ------------------------------------------------------------------ stili */
@@ -963,10 +963,10 @@ body[data-stile='vetro'] .topbar.my-move .whose b {
 
 .players-panel li {
   display: grid;
-  grid-template-columns: 10px auto 1fr auto auto auto;
+  grid-template-columns: 10px auto auto auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
 }
 
@@ -1003,108 +1003,11 @@ body[data-stile='vetro'] .topbar.my-move .whose b {
   color: var(--ink-dim);
 }
 
-.status-tag {
-  margin-left: 6px;
-  font-size: 11px;
-  color: var(--ink-dim);
-}
-
-.players-panel.compact li {
-  grid-template-columns: 10px auto auto auto auto;
-  gap: 6px;
-  padding: 4px 8px;
-}
-
-.players-panel.compact .player-name {
+.players-panel .player-name {
   max-width: 110px;
 }
 
-/* --- pannello della mossa */
-.action-panel h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.action-panel.busy {
-  cursor: progress;
-}
-
-.big-count {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 2px 0;
-}
-
-.big-count .num:first-child {
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.placements {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.placements li {
-  display: inline-flex;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  border: 1px solid var(--edge-soft);
-  font-size: 12px;
-}
-
-.placements .num {
-  font-weight: 700;
-}
-
-.target-list {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 4px;
-}
-
-.target-list button {
-  width: 100%;
-  justify-content: flex-start;
-  min-height: 30px;
-  padding: 3px 8px;
-  font-weight: 500;
-}
-
-.target-list button span:nth-child(2) {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.duel {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-}
-
-.duel-arrow {
-  font-size: 18px;
-  color: var(--accent);
-}
-
+/* --- dadi e numeri della barra dei comandi */
 .dice-pick {
   display: flex;
   align-items: center;
@@ -1961,16 +1864,6 @@ button.card:hover {
   font-size: 13px;
 }
 
-.hand-panel.fan .cards {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  padding: 6px 2px 2px;
-}
-
-.hand-panel.fan .card {
-  flex: none;
-}
-
 /* --- registro e chat */
 .logchat {
   display: flex;
@@ -2071,120 +1964,8 @@ button.card:hover {
   font-weight: 700;
 }
 
-/* ------------------------------------------------------------------ disposizione 1: plancia laterale */
-.layout-plancia .side {
-  position: absolute;
-  z-index: 10;
-  top: 60px;
-  right: 8px;
-  bottom: 8px;
-  width: 368px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.layout-plancia .side > section {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--edge-soft);
-}
-
-.layout-plancia .side > .action-panel {
-  background: var(--panel-2);
-}
-
-.layout-plancia .side > .logchat {
-  flex: 1;
-  border-bottom: 0;
-  min-height: 120px;
-}
-
-.layout-plancia .side > .hand-panel,
-.layout-plancia .side > .players-panel {
-  flex: none;
-}
-
-.layout-plancia .territory-info {
-  top: 64px;
-  left: 12px;
-}
-
-/* ------------------------------------------------------------------ disposizione 2: comandi in basso */
-.layout-comandi .players-strip {
-  position: absolute;
-  z-index: 10;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: calc(100vw - 24px);
-  padding: 4px 6px;
-}
-
-.layout-comandi .players-strip ol {
-  display: flex;
-  gap: 2px;
-}
-
-.layout-comandi .dock {
-  position: absolute;
-  z-index: 10;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  height: 202px;
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(360px, 440px) minmax(260px, 1fr);
-  gap: 8px;
-}
-
-.layout-comandi .dock > .panel {
-  padding: 10px 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.layout-comandi .dock-action {
-  overflow-y: auto !important;
-  border-color: var(--accent);
-}
-
-.layout-comandi .dock-hand .hand-panel {
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.layout-comandi .dock-hand .objective-sheet.compact {
-  display: grid;
-  grid-template-columns: 170px 1fr;
-  margin-bottom: 6px;
-}
-
-.layout-comandi .dock-hand .objective-sheet.compact .os-map {
-  aspect-ratio: auto;
-  min-height: 80px;
-  border-bottom: 0;
-}
-
-.layout-comandi .dock-battle .battle-panel {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--edge-soft);
-  margin-bottom: 6px;
-}
-
-.layout-comandi .dock-battle .logchat {
-  flex: 1;
-  min-height: 0;
-}
-
-.layout-comandi .territory-info {
-  top: 112px;
-  right: 12px;
-}
-
-/* ------------------------------------------------------------------ disposizione 3: essenziale */
-.layout-essenziale .corner-players {
+/* ------------------------------------------------------------------ partita: angoli, barra dei comandi, cassetti */
+.game .corner-players {
   position: absolute;
   z-index: 10;
   top: 60px;
@@ -2415,7 +2196,7 @@ body[data-stile='vetro'] .cb-title {
   opacity: 0.62;
 }
 
-.layout-essenziale .corner-tools {
+.game .corner-tools {
   position: absolute;
   z-index: 10;
   left: 12px;
@@ -2498,7 +2279,7 @@ body[data-stile='vetro'] .cb-title {
   }
 }
 
-.layout-essenziale .territory-info {
+.game .territory-info {
   top: 64px;
   right: 12px;
 }
@@ -2511,24 +2292,12 @@ body[data-stile='vetro'] .cb-title {
   .cb-head {
     max-width: 240px;
   }
-  .layout-comandi .dock {
-    grid-template-columns: 1fr minmax(300px, 380px);
-  }
-  .layout-comandi .dock-battle {
-    display: none !important;
-  }
 }
 
 @media (max-width: 760px) {
   .lobby-grid,
   .guide-cols {
     grid-template-columns: 1fr;
-  }
-  .layout-plancia .side {
-    width: auto;
-    left: 8px;
-    top: auto;
-    height: 50vh;
   }
 }
 
