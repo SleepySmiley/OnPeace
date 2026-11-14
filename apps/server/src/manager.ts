@@ -1,10 +1,11 @@
 /** Tutte le partite del server: creazione, ingresso, token di rientro, salvataggi, timer. */
 import { randomBytes } from 'node:crypto';
-import type { PlayerId } from '@onpeace/engine';
 import type { ClientMsg, LobbySettings, ServerMsg } from '@onpeace/protocol';
+import type { BoardProvider } from './boards';
 import { consoleLogger, type Logger } from './log';
-import type { MapProvider } from './maps';
 import { Room, type RoomSnapshot, type Seat } from './room';
+
+type PlayerId = string;
 
 /** Se un salvataggio fallisce (es. file bloccato da OneDrive o dall'antivirus) si riprova dopo questo tempo. */
 const SAVE_RETRY_MS = 1500;
@@ -41,7 +42,7 @@ export class RoomManager {
   private reportDumps = 0;
 
   constructor(
-    private readonly maps: MapProvider,
+    private readonly boards: BoardProvider,
     private readonly store: Persistence,
     private readonly transport: Transport,
     private readonly now: () => number = Date.now,
@@ -51,7 +52,7 @@ export class RoomManager {
 
   private deps(id: string) {
     return {
-      maps: this.maps,
+      boards: this.boards,
       now: this.now,
       send: (player: PlayerId, msg: ServerMsg) => this.transport.send(id, player, msg),
       changed: (room: Room) => this.scheduleSave(room, this.saveDelayMs),
@@ -70,11 +71,24 @@ export class RoomManager {
         this.removeFile(snap.id);
         continue;
       }
+      // partita cominciata con un tabellone che nel frattempo ha cambiato territori: non si può riprendere
+      // (il file resta dov'è: se il tabellone torna com'era, la partita riparte)
+      if (snap.state && !this.sameTerritories(snap)) {
+        this.log.error(`Partita ${snap.id}: il tabellone "${snap.board}" è cambiato o non c'è più, la partita non si può riprendere`);
+        continue;
+      }
       // il tempo del turno riparte: chi era a metà turno non lo perde per il riavvio
       if (snap.deadline !== null) snap.deadline = Math.max(snap.deadline, this.now() + 60_000);
       this.rooms.set(snap.id, new Room(snap.id, this.deps(snap.id), snap));
     }
     return this.rooms.size;
+  }
+
+  private sameTerritories(snap: RoomSnapshot): boolean {
+    if (!snap.state || !snap.board || !this.boards.has(snap.board)) return false;
+    const ids = new Set(this.boards.territoryIds(snap.board));
+    const saved = Object.keys(snap.state.territories);
+    return saved.length === ids.size && saved.every((t) => ids.has(t));
   }
 
   /**
@@ -148,7 +162,7 @@ export class RoomManager {
   report(roomId: string | null, player: PlayerId | null, msg: Extract<ClientMsg, { t: 'report' }>): void {
     const room = roomId ? this.rooms.get(roomId) : undefined;
     const name = room?.seats.find((x) => x.id === player)?.name ?? null;
-    const turn = room?.state?.turn ?? null;
+    const turn = room?.state?.turn?.number ?? null;
     const snapshot =
       msg.kind === 'feedback' && room && this.reportDumps++ < MAX_REPORT_DUMPS
         ? this.log.dump(`segnalazione-${room.id}-turno${turn ?? 0}`, room.snapshot())

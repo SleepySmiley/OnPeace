@@ -2,7 +2,7 @@
  * Quello che un giocatore può vedere: tutto il tabellone, ma delle carte e degli obiettivi
  * altrui solo quanti sono (gli obiettivi si scoprono a fine partita). Il mazzo resta coperto.
  */
-import { describeObjective } from './objectives';
+import { objectiveView, type ObjectiveView } from './objectives';
 import type { Card, GameContext, GameEvent, GameState, Phase, TerritoryState, TurnState } from './state';
 import type { GameMode } from './schema';
 
@@ -14,10 +14,12 @@ export interface PlayerView {
   cardCount: number;
   /** Solo le proprie (o tutte a partita finita). */
   cards: Card[] | null;
-  /** Testo dell'obiettivo: proprio, o di tutti a partita finita. */
-  objective: string | null;
+  /** Obiettivo: proprio, o di tutti a partita finita. */
+  objective: ObjectiveView | null;
   setupLeft: number;
   setupDone: boolean;
+  /** Ha letto il suo obiettivo (inizio partita). */
+  ready: boolean;
   /** Piazzamento tutti insieme: le proprie armate già decise e ancora coperte. */
   pending: Record<string, number> | null;
   eliminatedBy?: string;
@@ -50,9 +52,10 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
         alive: p.alive,
         cardCount: p.cards.length,
         cards: visible ? p.cards : null,
-        objective: visible && p.objective ? describeObjective(ctx, state, p.objective) : null,
+        objective: visible && p.objective ? objectiveView(ctx, state, p.objective) : null,
         setupLeft: p.setupLeft,
         setupDone: p.setupDone,
+        ready: p.ready !== false,
         pending: visible ? (p.pending ?? null) : null,
         ...(p.eliminatedBy ? { eliminatedBy: p.eliminatedBy } : {}),
       };

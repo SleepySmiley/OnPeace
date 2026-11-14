@@ -53,7 +53,7 @@ function checkPlacements(ctx: GameContext, state: GameState, id: string, placeme
   for (const [tid, n] of Object.entries(placements)) {
     const t = state.territories[tid];
     assertRule(t, `Territorio sconosciuto: ${tid}.`);
-    assertRule(t.owner === id, `${territoryName(ctx, tid)} non è tuo.`);
+    assertRule(t.owner === id, `${territoryName(ctx, tid)} non è un tuo territorio.`);
     assertRule(Number.isInteger(n) && n > 0, 'Le armate da piazzare devono essere numeri interi positivi.');
     sum += n;
   }
@@ -76,7 +76,7 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
     board: board.id,
     mode,
     seed: expandSeed(seed),
-    players: players.map((p) => ({ ...p, alive: true, cards: [], objective: null, setupLeft: 0, setupDone: false })),
+    players: players.map((p) => ({ ...p, alive: true, cards: [], objective: null, setupLeft: 0, setupDone: false, ready: !rules.setup.briefing })),
     order: [],
     territories: {},
     phase: 'setup',
@@ -91,28 +91,53 @@ export function createGame(ctx: GameContext, players: NewPlayer[], mode: GameMod
       players.map((p) => p.id),
       rng,
     );
-    // territori distribuiti a giro, nell'ordine di gioco, con un'armata ciascuno
-    shuffle(
-      board.territories.map((t) => t.id),
-      rng,
-    ).forEach((tid, i) => {
-      state.territories[tid] = { owner: state.order[i % state.order.length]!, armies: 1 };
-    });
-    const initial = rules.initialArmies[String(players.length)]!;
-    for (const p of state.players) {
-      p.setupLeft = initial - ownedBy(state, p.id).length;
-      p.setupDone = p.setupLeft === 0;
+    // a caso: territori distribuiti a giro, nell'ordine di gioco, con un'armata ciascuno (a turno li sceglie ognuno)
+    if (rules.setup.distribution === 'random') {
+      shuffle(
+        board.territories.map((t) => t.id),
+        rng,
+      ).forEach((tid, i) => {
+        state.territories[tid] = { owner: state.order[i % state.order.length]!, armies: 1 };
+      });
     }
+    const initial = rules.initialArmies[String(players.length)]!;
+    for (const p of state.players) p.setupLeft = Math.max(0, initial - ownedBy(state, p.id).length);
     state.deck = shuffle(buildDeck(ctx), rng);
     if (mode === 'objectives') {
       const dealt = dealObjectives(ctx, state.order, rng);
       for (const p of state.players) p.objective = dealt.get(p.id)!;
     }
   });
-  if (rules.setup.placement === 'rounds') state.setupPlayer = nextToPlace(state, null);
-  // nessuno ha armate da piazzare (regole con armate iniziali minime): si parte subito
-  if (state.players.every((p) => p.setupDone)) finishSetupIfReady(ctx, state, []);
+  // prima si legge l'obiettivo; senza, si passa subito ai territori
+  if (rules.setup.briefing) state.phase = 'briefing';
+  else startDistribution(ctx, state, []);
   return state;
+}
+
+/** Dopo l'obiettivo: si scelgono i territori a turno o, se sono già distribuiti, si piazzano le armate. */
+function startDistribution(ctx: GameContext, state: GameState, events: GameEvent[]) {
+  if (Object.keys(state.territories).length < ctx.board.territories.length) {
+    state.phase = 'draft';
+    state.setupPlayer = state.order[0]!;
+    return;
+  }
+  startPlacement(ctx, state, events);
+}
+
+/** Tutti i territori hanno un padrone: si piazzano le armate iniziali che restano. */
+function startPlacement(ctx: GameContext, state: GameState, events: GameEvent[]) {
+  state.phase = 'setup';
+  for (const p of state.players) p.setupDone = p.setupLeft === 0;
+  state.setupPlayer = ctx.rules.setup.placement === 'rounds' ? nextToPlace(state, null) : null;
+  // nessuno ha armate da piazzare (regole con armate iniziali minime): si parte subito
+  finishSetupIfReady(ctx, state, events);
+}
+
+/** Scelta a turno, tempo scaduto: un territorio libero accanto ai suoi se c'è, altrimenti uno libero qualsiasi. */
+function autoPick(ctx: GameContext, state: GameState, id: string): string {
+  const free = ctx.board.territories.map((t) => t.id).filter((t) => !state.territories[t]);
+  const near = free.filter((t) => (ctx.neighbours.get(t) ?? []).some((n) => state.territories[n]?.owner === id));
+  return withRng(state, (rng) => rng.pick(near.length > 0 ? near : free));
 }
 
 /** Preparazione a giri: il prossimo, in ordine di gioco dopo `after`, che ha ancora armate da piazzare. */
@@ -257,7 +282,32 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
   assertRule(state.phase !== 'over', 'La partita è finita.');
   assertRule(me.alive, 'Sei stato eliminato.');
 
+  if (action.kind === 'ready') {
+    assertRule(state.phase === 'briefing', 'La partita è già cominciata.');
+    if (!me.ready) {
+      me.ready = true;
+      events.push({ type: 'ready', player: id });
+    }
+    if (state.players.every((p) => p.ready)) startDistribution(ctx, state, events);
+    return { state, events };
+  }
+
+  if (action.kind === 'pick') {
+    assertRule(state.phase === 'draft', state.phase === 'briefing' ? "Prima si legge l'obiettivo." : 'I territori sono già stati scelti.');
+    assertRule(state.setupPlayer === id, 'Non tocca a te scegliere.');
+    assertRule(ctx.board.territories.some((t) => t.id === action.territory), `Territorio sconosciuto: ${action.territory}.`);
+    const taken = state.territories[action.territory];
+    assertRule(!taken, `${territoryName(ctx, action.territory)} è già ${taken?.owner === id ? 'tuo' : `di ${taken ? player(state, taken.owner).name : ''}`}.`);
+    state.territories[action.territory] = { owner: id, armies: 1 };
+    me.setupLeft = Math.max(0, me.setupLeft - 1);
+    events.push({ type: 'pick', player: id, territory: action.territory });
+    if (Object.keys(state.territories).length === ctx.board.territories.length) startPlacement(ctx, state, events);
+    else state.setupPlayer = nextAlive(state, id);
+    return { state, events };
+  }
+
   if (action.kind === 'setup-place') {
+    assertRule(state.phase !== 'briefing' && state.phase !== 'draft', 'Le armate si piazzano dopo la scelta dei territori.');
     assertRule(state.phase === 'setup', 'La preparazione è già finita.');
     assertRule(!me.setupDone, 'Hai già piazzato tutte le armate iniziali.');
     const rounds = ctx.rules.setup.placement === 'rounds';
@@ -431,32 +481,66 @@ function autoPlace(ctx: GameContext, state: GameState, id: string, total: number
 }
 
 /**
- * Tempo scaduto: in preparazione piazza a caso le armate di chi non ha confermato; durante un
- * turno chiude quello che manca (rinforzi, occupazione) e passa al prossimo.
+ * Chi deve muoversi adesso: chi non ha ancora letto l'obiettivo, chi sceglie il territorio, chi
+ * piazza (uno a giri, tutti quelli che non hanno confermato se tutti insieme) o chi ha il turno.
  */
-export function timeout(ctx: GameContext, prev: GameState): ActionResult {
+export function playersToAct(ctx: GameContext, state: GameState): string[] {
+  if (state.phase === 'over') return [];
+  if (state.phase === 'briefing') return state.players.filter((p) => !p.ready).map((p) => p.id);
+  if (state.phase === 'draft') return state.setupPlayer ? [state.setupPlayer] : [];
+  if (state.phase === 'setup') {
+    if (ctx.rules.setup.placement === 'rounds') return state.setupPlayer ? [state.setupPlayer] : [];
+    return state.players.filter((p) => !p.setupDone).map((p) => p.id);
+  }
+  return state.turn ? [state.turn.player] : [];
+}
+
+/**
+ * Fa al posto di un giocatore quello che gli manca adesso (tempo scaduto, o è uscito dalla
+ * partita): chiude l'obiettivo, sceglie un territorio, piazza a caso le armate di questo passo;
+ * nel suo turno chiude rinforzi e occupazione e passa al prossimo. Se adesso non deve muoversi
+ * lui non fa nulla.
+ */
+export function passFor(ctx: GameContext, prev: GameState, id: string): ActionResult {
   let state = clone(prev);
   const events: GameEvent[] = [];
-  if (state.phase === 'over') return { state, events };
-  if (state.phase === 'setup') {
-    // a giri scade solo il giro di chi deve piazzare; tutti insieme, quello di chi non ha confermato
-    const late = state.setupPlayer ? [state.setupPlayer] : state.players.filter((x) => !x.setupDone).map((x) => x.id);
-    for (const pid of late) {
-      const placements = autoPlace(ctx, state, pid, setupStep(ctx, state, pid));
-      const r = applyAction(ctx, state, pid, { kind: 'setup-place', placements });
-      state = r.state;
-      events.push(...r.events);
-    }
-    return { state, events };
-  }
-  const id = state.turn!.player;
+  if (!playersToAct(ctx, state).includes(id)) return { state, events };
   const run = (action: Action) => {
     const r = applyAction(ctx, state, id, action);
     state = r.state;
     events.push(...r.events);
   };
+  if (state.phase === 'briefing') {
+    run({ kind: 'ready' });
+    return { state, events };
+  }
+  if (state.phase === 'draft') {
+    run({ kind: 'pick', territory: autoPick(ctx, state, id) });
+    return { state, events };
+  }
+  if (state.phase === 'setup') {
+    run({ kind: 'setup-place', placements: autoPlace(ctx, state, id, setupStep(ctx, state, id)) });
+    return { state, events };
+  }
   if (state.phase === 'reinforce') run({ kind: 'reinforce', placements: autoPlace(ctx, state, id, state.turn!.reinforcements) });
   if (state.phase === 'attack' && state.turn!.occupation) run({ kind: 'occupy', armies: state.turn!.occupation.min });
   if (state.phase === 'attack' || state.phase === 'fortify') run({ kind: 'end-turn' });
   return { state, events };
+}
+
+/**
+ * Tempo scaduto: all'inizio chiude l'obiettivo a chi non l'ha fatto e sceglie il territorio per chi
+ * doveva; in preparazione piazza a caso le armate di chi non ha confermato; durante un turno
+ * chiude quello che manca (rinforzi, occupazione) e passa al prossimo.
+ */
+export function timeout(ctx: GameContext, prev: GameState): ActionResult {
+  let state = prev;
+  const events: GameEvent[] = [];
+  // a giri scade solo il giro di chi deve piazzare; tutti insieme, quello di chi non ha confermato
+  for (const id of playersToAct(ctx, prev)) {
+    const r = passFor(ctx, state, id);
+    state = r.state;
+    events.push(...r.events);
+  }
+  return { state: state === prev ? clone(prev) : state, events };
 }

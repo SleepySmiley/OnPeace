@@ -1,7 +1,7 @@
 # OnPeace
 
-Gioco di strategia multiplayer a turni simultanei, da browser, per partite dal vivo tra amici.
-Progetto, regole e piano di sviluppo: [docs/progetto.md](docs/progetto.md). Ricerca di riferimento: [docs/ricerca/](docs/ricerca/).
+Gioco di conquista a turni sul mondo vero, da browser, per partite dal vivo tra amici (da 2 a 8 giocatori).
+Regole, decisioni e architettura: [docs/progetto.md](docs/progetto.md). Cosa resta da fare: [docs/roadmap.md](docs/roadmap.md).
 
 ## Requisiti
 
@@ -17,16 +17,17 @@ npm run serata         # serata tra amici: compila, avvia server e tunnel, apre 
 npm run prova          # prova generale: giocatori simulati fanno una partita intera su un server di prova
 npm start              # solo il server di produzione: gioco completo su http://localhost:3210
 npm run tunnel         # solo il tunnel Cloudflare verso il server già acceso
-npm test               # test (motore, server, validità dei dati)
+npm test               # test (motore, server, client, tabellone)
 npm run lint           # ESLint
 npm run typecheck      # controllo dei tipi su tutto il progetto
-npm run data:check     # verifica regole e mappe in data/
+npm run data:check     # verifica tabelloni, regole e obiettivi in data/
 npm run data:schema    # rigenera i JSON Schema in data/schema/
 npm run mondo:scarica  # scarica una volta i dati geografici (Natural Earth) in .cache/
-npm run mondo          # ricostruisce le mappe reali da data/mondo/ (oppure: npm run mondo -- europa)
-npm run mondo:anteprima -- europa anteprima.svg   # disegna una mappa in SVG per controllarla
-npm run map:generate -- [seme] [nome]   # genera una mappa inventata in data/maps/<nome>.json
+npm run mondo          # ricostruisce i tabelloni da data/mondo/ (oppure: npm run mondo -- mondo)
+npm run mondo:anteprima -- mondo anteprima.html   # disegna un tabellone in una pagina HTML per controllarlo
 ```
+
+Con `npm run dev` si apre anche `http://localhost:5173/prova.html`: una partita vera nel browser contro quattro avversari automatici, senza server (`?da=inizio` parte dall'obiettivo, `?stile=vetro` usa l'altro tema).
 
 ## Giocare online tra amici (server sul tuo PC)
 
@@ -45,18 +46,18 @@ Opzioni: `npm run serata -- --locale` (senza tunnel, solo questo PC), `--build` 
 
 Durante la serata:
 - Se il server cade, `npm run serata` lo riavvia: la partita riprende dai salvataggi in `games/` e i browser si ricollegano da soli.
-- Se il motore va in errore risolvendo un turno, si perdono al massimo gli ordini di quel turno di un giocatore, e lui viene avvisato.
+- Chi chiude il browser rientra riaprendo il link: il browser ricorda il suo posto. Finché è fuori, il server gioca al posto suo.
+- Se il motore va in errore la partita si ferma invece di cadere: l'errore finisce nel registro e l'host può riprovare con **Riprova**.
 - L'host può fermare il tempo con **Pausa**. Ognuno ha la **Guida** («Come si gioca») e il pulsante **Segnala** in alto.
-- Chi chiude il browser rientra riaprendo il link: il browser ricorda il suo posto.
 - L'indirizzo `trycloudflare.com` cambia a ogni avvio del tunnel. Per un indirizzo fisso serve un tunnel con nome e un dominio su Cloudflare.
 
-Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova, passando per dottrine, battaglie, trasporti, cadute e rientri; il comando esce con errore se qualcosa va storto. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6 --turni 25`.
+Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova: piazzano, giocano i tris, attaccano, spostano, chattano, mandano mosse sbagliate apposta, cadono e rientrano, e uno esce a metà. Il comando esce con errore se qualcosa va storto. Opzioni: `--giocatori 4 --giri 40 --seme 1 --modo objectives|conquest --territori draft|random --piazzamento rounds|simultaneous`. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6`.
 
 Dopo la serata, per le correzioni:
 
 | File | Contenuto |
 |---|---|
-| `logs/server-AAAA-MM-GG.log` | Registro: partite, giocatori, turni con i tempi di risoluzione, errori |
+| `logs/server-AAAA-MM-GG.log` | Registro: partite che cominciano e finiscono, chi esce o viene tolto, pause, errori |
 | `logs/segnalazioni.jsonl` | Segnalazioni dei giocatori (pulsante Segnala) ed errori dei browser, con il contesto |
 | `logs/errori/` | Stato della partita da cui riprodurre ogni errore del motore e ogni segnalazione |
 
@@ -64,53 +65,43 @@ Dopo la serata, per le correzioni:
 
 | Cartella | Contenuto |
 |---|---|
-| `packages/engine` | Regole del gioco in TypeScript puro: schemi dei dati, geometria, combattimento, turno, nebbia di guerra |
+| `packages/engine` | Formato e controlli del tabellone, errori delle regole, numeri casuali |
+| `packages/conquista` | Il motore del gioco: preparazione, turni, dadi, carte, obiettivi, vista di ogni giocatore |
 | `packages/protocol` | Messaggi tra browser e server (validati con zod) |
-| `apps/server` | Server Node: stanze, timer, salvataggi, registro, WebSocket su `/ws` |
-| `apps/client` | Interfaccia: React per i pannelli, PixiJS per la mappa |
-| `data/rules` | Unità, edifici e parametri delle regole (ogni numero del gioco sta qui) |
-| `data/maps` | Mappe in JSON: paesi (forme), città, zone invalicabili, scorciatoie |
-| `data/mondo` | Configurazione delle mappe reali: inquadratura, paesi, città, montagne, passaggi |
+| `apps/server` | Server Node: sale, timer, salvataggi, registro, WebSocket su `/ws` |
+| `apps/client` | Il gioco nel browser: React per l'interfaccia, Canvas 2D per il tabellone |
+| `data/territori` | Tabelloni (generati da `npm run mondo`) |
+| `data/conquista` | Regole e obiettivi segreti |
+| `data/mondo` | Configurazione dei tabelloni |
 | `data/schema` | JSON Schema generati: danno autocompletamento e controllo in VS Code |
-| `tools` | Costruzione delle mappe reali (`tools/mondo`), generatore di mappe inventate, verifica dati, generazione schemi, avvio della serata, prova generale |
+| `tools` | Costruzione dei tabelloni (`tools/mondo`), verifica dei dati, generazione degli schemi, avvio della serata, prova generale |
 
-## Modificare regole e mappe
+## Modificare regole, obiettivi e tabelloni
 
-Le regole e le mappe sono file JSON:
+Sono tutti file JSON:
 
 | File | Contenuto |
 |---|---|
-| `data/rules/units.json` | Unità, compresi il Generale e le unità rare (`"rare": true`) |
-| `data/rules/buildings.json` | Edifici |
-| `data/rules/strategies.json` | Strategie: modificatori di unità ed edifici |
-| `data/rules/general.json` | Potenziamenti del Generale e quanti se ne scelgono |
-| `data/rules/defaults.json` | Tutti gli altri numeri del gioco e le opzioni predefinite |
-| `data/maps/*.json` | Mappe |
+| `data/conquista/regole.json` | Ogni numero del gioco: armate iniziali, rinforzi, dadi, tris, spostamenti, tempi, regola dei primi giri, modalità |
+| `data/conquista/obiettivi/<tabellone>.json` | Obiettivi segreti di un tabellone |
+| `data/mondo/territori.json` | Tabelloni: inquadratura, continenti col bonus, territori (quali paesi contiene ognuno), collegamenti via mare, confini da togliere |
+| `data/mondo/paesi.json` | Paesi esclusi, uniti (es. Somaliland con la Somalia), divisi (Alaska, Hawaii, Guyana francese), nomi |
+| `data/mondo/regioni.json` | Paesi grandi divisi in regioni (gruppi di stati e province, per codice ISO 3166-2) e territori riassegnati (Crimea all'Ucraina) |
 
-Dopo ogni modifica:
+Dopo una modifica a regole o obiettivi:
 
 ```bash
 npm run data:check
 ```
 
-Il comando controlla il formato (schema) e la coerenza: città dentro il proprio paese, capitali valide, porti vicini al mare, città non in montagna, distanze minime.
+Il comando controlla formato e coerenza: tabellone valido (territori collegati e raggiungibili), abbastanza territori per i giocatori, obiettivi possibili su quel tabellone (continenti esistenti, numeri raggiungibili, obiettivo di riserva valido).
 
-### Mappe reali
-
-Il mondo e i continenti (`mondo`, `europa`, `asia`, `africa`, `nordamerica`, `sudamerica`, `oceania`) si costruiscono dai dati di [Natural Earth](https://www.naturalearthdata.com/) (pubblico dominio). Questi file in `data/maps/` non si ritoccano a mano: si cambia la configurazione e si ricostruisce.
-
-| File | Contenuto |
-|---|---|
-| `data/mondo/mappe.json` | Per ogni mappa: proiezione e inquadratura, km per punto di raggio, quante città, distanza minima; in cima le formule di popolazione e reddito |
-| `data/mondo/paesi.json` | Paesi esclusi, uniti (es. Somaliland con la Somalia), divisi (Alaska, Hawaii, Guyana francese), nomi |
-| `data/mondo/citta.json` | Capitali scelte a mano, nomi, città escluse o sempre incluse |
-| `data/mondo/geografia.json` | Zone invalicabili e passaggi (tunnel, ponti, canali, stretti) in longitudine e latitudine |
-| `data/mondo/regioni.json` | Paesi grandi divisi in regioni (gruppi di stati e province, per codice ISO 3166-2) e territori riassegnati (Crimea all'Ucraina) |
+I tabelloni in `data/territori/` non si ritoccano a mano: si cambia la configurazione in `data/mondo/` e si ricostruiscono dai dati di [Natural Earth](https://www.naturalearthdata.com/) (pubblico dominio).
 
 ```bash
 npm run mondo:scarica   # solo la prima volta
-npm run mondo           # ricostruisce tutte le mappe e le controlla
+npm run mondo           # ricostruisce i tabelloni e li controlla
 npm test
 ```
 
-Il server legge le mappe all'avvio: dopo averle ricostruite va riavviato.
+Il server legge tabelloni e regole all'avvio: dopo averli cambiati va riavviato.

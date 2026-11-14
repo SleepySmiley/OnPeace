@@ -24,8 +24,10 @@ export interface PlayerState {
   alive: boolean;
   cards: Card[];
   objective: PlayerObjective | null;
-  /** Armate iniziali ancora da piazzare (preparazione). */
+  /** Armate iniziali ancora da piazzare (preparazione; ogni territorio scelto a turno ne usa una). */
   setupLeft: number;
+  /** Ha letto il suo obiettivo (inizio partita). */
+  ready?: boolean;
   /** Ha confermato il piazzamento iniziale. */
   setupDone: boolean;
   /** Piazzamento tutti insieme: armate già decise ma ancora coperte, si scoprono quando hanno confermato tutti. */
@@ -58,7 +60,8 @@ export interface TurnState {
   fortifyLeft: number;
 }
 
-export type Phase = 'setup' | 'reinforce' | 'attack' | 'fortify' | 'over';
+/** Lettura dell'obiettivo, scelta dei territori, piazzamento iniziale, poi i turni. */
+export type Phase = 'briefing' | 'draft' | 'setup' | 'reinforce' | 'attack' | 'fortify' | 'over';
 
 export interface GameState {
   board: string;
@@ -68,9 +71,10 @@ export interface GameState {
   players: PlayerState[];
   /** Ordine di gioco (id dei giocatori). */
   order: string[];
+  /** Territori con padrone: durante la scelta a turno mancano quelli ancora liberi. */
   territories: Record<string, TerritoryState>;
   phase: Phase;
-  /** Preparazione a giri: chi deve piazzare adesso (null se tutti insieme o finita). */
+  /** Preparazione: chi sceglie un territorio (scelta a turno) o chi piazza (a giri); null se tutti insieme o finita. */
   setupPlayer: string | null;
   turn: TurnState | null;
   deck: Card[];
@@ -91,6 +95,8 @@ const Id = z.string().min(1).max(64);
 const Placements = z.record(Id, z.number().int().min(1).max(10_000));
 
 export const ActionS = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('ready') }),
+  z.object({ kind: z.literal('pick'), territory: Id }),
   z.object({ kind: z.literal('setup-place'), placements: Placements }),
   z.object({ kind: z.literal('play-set'), cards: z.tuple([Id, Id, Id]) }),
   z.object({ kind: z.literal('reinforce'), placements: Placements }),
@@ -103,6 +109,8 @@ export const ActionS = z.discriminatedUnion('kind', [
 export type Action = z.infer<typeof ActionS>;
 
 export type GameEvent =
+  | { type: 'ready'; player: string }
+  | { type: 'pick'; player: string; territory: string }
   | { type: 'setup-place'; player: string; placements: Record<string, number>; left: number; hidden?: boolean }
   /** Piazzamento tutti insieme: le armate coperte di tutti, scoperte insieme (giocatore -> territorio -> armate). */
   | { type: 'setup-reveal'; placements: Record<string, Record<string, number>> }

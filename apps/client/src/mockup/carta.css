@@ -1,0 +1,95 @@
+/*
+ * Pagina di prova della carta dell'obiettivo: solo la barra in alto per cambiare tema e obiettivo.
+ * La carta usa lo stile del gioco (styles.css).
+ */
+
+/* ------------------------------------------------------------------ pagina di prova */
+.mock-stage {
+  position: fixed;
+  inset: 0;
+}
+
+.mock-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--edge);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  white-space: nowrap;
+}
+
+.mock-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--display);
+  font-size: 17px;
+  margin-right: auto;
+}
+
+body[data-stile='vetro'] .mock-name {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.mock-seg {
+  margin: 0;
+  grid-auto-columns: auto;
+  padding: 3px;
+}
+
+.mock-seg button {
+  padding: 5px 11px;
+  font-size: 13px;
+  color: inherit;
+}
+
+.mock-seg .num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  margin-right: 3px;
+  border: 1px solid var(--edge-soft);
+  border-radius: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.mock-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.mock-pick select {
+  min-height: 32px;
+  padding: 4px 8px;
+}
+
+/* la versione piccola, come appare tra le carte (larga quanto il cassetto) */
+.mock-compact {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 300px;
+  padding: 12px 12px 0;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}

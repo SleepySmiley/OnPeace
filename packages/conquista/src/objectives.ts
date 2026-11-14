@@ -1,4 +1,4 @@
-/** Obiettivi segreti: distribuzione, verifica e testo da mostrare. */
+/** Obiettivi segreti: distribuzione, verifica e come mostrarli al giocatore. */
 import type { Rng } from '@onpeace/engine';
 import { shuffle } from './cards';
 import type { ObjectiveDef } from './schema';
@@ -64,4 +64,29 @@ export function describeObjective(ctx: GameContext, state: GameState, objective:
   const target = state.players.find((p) => p.id === objective.target);
   // con una funzione: un nome come "$&" altrimenti verrebbe interpretato da replace
   return def.text.replace('{giocatore}', () => target?.name ?? 'il bersaglio');
+}
+
+/** Obiettivo di riserva di un "elimina": mai un altro "elimina". */
+export type FallbackObjectiveView = Exclude<ObjectiveView, { kind: 'eliminate' }>;
+
+/** L'obiettivo come lo riceve il giocatore: tipo e numeri per disegnarlo sulla carta, più la frase. */
+export type ObjectiveView =
+  | { kind: 'continents'; continents: string[]; plusAny: number; text: string }
+  | { kind: 'territories'; count: number; minArmies: number | null; text: string }
+  | { kind: 'eliminate'; target: string | null; fallback: FallbackObjectiveView; text: string };
+
+export function objectiveView(ctx: GameContext, state: GameState, objective: PlayerObjective): ObjectiveView {
+  const def = objectiveDef(ctx, objective.id);
+  const text = describeObjective(ctx, state, objective);
+  switch (def.kind) {
+    case 'continents':
+      return { kind: 'continents', continents: [...def.continents], plusAny: def.plusAny ?? 0, text };
+    case 'territories':
+      return { kind: 'territories', count: def.count, minArmies: def.minArmies ?? null, text };
+    case 'eliminate': {
+      const fallback = objectiveView(ctx, state, { id: def.fallback });
+      if (fallback.kind === 'eliminate') throw new Error(`obiettivo "${def.id}": la riserva è un altro "elimina"`);
+      return { kind: 'eliminate', target: objective.target ?? null, fallback, text };
+    }
+  }
 }

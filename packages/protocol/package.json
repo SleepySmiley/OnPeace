@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@onpeace/engine": "*",
+    "@onpeace/conquista": "*",
     "zod": "^4.1.0"
   }
 }

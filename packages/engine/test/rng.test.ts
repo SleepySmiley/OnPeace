@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRng, seedFromString } from '../src';
+import { createRng } from '../src';
 
 describe('rng', () => {
   it('stesso seme, stessa sequenza', () => {
@@ -15,7 +15,7 @@ describe('rng', () => {
   });
 
   it('int() resta negli estremi e li raggiunge', () => {
-    const rng = createRng(seedFromString('dadi'));
+    const rng = createRng(7);
     const seen = new Set<number>();
     for (let i = 0; i < 2000; i++) {
       const v = rng.int(1, 6);
@@ -24,10 +24,5 @@ describe('rng', () => {
       seen.add(v);
     }
     expect([...seen].sort()).toEqual([1, 2, 3, 4, 5, 6]);
-  });
-
-  it('seedFromString è stabile', () => {
-    expect(seedFromString('partita-1:turno-3')).toBe(seedFromString('partita-1:turno-3'));
-    expect(seedFromString('a')).not.toBe(seedFromString('b'));
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { PauseInfo } from '../game/store';
+import type { PauseInfo } from '../store';
 
 const clock = (ms: number) => {
   const left = Math.max(0, Math.ceil(ms / 1000));
@@ -51,7 +51,7 @@ export function Countdown({ deadline, paused = null, total }: Props) {
   if (left === null) return null;
   return (
     <>
-      <span className={`countdown num ${left <= URGENT_MS ? 'urgent' : ''}`} title="Tempo rimasto per dare gli ordini">
+      <span className={`countdown num ${left <= URGENT_MS ? 'urgent' : ''}`} title="Tempo rimasto per la mossa">
         {clock(left)}
       </span>
       {bar}

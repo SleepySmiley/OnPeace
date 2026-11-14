@@ -1,0 +1,71 @@
+/* Pagina di prova della battaglia: solo il pannello delle scelte, in alto a destra. */
+
+.bt-dock {
+  position: absolute;
+  z-index: 25;
+  top: 62px;
+  right: 12px;
+  width: 300px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  font-size: 12.5px;
+}
+
+.bt-dock-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.bt-dock .bt-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.bt-dock .mock-restart {
+  width: 100%;
+}
+
+.bt-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  border: 1px solid var(--edge-soft);
+}
+
+.bt-seg button {
+  min-height: 26px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.bt-seg button b {
+  font-family: var(--num);
+  opacity: 0.6;
+}
+
+.bt-seg button[aria-checked='true'] {
+  background: var(--panel-solid);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  font-weight: 600;
+}
+
+.bt-seg button[aria-checked='true'] b {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.bt-dock .mock-restart {
+  font-size: 12.5px;
+}
+

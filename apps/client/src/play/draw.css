@@ -1,0 +1,617 @@
+/*
+ * Scena della pesca: la carta grande (retro con la rosa dei venti, fronte con la mappa del
+ * territorio e il simbolo) e il mazzo che cade al centro sopra un velo; la carta sale, si gira e
+ * vola sul bottone delle carte. Due temi: classico (cartoncino, inchiostro) e vetro (scuro,
+ * lucido). Le durate arrivano in --flip e --fly; il volo in --fx, --fy, --fs.
+ */
+
+/* ------------------------------------------------------------------ la carta */
+.dc {
+  --dc-r: 10px;
+  position: relative;
+  display: block;
+  width: 220px;
+  height: 308px;
+  perspective: 1400px;
+}
+
+body[data-stile='vetro'] .dc {
+  --dc-r: 18px;
+}
+
+.dc-inner {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-style: preserve-3d;
+}
+
+.dc-face {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--dc-r);
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.dc-front {
+  transform: rotateY(180deg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px 16px;
+}
+
+/* --- retro */
+.dc-back-field {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.dc-emblem {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+}
+
+.dc-brand {
+  line-height: 1.4;
+}
+
+body[data-stile='classico'] .dc-back {
+  background: #7a2318;
+  border: 1px solid #2b2219;
+}
+
+body[data-stile='classico'] .dc-back-field {
+  inset: 9px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(246, 239, 220, 0.85);
+  background: var(--card-back);
+  color: #f6efdc;
+  box-shadow:
+    inset 0 0 0 3px #7a2318,
+    inset 0 0 0 4px rgba(246, 239, 220, 0.5);
+}
+
+body[data-stile='classico'] .dc-emblem {
+  background: radial-gradient(circle, #7a2318 0 64%, transparent 65%);
+}
+
+body[data-stile='classico'] .dc-emblem-dot {
+  fill: #7a2318;
+}
+
+body[data-stile='classico'] .dc-brand {
+  padding: 0 10px;
+  background: #7a2318;
+  font-family: var(--display);
+  font-size: 17px;
+  letter-spacing: 0.12em;
+}
+
+body[data-stile='vetro'] .dc-back {
+  background: var(--card-back);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+body[data-stile='vetro'] .dc-back::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 38%);
+  pointer-events: none;
+}
+
+body[data-stile='vetro'] .dc-back-field {
+  inset: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.2), transparent 62%);
+  color: #ffffff;
+}
+
+body[data-stile='vetro'] .dc-emblem-dot {
+  fill: #0a64d8;
+}
+
+body[data-stile='vetro'] .dc-brand {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+/* --- fronte */
+.dc-kind {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dc-mapwrap {
+  position: relative;
+  margin: 4px 0 18px;
+}
+
+.dc-map {
+  display: block;
+  width: 188px;
+  height: 112px;
+}
+
+.dc-medal {
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  width: 42px;
+  height: 42px;
+  margin-left: -21px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+.dc-name {
+  margin: 4px 0 0;
+  max-width: 100%;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.dc-sub {
+  margin: 0;
+  text-align: center;
+}
+
+.dc-owner {
+  margin: auto 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.dc-corner {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  display: flex;
+}
+
+.dc-corner-end {
+  top: auto;
+  left: auto;
+  bottom: 15px;
+  right: 15px;
+  transform: rotate(180deg);
+}
+
+.dc-star {
+  margin: 14px 0 6px;
+  display: grid;
+  place-items: center;
+}
+
+body[data-stile='classico'] .dc-front {
+  --card-bg: #fbf5e4;
+  background: radial-gradient(ellipse at 30% 18%, #fffaf0 0%, #f7efda 55%, #efe3c6 100%);
+  border: 1px solid #2b2219;
+  color: #2b2219;
+}
+
+body[data-stile='classico'] .dc-front::before,
+body[data-stile='classico'] .dc-front::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 6px;
+}
+
+body[data-stile='classico'] .dc-front::before {
+  inset: 7px;
+  border: 1px solid rgba(43, 34, 25, 0.62);
+}
+
+body[data-stile='classico'] .dc-front::after {
+  inset: 10px;
+  border: 0.5px solid rgba(43, 34, 25, 0.35);
+  border-radius: 4px;
+}
+
+body[data-stile='classico'] .dc-kind {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+}
+
+body[data-stile='classico'] .dc-map {
+  border: 1px solid rgba(43, 34, 25, 0.75);
+  border-radius: 3px;
+}
+
+body[data-stile='classico'] .dc-medal {
+  background: #fbf5e4;
+  border: 1.5px solid #2b2219;
+  color: #2b2219;
+  box-shadow: 0 2px 0 rgba(43, 34, 25, 0.18);
+}
+
+body[data-stile='classico'] .dc-name {
+  font-family: var(--display);
+  font-size: 25px;
+  line-height: 1.02;
+}
+
+body[data-stile='classico'] .dc-sub {
+  font-style: italic;
+  font-size: 13px;
+  color: #6b5a45;
+}
+
+body[data-stile='classico'] .dc-joker {
+  background: linear-gradient(160deg, #f3d98c 0%, #e5be62 60%, #d8aa48 100%);
+}
+
+body[data-stile='classico'] .dc-joker .dc-star {
+  color: #7a2318;
+}
+
+body[data-stile='classico'] .dc-joker .dc-sub {
+  color: #5a4220;
+}
+
+body[data-stile='vetro'] .dc-front {
+  --card-bg: #24272e;
+  background: linear-gradient(165deg, #363a43 0%, #25282f 55%, #1c1e24 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  color: #f5f5f7;
+}
+
+body[data-stile='vetro'] .dc-kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+}
+
+body[data-stile='vetro'] .dc-map {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+
+body[data-stile='vetro'] .dc-medal {
+  --card-bg: #1c1e24;
+  background: #1c1e24;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(47, 140, 255, 0.4);
+}
+
+body[data-stile='vetro'] .dc-name {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+body[data-stile='vetro'] .dc-sub {
+  font-size: 12.5px;
+  color: #a1a1aa;
+}
+
+body[data-stile='vetro'] .dc-corner {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+body[data-stile='vetro'] .dc-joker .dc-star {
+  color: #ffd60a;
+  filter: drop-shadow(0 0 16px rgba(255, 214, 10, 0.55));
+}
+
+/* --- mazzo: retri impilati, ognuno un filo più su */
+.dc-deck {
+  position: relative;
+  display: block;
+  width: 220px;
+  height: 308px;
+}
+
+.dc-stacked {
+  position: absolute;
+  inset: 0;
+  transform: translate(calc(var(--k) * var(--step-x, -1px)), calc(var(--k) * var(--step-y, -1.6px)));
+}
+
+.dc-stacked .dc-face {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ------------------------------------------------------------------ la scena */
+.draw-layer {
+  position: absolute;
+  inset: 52px 0 0;
+  z-index: 22;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  color: #fbf5e4;
+}
+
+body[data-stile='vetro'] .draw-layer {
+  color: #ffffff;
+}
+
+.dl-card .dc-face {
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
+}
+
+.dl-slot {
+  position: absolute;
+  width: 220px;
+  height: 308px;
+}
+
+.dl-card {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.18s ease-out;
+}
+
+.dl-head {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.dl-title {
+  margin: 0;
+  font-size: 30px;
+}
+
+.dl-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.dl-auto {
+  display: block;
+  width: 120px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.dl-auto i {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  animation: dl-auto linear forwards;
+}
+
+@keyframes dl-auto {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+
+/* in volo verso il bottone delle carte */
+.dl-card.is-fly {
+  animation: dl-fly var(--fly) cubic-bezier(0.55, 0, 0.8, 0.35) forwards;
+}
+
+.dl-card.is-fly .dc-inner {
+  transform: rotateY(180deg);
+}
+
+@keyframes dl-fly {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  28% {
+    transform: translate(calc(var(--fx) * 0.08), calc(var(--fy) * 0.08 - 28px)) scale(0.86) rotate(-3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--fx), var(--fy)) scale(var(--fs)) rotate(-14deg);
+    opacity: 0.5;
+  }
+}
+
+@keyframes dl-flip {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+
+@keyframes dl-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dl-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* il bottone delle carte quando la carta arriva */
+.count.bump {
+  animation: count-bump 560ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes count-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.55);
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* --- il mazzo al centro sopra il velo */
+.draw-layer .dl-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 70% at 50% 46%, rgba(6, 12, 9, 0.62), rgba(6, 12, 9, 0.78));
+  animation: dl-fade-in 320ms ease-out both;
+}
+
+.draw-layer.is-fly .dl-veil {
+  animation: dl-fade-out var(--fly) ease-in forwards;
+}
+
+.draw-layer .dl-stage {
+  position: absolute;
+  inset: 0 0 110px;
+}
+
+.draw-layer .dl-slot {
+  left: 50%;
+  top: 50%;
+  margin: -154px 0 0 -110px;
+}
+
+.draw-layer.is-offer .dl-slot {
+  animation: dl-deck-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes dl-deck-in {
+  from {
+    transform: translateY(70px) scale(1.06);
+    opacity: 0;
+  }
+}
+
+.draw-layer .dl-deck {
+  --step-x: -2px;
+  --step-y: -3px;
+  position: absolute;
+  inset: 0;
+  transform: scale(0.72);
+  filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.45));
+}
+
+.draw-layer.is-reveal .dl-deck,
+.draw-layer.is-fly .dl-deck {
+  animation: dl-deck-out 420ms ease-in forwards;
+}
+
+@keyframes dl-deck-out {
+  to {
+    transform: translateY(40px) scale(0.68);
+    opacity: 0;
+  }
+}
+
+/* la prima carta del mazzo è la carta vera, coperta: sale, si gira e si ingrandisce */
+.draw-layer .dl-card.is-offer {
+  transform: translate(-8.6px, -13px) scale(0.72);
+}
+
+.draw-layer.is-offer:hover .dl-card.is-offer {
+  transform: translate(-8.6px, -28px) scale(0.72) rotate(-1.5deg);
+}
+
+.draw-layer .dl-card.is-reveal {
+  animation: dl-c-reveal var(--flip) cubic-bezier(0.25, 0.7, 0.25, 1) forwards;
+}
+
+.draw-layer .dl-card.is-reveal .dc-inner {
+  animation: dl-flip calc(var(--flip) * 0.7) ease-in-out calc(var(--flip) * 0.15) both;
+}
+
+@keyframes dl-c-reveal {
+  0% {
+    transform: translate(-8.6px, -13px) scale(0.72);
+  }
+  40% {
+    transform: translate(0, -44px) scale(0.88);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.draw-layer .dl-head {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(50% + 140px);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  animation: dl-fade-in 400ms ease-out 160ms both;
+}
+
+.draw-layer .dl-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + 132px);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  font-size: 13px;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 0 14px rgba(0, 0, 0, 0.8);
+  animation: dl-fade-in 400ms ease-out 260ms both;
+}
+
+.draw-layer .dl-foot .dim {
+  opacity: 0.82;
+}
+
+.draw-layer .dl-foot kbd {
+  margin-left: 6px;
+}
+
+.draw-layer.is-reveal .dl-head,
+.draw-layer.is-reveal .dl-foot,
+.draw-layer.is-fly .dl-head,
+.draw-layer.is-fly .dl-foot {
+  animation: dl-fade-out 200ms ease-in forwards;
+}
+
+/* ------------------------------------------------------------------ meno movimento */
+@media (prefers-reduced-motion: reduce) {
+  .draw-layer *,
+  .draw-layer,
+  .count.bump {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+  }
+}

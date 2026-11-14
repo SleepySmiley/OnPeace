@@ -1,15 +1,19 @@
 /**
  * Stile "Vetro": pulito e scuro, qualità da prodotto. Territori pieni e luminosi in leggero
- * rilievo sul mare grafite, terreno appena accennato, pedine rotonde con ombra morbida,
+ * rilievo sul mare grafite, terreno appena accennato, carri armati con ombra morbida,
  * messa a fuoco del territorio selezionato (il resto si spegne).
  */
+import { drawTankToken, type TankTheme } from '../tanks';
 import {
+  actionable,
   clamp,
-  luminance,
+  flashLevel,
+  mix,
+  pendingBadge,
   placeLabels,
+  pulseLevel,
   rgba,
   routePath,
-  screenOf,
   selectionArrows,
   shade,
   toMap,
@@ -20,8 +24,21 @@ import {
   type PaintEnv,
   type Rect,
 } from '../common';
+import { CONTINENT } from './classico';
 
 const FONT = '"Geist", system-ui, sans-serif';
+
+/** Territori ancora liberi (scelta a turno): le tinte dei continenti dell'atlante, scure e spente. */
+const FREE = Object.fromEntries(Object.entries(CONTINENT).map(([id, c]) => [id, mix(c, '#2a2d33', 0.58)]));
+
+/** Carri sul vetro: contorno chiaro, cingoli quasi neri, ombra scura (i territori sono del colore del padrone). */
+const TANK_THEME: TankTheme = {
+  line: 'rgba(255, 255, 255, 0.85)',
+  track: '#15171c',
+  wheel: '#5d6068',
+  deepShadow: true,
+  font: FONT,
+};
 
 export const vetro: BoardStyle = {
   id: 'vetro',
@@ -29,6 +46,7 @@ export const vetro: BoardStyle = {
   tagline: 'Pulito, scuro, qualità da prodotto',
   playerColors: ['#0a84ff', '#ff453a', '#30d158', '#ffd60a', '#bf5af2', '#ff9f0a', '#64d2ff', '#ff375f'],
   fonts: [`700 16px ${FONT}`, `600 16px ${FONT}`, `500 16px ${FONT}`],
+  ownersInStatic: true,
 
   paintStatic(env: PaintEnv) {
     const { ctx, geo, view, state, dpr, assets } = env;
@@ -66,9 +84,9 @@ export const vetro: BoardStyle = {
     ctx.fill(geo.land, 'evenodd');
     ctx.restore();
 
-    // territori: colore pieno con una luce dall'alto
+    // territori: colore pieno con una luce dall'alto; i liberi nella tinta scura del loro continente
     for (const t of geo.board.territories) {
-      const color = state.owners.get(t.id) ?? '#3a3d44';
+      const color = state.owners.get(t.id) ?? FREE[t.continent] ?? '#3a3d44';
       const path = geo.paths.get(t.id)!;
       const [, y0, , y1] = geo.boxes.get(t.id)!;
       const g = ctx.createLinearGradient(0, y0, 0, y1);
@@ -140,11 +158,46 @@ export const vetro: BoardStyle = {
     const colorOf = (id: string) => state.owners.get(id) ?? '#3a3d44';
 
     toMap(env);
-    if (state.selected) {
-      // messa a fuoco: si spegne tutto tranne il territorio e i suoi confinanti
+    // pagina di prova del tabellone, col territorio scelto: si spegne tutto tranne lui e i suoi confinanti
+    if (state.selected && state.arrows === undefined) {
       const focus = new Set([state.selected, ...(geo.neighbours.get(state.selected) ?? [])]);
       ctx.fillStyle = 'rgba(6, 7, 10, 0.5)';
       for (const t of geo.board.territories) if (!focus.has(t.id)) ctx.fill(geo.paths.get(t.id)!, 'evenodd');
+    }
+    // su cosa si può agire adesso: contorno bianco su un solco scuro, che pulsa (non si spegne niente)
+    const now = performance.now();
+    const lit = actionable(state);
+    if (lit.length > 0) {
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.4 + 0.6 * pulseLevel(now);
+      ctx.lineWidth = 4 * px;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.lineWidth = 2 * px;
+      ctx.strokeStyle = '#ffffff';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.globalAlpha = 1;
+    }
+    for (const id of state.flashes?.keys() ?? []) {
+      const k = flashLevel(state, id, now);
+      if (k <= 0) continue;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.42 * k})`;
+      ctx.fill(geo.paths.get(id)!, 'evenodd');
+      ctx.restore();
+    }
+    if (state.target && geo.paths.has(state.target)) {
+      ctx.save();
+      ctx.shadowColor = rgba(colorOf(state.selected ?? state.target), 0.9);
+      ctx.shadowBlur = 16 * dpr;
+      ctx.lineWidth = 2 * px;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.setLineDash([6 * px, 4 * px]);
+      ctx.stroke(geo.paths.get(state.target)!);
+      ctx.restore();
+    }
+    if (state.selected) {
       ctx.save();
       ctx.shadowColor = rgba(colorOf(state.selected), 0.9);
       ctx.shadowBlur = 22 * dpr;
@@ -166,78 +219,69 @@ export const vetro: BoardStyle = {
 
     toScreen(env);
     const r = clamp(11 + (z - 1) * 1.4, 11, 16);
-    // frecce morbide
-    const mine = state.selected ? colorOf(state.selected) : '#ffffff';
-    for (const { enemy, shape } of selectionArrows(env, r + 6, 0.2)) {
-      const head = enemy ? 11 : 8;
+    // frecce: d'attacco chiare con un bordo scuro (col colore di chi attacca, sul suo territorio non si vedrebbero), di spostamento sottili
+    for (const { enemy, chosen, shape } of selectionArrows(env, r + 6, 0.2)) {
+      const head = enemy ? (chosen ? 13 : 11) : chosen ? 10 : 8;
       const base: [number, number] = [shape.to[0] - shape.dir[0] * head * 0.8, shape.to[1] - shape.dir[1] * head * 0.8];
       const body = new Path2D();
       body.moveTo(shape.from[0], shape.from[1]);
       body.quadraticCurveTo(shape.ctrl[0], shape.ctrl[1], base[0], base[1]);
+      const [hx, hy] = shape.dir;
+      const tip = new Path2D();
+      tip.moveTo(shape.to[0], shape.to[1]);
+      tip.lineTo(shape.to[0] - hx * head - hy * head * 0.62, shape.to[1] - hy * head + hx * head * 0.62);
+      tip.lineTo(shape.to[0] - hx * head + hy * head * 0.62, shape.to[1] - hy * head - hx * head * 0.62);
+      tip.closePath();
       ctx.save();
+      // scelto il bersaglio, le altre frecce passano in secondo piano
+      if (state.target && !chosen) ctx.globalAlpha = 0.35;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
-      g.addColorStop(0, enemy ? rgba(mine, 0.15) : 'rgba(255, 255, 255, 0.1)');
-      g.addColorStop(1, enemy ? mine : 'rgba(255, 255, 255, 0.75)');
+      const width = enemy ? (chosen ? 5.5 : 4) : chosen ? 3 : 2;
       if (enemy) {
-        ctx.shadowColor = rgba(mine, 0.8);
-        ctx.shadowBlur = 12;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = width + 3.5;
+        ctx.strokeStyle = 'rgba(10, 11, 14, 0.72)';
+        ctx.stroke(body);
+        ctx.lineWidth = 5.5;
+        ctx.stroke(tip);
+        ctx.fillStyle = 'rgba(10, 11, 14, 0.72)';
+        ctx.fill(tip);
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.45)';
+        ctx.shadowBlur = 10;
       }
-      ctx.lineWidth = enemy ? 4 : 2;
+      const g = ctx.createLinearGradient(shape.from[0], shape.from[1], shape.to[0], shape.to[1]);
+      g.addColorStop(0, enemy ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.1)');
+      g.addColorStop(1, enemy ? '#ffffff' : 'rgba(255, 255, 255, 0.75)');
+      ctx.lineWidth = width;
       ctx.strokeStyle = g;
       ctx.stroke(body);
-      const [hx, hy] = shape.dir;
-      ctx.beginPath();
-      ctx.moveTo(shape.to[0], shape.to[1]);
-      ctx.lineTo(shape.to[0] - hx * head - hy * head * 0.62, shape.to[1] - hy * head + hx * head * 0.62);
-      ctx.lineTo(shape.to[0] - hx * head + hy * head * 0.62, shape.to[1] - hy * head - hx * head * 0.62);
-      ctx.closePath();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = enemy ? mine : 'rgba(255, 255, 255, 0.75)';
-      ctx.fillStyle = enemy ? mine : 'rgba(255, 255, 255, 0.75)';
-      ctx.fill();
-      ctx.stroke();
+      ctx.lineWidth = enemy ? 1.5 : 2;
+      ctx.strokeStyle = enemy ? '#ffffff' : 'rgba(255, 255, 255, 0.75)';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill(tip);
+      ctx.stroke(tip);
       ctx.restore();
     }
 
-    // pedine rotonde
+    // pedine: carri armati col numero sulla fiancata
     const taken: Rect[] = [];
-    for (const t of visibleTerritories(env)) {
-      const [x, y] = screenOf(env, t.anchor);
-      const color = colorOf(t.id);
+    for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
+      if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
+      if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
       const active = t.id === state.selected || t.id === state.hover;
-      const rr = active ? r + 1.5 : r;
-      taken.push([x - rr - 2, y - rr - 2, x + rr + 2, y + rr + 2]);
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-      ctx.shadowBlur = active ? 16 : 10;
-      ctx.shadowOffsetY = active ? 6 : 3;
-      ctx.beginPath();
-      ctx.arc(x, y, rr, 0, Math.PI * 2);
-      const g = ctx.createLinearGradient(x, y - rr, x, y + rr);
-      g.addColorStop(0, shade(color, 0.18));
-      g.addColorStop(1, shade(color, -0.12));
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.restore();
-      ctx.beginPath();
-      ctx.arc(x, y, rr - 0.75, 0, Math.PI * 2);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.stroke();
-      ctx.font = `700 ${rr * 1.02}px ${FONT}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = luminance(color) > 0.5 ? '#111214' : '#ffffff';
-      ctx.fillText(String(state.armies.get(t.id) ?? 0), x, y + rr * 0.06);
+      const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, colorOf(t.id), r, active, TANK_THEME);
+      taken.push(box);
+      const add = state.pending?.get(t.id);
+      if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: `700 11px ${FONT}`, fill: '#ffffff', ink: '#111214', edge: 'rgba(0, 0, 0, 0.2)' });
     }
 
     const fs = clamp(11 + (z - 1) * 0.9, 11, 14);
     placeLabels(env, taken, {
       font: `600 ${fs}px ${FONT}`,
       size: fs,
-      offsetY: r + 5,
+      offsetY: r * 1.55 + 5,
       letterSpacing: -0.1,
       draw: (text, x, y, active) => {
         ctx.save();

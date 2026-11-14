@@ -5,16 +5,14 @@
  *   DATA_DIR  cartella dei salvataggi (predefinita <repo>/games)
  *   LOG_DIR   cartella del registro e degli errori da riprodurre (predefinita <repo>/logs)
  */
-import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { parseRules, type PlayerId } from '@onpeace/engine';
 import { parseClientMsg, type ClientMsg, type ServerMsg } from '@onpeace/protocol';
+import { BoardLibrary } from './boards';
 import { describeError, fileLogger } from './log';
 import { RoomManager } from './manager';
-import { MapLibrary } from './maps';
 import { staticHandler } from './static';
 import { Storage } from './storage';
 
@@ -25,16 +23,8 @@ const LOG_DIR = process.env.LOG_DIR ?? join(repoRoot, 'logs');
 const log = fileLogger(LOG_DIR);
 /** Indirizzo pubblico (tunnel): da PUBLIC_URL o comunicato da `npm run serata` quando il tunnel è pronto. */
 let publicUrl: string | null = process.env.PUBLIC_URL || null;
-const readJson = (...p: string[]) => JSON.parse(readFileSync(join(repoRoot, 'data', ...p), 'utf8'));
-
-const rules = parseRules({
-  units: readJson('rules', 'units.json'),
-  buildings: readJson('rules', 'buildings.json'),
-  defaults: readJson('rules', 'defaults.json'),
-  strategies: readJson('rules', 'strategies.json'),
-  general: readJson('rules', 'general.json'),
-});
-const maps = new MapLibrary(join(repoRoot, 'data', 'maps'), rules);
+const boards = new BoardLibrary(join(repoRoot, 'data'));
+type PlayerId = string;
 
 // ---------------------------------------------------------------- connessioni
 interface Conn {
@@ -71,7 +61,7 @@ const raw = (conn: Conn, msg: ServerMsg) => {
 };
 
 const manager = new RoomManager(
-  maps,
+  boards,
   new Storage(DATA_DIR),
   {
     send(room, player, msg) {
@@ -126,21 +116,21 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
   }
   if (!conn.room || !conn.player) return raw(conn, { t: 'error', message: 'Prima entra in una partita' });
   const error = manager.handle(conn.room, conn.player, msg);
-  if (error) raw(conn, { t: 'error', message: error });
+  if (error) raw(conn, { t: 'error', message: error, ...(msg.t === 'act' && msg.n !== undefined ? { ack: msg.n } : {}) });
 }
 
 // ---------------------------------------------------------------- HTTP + WebSocket
 const serveClient = staticHandler(join(repoRoot, 'apps', 'client', 'dist'));
 const server = createServer((req, res) => {
   try {
-    if (!maps.handle(req, res)) serveClient(req, res);
+    if (!boards.handle(req, res)) serveClient(req, res);
   } catch {
     // indirizzi malformati (es. "/%zz"): una richiesta strana non deve far cadere il server
     if (!res.headersSent) res.writeHead(400);
     res.end();
   }
 });
-// compressione: la vista della partita è JSON ripetitivo (100+ kB a fine partita), compressa pesa ~6 volte meno
+// compressione: le regole e la vista della partita sono JSON ripetitivo, compresso pesa molto meno
 const wss = new WebSocketServer({
   server,
   path: '/ws',
@@ -166,7 +156,8 @@ wss.on('connection', (ws) => {
       log.error(`Partita ${conn.room ?? '-'}, ${conn.player ?? '-'}: errore gestendo "${msg.t}"`, err);
       const room = conn.room ? manager.rooms.get(conn.room) : undefined;
       log.dump(`messaggio-${conn.room ?? 'nessuna'}`, { error: describeError(err), msg, room: room?.snapshot() });
-      raw(conn, { t: 'error', message: 'Errore del server: azione non eseguita. Il problema è stato registrato.' });
+      const ack = msg.t === 'act' && msg.n !== undefined ? { ack: msg.n } : {};
+      raw(conn, { t: 'error', message: 'Errore del server: azione non eseguita. Il problema è stato registrato.', ...ack });
     }
   });
 

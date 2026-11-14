@@ -1,8 +1,13 @@
 /** Suoni legati a quello che succede nella partita (non ai clic): turni, battaglie, tempo, chat. */
 import { useEffect, useRef } from 'react';
-import type { GameState, PlayerId, TurnEvent } from '@onpeace/engine';
-import type { ChatLine } from '@onpeace/protocol';
+import type { ChatLine, LoggedEvent } from '@onpeace/protocol';
 import { sfx } from './sfx';
+
+/** I suoni delle battaglie li fa la scena della battaglia, quando c'è (al momento giusto dei dadi). */
+let battlesByScene = false;
+export function setBattleSoundsByScene(on: boolean): void {
+  battlesByScene = on;
+}
 
 /** Avviso singolo quando mancano questi secondi. */
 const WARN_AT = 30;
@@ -10,92 +15,67 @@ const WARN_AT = 30;
 const TICKS_FROM = 5;
 
 interface Args {
-  game: GameState | null;
-  /** Chi gioca su questo schermo (online); in locale null: si sente l'esito generale. */
-  me: PlayerId | null;
-  events: TurnEvent[];
-  /** Online: chi deve scegliere il paese ora. */
-  picker: PlayerId | null;
-  /** Scadenza del turno (orologio locale), solo online. */
+  me: string | null;
+  /** Eventi appena arrivati (non al rientro). */
+  fresh: { events: LoggedEvent[]; at: number } | null;
+  /** Scadenza del tempo in corso (orologio locale). */
   deadline: number | null;
   paused: boolean;
-  /** Sto ancora dando ordini (non ho premuto Fine turno). */
-  planning: boolean;
+  /** Tocca a me muovermi (il conto alla rovescia mi riguarda). */
+  myMove: boolean;
   chat: ChatLine[];
-  lobbyPlayers: number;
 }
 
-export function useGameSounds({ game, me, events, picker, deadline, paused, planning, chat, lobbyPlayers }: Args) {
-  // ---------------------------------------------------------------- turni e fine partita
-  const prev = useRef<{ id: string; turn: number; phase: string } | null>(null);
+export function useGameSounds({ me, fresh, deadline, paused, myMove, chat }: Args) {
+  // ---------------------------------------------------------------- eventi della partita
   useEffect(() => {
-    if (!game) {
-      prev.current = null;
+    if (!fresh) return;
+    const events = fresh.events.map((e) => e.event);
+    const victory = events.find((e) => e.type === 'victory');
+    if (victory) {
+      sfx.play(victory.player === me ? 'victory' : 'defeat');
       return;
     }
-    const before = prev.current;
-    prev.current = { id: game.id, turn: game.turn, phase: game.phase };
-    // all'apertura della pagina (o di un'altra partita) nessun suono: solo i cambiamenti
-    if (!before || before.id !== game.id) return;
-    if (game.phase === 'ended' && before.phase !== 'ended') {
-      sfx.play(me === null || game.winners?.includes(me) ? 'victory' : 'defeat');
-      return;
-    }
-    if (game.phase !== 'playing' || (before.phase === 'playing' && game.turn <= before.turn)) return;
-    sfx.play('turn');
-    const mine = (p: PlayerId | null) => me === null || p === me;
-    const lost = me !== null && events.some((e) => e.kind === 'capture' && e.from === me && e.player !== me);
-    const won = events.some((e) => e.kind === 'capture' && mine(e.player));
-    const fought = events.some((e) => e.kind === 'battle' && (mine(e.attacker) || mine(e.defender)));
-    if (lost) sfx.play('loss', 0.55);
-    else if (won) sfx.play('capture', 0.55);
-    else if (fought) sfx.play('battle', 0.45);
-  }, [game, me, events]);
+    if (events.some((e) => e.type === 'eliminated' && e.player === me)) return sfx.play('defeat');
+    if (events.some((e) => e.type === 'turn' && e.player === me)) sfx.play('yourPick');
+    else if (events.some((e) => e.type === 'turn' || e.type === 'setup-reveal')) sfx.play('turn', 0, 0.6);
+    const battles = battlesByScene ? [] : events.filter((e) => e.type === 'battle');
+    const lost = battles.some((b) => b.conquered && b.defender === me);
+    const won = battles.some((b) => b.conquered && b.player === me);
+    if (lost) sfx.play('loss');
+    else if (won) sfx.play('capture');
+    else if (battles.some((b) => b.player === me || b.defender === me)) sfx.play(battles.some((b) => b.attackerLosses === 0) ? 'hit' : 'battle', 0, 0.7);
+    else if (battles.length > 0) sfx.play('battle', 0, 0.35);
+  }, [fresh, me]);
 
   // ---------------------------------------------------------------- tempo che sta per finire
   useEffect(() => {
-    if (deadline === null || paused || !planning) return;
+    if (deadline === null || paused || !myMove) return;
     let warned = false;
     const ticked = new Set<number>();
     const id = setInterval(() => {
-      const left = (deadline - Date.now()) / 1000;
-      if (left <= 0) return;
-      if (!warned && left <= WARN_AT && left > TICKS_FROM) {
+      const left = Math.ceil((deadline - Date.now()) / 1000);
+      if (left <= WARN_AT && left > TICKS_FROM && !warned) {
         warned = true;
         sfx.play('warn');
       }
-      const sec = Math.ceil(left);
-      if (sec <= TICKS_FROM && !ticked.has(sec)) {
-        ticked.add(sec);
+      if (left <= TICKS_FROM && left > 0 && !ticked.has(left)) {
+        ticked.add(left);
         sfx.play('tick');
       }
-    }, 200);
+    }, 250);
     return () => clearInterval(id);
-  }, [deadline, paused, planning]);
+  }, [deadline, paused, myMove]);
 
-  // ---------------------------------------------------------------- tocca a te scegliere il paese
-  const prevPicker = useRef<PlayerId | null>(null);
+  // ---------------------------------------------------------------- chat
+  const lastChat = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (picker && me && picker === me && prevPicker.current !== picker) sfx.play('yourPick');
-    prevPicker.current = picker;
-  }, [picker, me]);
-
-  // ---------------------------------------------------------------- chat e sala d'attesa
-  // si ricorda l'ultima riga vista, non quante erano: la chat tiene solo le ultime 200 righe, e oltre
-  // quel numero la lunghezza non cresce più (il suono non sarebbe più partito)
-  const seenChat = useRef<ChatLine | null | undefined>(undefined);
-  useEffect(() => {
-    const before = seenChat.current;
-    seenChat.current = chat.at(-1) ?? null;
-    if (before === undefined) return; // primo giro: la chat che c'era già non suona
-    const fresh = before === null ? chat : chat.slice(chat.indexOf(before) + 1);
-    if (fresh.some((l) => l.from !== me)) sfx.play('chat');
+    const last = chat.at(-1);
+    const key = last ? `${last.at}:${last.from}` : null;
+    const before = lastChat.current;
+    lastChat.current = key;
+    // all'apertura non suona: solo le righe nuove degli altri
+    if (before === undefined || key === before || !last || last.from === me) return;
+    sfx.play('chat');
   }, [chat, me]);
-
-  const seenPlayers = useRef<number | null>(null);
-  useEffect(() => {
-    const before = seenPlayers.current;
-    seenPlayers.current = lobbyPlayers;
-    if (before !== null && lobbyPlayers > before) sfx.play('join');
-  }, [lobbyPlayers]);
 }

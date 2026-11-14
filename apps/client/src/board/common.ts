@@ -17,6 +17,43 @@ export interface BoardState {
   armies: Map<string, number>;
   hover: string | null;
   selected: string | null;
+  /**
+   * Frecce dal territorio scelto: verso quali territori e di che tipo (attacco o spostamento).
+   * Assente: verso tutti i confinanti (pagina di prova); null: nessuna freccia.
+   */
+  arrows?: { to: readonly string[]; kind: 'attack' | 'move' } | null;
+  /** Bersaglio scelto tra le frecce: la sua è in evidenza. */
+  target?: string | null;
+  /** Territori su cui si può agire adesso: hanno un contorno che pulsa (null: nessuno). */
+  active?: ReadonlySet<string> | null;
+  /** Armate aggiunte ma non ancora confermate (piazzamento, rinforzi): "+n" sulla pedina. */
+  pending?: ReadonlyMap<string, number>;
+  /** Territori appena coinvolti in una battaglia o una conquista: si accendono per un attimo (id → ms dell'evento). */
+  flashes?: ReadonlyMap<string, number>;
+  /** Territori senza pedina per un momento (la scena della battaglia ci mette i suoi carri). */
+  hidden?: ReadonlySet<string> | null;
+  /** false: niente pedine (tabellone di sfondo, senza partita). */
+  tokens?: boolean;
+}
+
+/**
+ * Territori su cui si può agire adesso, col contorno che pulsa: col territorio scelto e le sue frecce, i
+ * bersagli; altrimenti quelli attivi (tranne lo scelto, che ha già il suo contorno). Nessuno si spegne.
+ */
+export function actionable(state: BoardState): string[] {
+  if (state.selected && state.arrows) return [...state.arrows.to];
+  if (state.active) return [...state.active].filter((id) => id !== state.selected);
+  return [];
+}
+
+/** Intensità del contorno che pulsa (da 0 a 1): un respiro ogni 1,4 secondi. */
+export const pulseLevel = (now: number) => 0.5 + 0.5 * Math.sin((now / 1400) * Math.PI * 2);
+
+/** Lampo di un territorio: da 1 (appena successo) a 0 (dopo `ms`). */
+export function flashLevel(state: BoardState, id: string, now: number, ms = 1400): number {
+  const at = state.flashes?.get(id);
+  if (at === undefined) return 0;
+  return Math.max(0, 1 - (now - at) / ms);
 }
 
 /** Immagini della Terra già riproiettate (possono mancare finché si caricano). */
@@ -45,7 +82,9 @@ export interface BoardStyle {
   playerColors: string[];
   /** Caratteri da caricare prima di disegnare (sintassi di document.fonts.load). */
   fonts: string[];
-  /** Strato fisso: cambia solo con la vista o i padroni. */
+  /** Lo strato fisso è colorato coi padroni: va rifatto quando un territorio cambia mano. */
+  ownersInStatic?: boolean;
+  /** Strato fisso: cambia solo con la vista (e con i padroni, se `ownersInStatic`). */
   paintStatic(env: PaintEnv): void;
   /** Strato mobile: selezione, frecce, pedine, nomi. */
   paintOverlay(env: PaintEnv): void;
@@ -78,6 +117,12 @@ export function shade(hex: string, t: number): string {
   const k = Math.abs(t);
   const c = (v: number) => Math.round(v + (target - v) * k);
   return `rgb(${c(r)}, ${c(g)}, ${c(b)})`;
+}
+/** Mescola due colori #rrggbb: t = 0 dà `a`, t = 1 dà `b`. */
+export function mix(a: string, b: string, t: number): string {
+  const ca = hexRgb(a);
+  const cb = hexRgb(b);
+  return `#${ca.map((v, i) => Math.round(v + (cb[i]! - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 export function luminance(hex: string): number {
   const v = hexRgb(hex).map((c) => {
@@ -178,22 +223,54 @@ export function qPoint(s: ArrowShape, t: number): [number, number] {
   ];
 }
 
-/** Per ogni confinante del territorio selezionato: forma della freccia e se è nemico. */
+/**
+ * Frecce dal territorio selezionato: verso quelli indicati in `state.arrows` (o, se manca, verso
+ * tutti i confinanti), con la forma, se è un attacco e se è il bersaglio scelto.
+ */
 export function selectionArrows(env: PaintEnv, trim: number, bendK?: number) {
   const { geo, state, view } = env;
-  if (!state.selected) return [];
+  if (!state.selected || state.arrows === null) return [];
   const t = geo.board.territories.find((x) => x.id === state.selected)!;
   const a = screenOf(env, t.anchor);
   const mine = state.owners.get(t.id);
-  const out: { id: string; enemy: boolean; shape: ArrowShape }[] = [];
-  for (const n of geo.neighbours.get(t.id) ?? []) {
-    const other = geo.board.territories.find((x) => x.id === n)!;
+  const targets = state.arrows ? state.arrows.to : (geo.neighbours.get(t.id) ?? []);
+  const out: { id: string; enemy: boolean; chosen: boolean; shape: ArrowShape }[] = [];
+  for (const n of targets) {
+    const other = geo.board.territories.find((x) => x.id === n);
+    if (!other) continue;
     const b = screenOf(env, other.anchor);
     if (Math.abs(b[0] - a[0]) > (geo.width * view.scale) / 2) continue; // rotta che fa il giro del mondo
     const shape = arrowShape(a, b, trim, bendK);
-    if (shape) out.push({ id: n, enemy: state.owners.get(n) !== mine, shape });
+    const enemy = state.arrows ? state.arrows.kind === 'attack' : state.owners.get(n) !== mine;
+    if (shape) out.push({ id: n, enemy, chosen: n === state.target, shape });
   }
-  return out;
+  // il bersaglio scelto si disegna per ultimo, sopra gli altri
+  return out.sort((x, y) => Number(x.chosen) - Number(y.chosen));
+}
+
+/** Etichetta "+n" accanto alla pedina (armate non ancora confermate). */
+export function pendingBadge(env: PaintEnv, x: number, y: number, n: number, opts: { font: string; fill: string; ink: string; edge: string }) {
+  const { ctx } = env;
+  const text = `+${n}`;
+  ctx.font = opts.font;
+  const w = Math.max(18, ctx.measureText(text).width + 9);
+  const h = 17;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y - h / 2, w, h, h / 2);
+  ctx.fillStyle = opts.fill;
+  ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = opts.edge;
+  ctx.stroke();
+  ctx.fillStyle = opts.ink;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + 0.5);
 }
 
 /** Percorso delle rotte via mare (coordinate mappa). */

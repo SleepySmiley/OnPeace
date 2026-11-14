@@ -7,7 +7,9 @@ import {
   describeObjective,
   eventsFor,
   objectiveMet,
+  objectiveView,
   ownedBy,
+  playersToAct,
   reinforcementsFor,
   setValue,
   timeout,
@@ -15,9 +17,9 @@ import {
   type Card,
   type GameState,
 } from '../src';
-import { data, newGame, setTerritories, skipSetup, worldContext } from './helpers';
+import { classicContext, data, newGame, setTerritories, skipSetup, worldContext } from './helpers';
 
-const ctx = worldContext();
+const ctx = classicContext();
 
 /** Stesso stato, ma al primo turno dopo i giri in cui nessuno può essere eliminato. */
 function afterProtection(state: GameState): GameState {
@@ -93,6 +95,108 @@ describe('nuova partita', () => {
   });
 });
 
+describe('inizio: obiettivo, poi territori scelti a turno', () => {
+  const real = worldContext();
+  /** Tutti hanno letto l'obiettivo. */
+  const afterBriefing = (s: GameState) => {
+    for (const p of s.players) s = applyAction(real, s, p.id, { kind: 'ready' }).state;
+    return s;
+  };
+
+  it('prima ognuno legge il suo obiettivo: si va avanti quando sono pronti tutti', () => {
+    let s = newGame(3, 'objectives', 5, real);
+    expect(s.phase).toBe('briefing');
+    expect(Object.keys(s.territories)).toHaveLength(0);
+    expect(playersToAct(real, s).sort()).toEqual(s.order.slice().sort());
+    const [a, b, c] = s.order as [string, string, string];
+    expect(() => applyAction(real, s, a, { kind: 'pick', territory: real.board.territories[0]!.id })).toThrow(/Prima si legge/);
+    expect(() => applyAction(real, s, a, { kind: 'setup-place', placements: {} })).toThrow(/dopo la scelta dei territori/);
+    expect(() => applyAction(real, s, a, { kind: 'end-turn' })).toThrow(/non è ancora cominciata/);
+    const r = applyAction(real, s, b, { kind: 'ready' });
+    expect(r.events).toEqual([{ type: 'ready', player: b }]);
+    s = r.state;
+    expect(viewFor(real, s, a).players.find((p) => p.id === b)!.ready).toBe(true);
+    expect(viewFor(real, s, a).players.find((p) => p.id === a)!.ready).toBe(false);
+    // di nuovo pronto: non cambia nulla
+    expect(applyAction(real, s, b, { kind: 'ready' }).events).toEqual([]);
+    s = applyAction(real, s, a, { kind: 'ready' }).state;
+    expect(s.phase).toBe('briefing');
+    s = applyAction(real, s, c, { kind: 'ready' }).state;
+    expect(s.phase).toBe('draft');
+    expect(s.setupPlayer).toBe(a);
+  });
+
+  it('a tempo scaduto si va avanti anche senza chi non ha chiuso l\'obiettivo', () => {
+    const s = newGame(3, 'objectives', 5, real);
+    const r = timeout(real, applyAction(real, s, s.order[1]!, { kind: 'ready' }).state);
+    expect(r.state.phase).toBe('draft');
+    expect(r.events.filter((e) => e.type === 'ready')).toHaveLength(2);
+  });
+
+  it('a turno, in ordine di gioco: un territorio libero con un\'armata delle proprie', () => {
+    let s = afterBriefing(newGame(3, 'conquest', 9, real));
+    const [a, b] = s.order as [string, string, string];
+    const [t1, t2] = real.board.territories.map((t) => t.id) as [string, string];
+    expect(() => applyAction(real, s, b, { kind: 'pick', territory: t1 })).toThrow('Non tocca a te scegliere.');
+    expect(() => applyAction(real, s, a, { kind: 'pick', territory: 'atlantide' })).toThrow(/sconosciuto/);
+    const r = applyAction(real, s, a, { kind: 'pick', territory: t1 });
+    expect(r.events).toEqual([{ type: 'pick', player: a, territory: t1 }]);
+    s = r.state;
+    expect(s.territories[t1]).toEqual({ owner: a, armies: 1 });
+    expect(s.players.find((p) => p.id === a)!.setupLeft).toBe(real.rules.initialArmies['3']! - 1);
+    expect(s.setupPlayer).toBe(b);
+    expect(() => applyAction(real, s, b, { kind: 'pick', territory: t1 })).toThrow(/già di/);
+    s = applyAction(real, s, b, { kind: 'pick', territory: t2 }).state;
+    expect(s.setupPlayer).toBe(s.order[2]);
+  });
+
+  it('presi tutti i territori si piazzano le armate rimaste, a giri dal primo giocatore', () => {
+    let s = afterBriefing(newGame(4, 'conquest', 3, real));
+    const free = () => real.board.territories.map((t) => t.id).filter((t) => !s.territories[t]);
+    for (let i = 0; s.phase === 'draft'; i++) {
+      expect(i).toBeLessThan(real.board.territories.length);
+      s = applyAction(real, s, s.setupPlayer!, { kind: 'pick', territory: free()[0]! }).state;
+    }
+    expect(s.phase).toBe('setup');
+    expect(Object.keys(s.territories)).toHaveLength(real.board.territories.length);
+    const counts = s.order.map((p) => ownedBy(s, p).length);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    for (const p of s.players) expect(p.setupLeft + ownedBy(s, p.id).length).toBe(real.rules.initialArmies['4']);
+    expect(s.setupPlayer).toBe(s.order[0]);
+    expect(() => applyAction(real, s, s.order[0]!, { kind: 'pick', territory: real.board.territories[0]!.id })).toThrow(/già stati scelti/);
+  });
+
+  it('a tempo scaduto il server sceglie un territorio libero vicino ai suoi', () => {
+    let s = afterBriefing(newGame(3, 'conquest', 4, real));
+    const a = s.setupPlayer!;
+    const first = real.board.territories.find((t) => (real.neighbours.get(t.id) ?? []).length >= 3)!.id;
+    s = applyAction(real, s, a, { kind: 'pick', territory: first }).state;
+    // gli altri due scelgono lontano, poi ad a scade il tempo
+    for (const _ of [1, 2]) {
+      const far = real.board.territories.map((t) => t.id).find((t) => !s.territories[t] && !(real.neighbours.get(first) ?? []).includes(t))!;
+      s = applyAction(real, s, s.setupPlayer!, { kind: 'pick', territory: far }).state;
+    }
+    expect(s.setupPlayer).toBe(a);
+    const r = timeout(real, s);
+    const pick = r.events.find((e) => e.type === 'pick');
+    expect(pick).toMatchObject({ player: a });
+    expect(real.neighbours.get(first)).toContain((pick as { territory: string }).territory);
+    expect(r.state.setupPlayer).not.toBe(a);
+  });
+
+  it('territori a caso: dopo l\'obiettivo si passa subito al piazzamento', () => {
+    const random = worldContext((r) => {
+      (r.setup as { distribution: string }).distribution = 'random';
+    });
+    let s = newGame(3, 'conquest', 2, random);
+    expect(s.phase).toBe('briefing');
+    expect(Object.keys(s.territories)).toHaveLength(random.board.territories.length);
+    for (const p of s.players) s = applyAction(random, s, p.id, { kind: 'ready' }).state;
+    expect(s.phase).toBe('setup');
+    expect(s.setupPlayer).toBe(s.order[0]);
+  });
+});
+
 describe('preparazione a giri', () => {
   it('in ordine di gioco, 3 armate per volta, solo sui propri territori', () => {
     let s = newGame(3, 'objectives', 7);
@@ -101,7 +205,7 @@ describe('preparazione a giri', () => {
     const mineA = ownedBy(s, a)[0]!;
     expect(() => applyAction(ctx, s, b, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/Non tocca a te/);
     expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2 } })).toThrow(/esattamente 3/);
-    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/non è tuo/);
+    expect(() => applyAction(ctx, s, a, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: 3 } })).toThrow(/non è un tuo territorio/);
     const before = s.players.find((p) => p.id === a)!.setupLeft;
     const r = applyAction(ctx, s, a, { kind: 'setup-place', placements: { [mineA]: 2, [ownedBy(s, a)[1]!]: 1 } });
     s = r.state;
@@ -133,7 +237,7 @@ describe('preparazione a giri', () => {
 });
 
 describe('preparazione tutti insieme (variante)', () => {
-  const quick = worldContext((r) => {
+  const quick = classicContext((r) => {
     (r.setup as { placement: string }).placement = 'simultaneous';
   });
   it('ognuno piazza tutto in una volta, senza turni e alla cieca', () => {
@@ -383,6 +487,26 @@ describe('obiettivi', () => {
     expect(r.events.at(-1)).toMatchObject({ type: 'victory', player: me, reason: 'objective' });
   });
 
+  it('al giocatore arrivano tipo e numeri dell’obiettivo, per disegnarlo, oltre alla frase', () => {
+    const s = newGame(3, 'objectives', 5);
+    const target = s.players[1]!;
+    expect(objectiveView(ctx, s, { id: 'europa_sudamerica_altro' })).toEqual({
+      kind: 'continents',
+      continents: ['europa', 'sudamerica'],
+      plusAny: 1,
+      text: "Conquista l'Europa, il Sud America e un terzo continente a tua scelta.",
+    });
+    expect(objectiveView(ctx, s, { id: 'asia_africa' })).toMatchObject({ kind: 'continents', plusAny: 0 });
+    expect(objectiveView(ctx, s, { id: 'territori_20_presidiati' })).toMatchObject({ kind: 'territories', count: 20, minArmies: 2 });
+    expect(objectiveView(ctx, s, { id: 'territori_26' })).toMatchObject({ kind: 'territories', count: 26, minArmies: null });
+    expect(objectiveView(ctx, s, { id: 'elimina', target: target.id })).toEqual({
+      kind: 'eliminate',
+      target: target.id,
+      fallback: { kind: 'territories', count: 26, minArmies: null, text: 'Conquista 26 territori.' },
+      text: expect.stringContaining(target.name),
+    });
+  });
+
   it('il nome del bersaglio entra nel testo così com’è, anche con simboli come $&', () => {
     const s = newGame(3, 'objectives', 5);
     s.players[1]!.name = '$&$`';
@@ -463,7 +587,7 @@ describe('vista', () => {
     expect(vb.cards).toBeNull();
     expect(vb.cardCount).toBe(2);
     expect(vb.objective).toBeNull();
-    expect(v.players.find((p) => p.id === a)!.objective).toMatch(/\S/);
+    expect(v.players.find((p) => p.id === a)!.objective!.text).toMatch(/\S/);
     expect('deck' in v).toBe(false);
     expect('seed' in v).toBe(false);
   });

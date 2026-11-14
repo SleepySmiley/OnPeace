@@ -3,15 +3,17 @@
  * zero. Continenti in tinte da atlante, mare chiaro con le increspature incise, nomi in
  * maiuscoletto antico, pedine dei giocatori come dischi di plastica impilati.
  */
+import { drawTankToken, type TankTheme } from '../tanks';
 import {
+  actionable,
   clamp,
-  luminance,
+  flashLevel,
   noiseTile,
+  pendingBadge,
   placeLabels,
+  pulseLevel,
   qPoint,
-
   routePath,
-  screenOf,
   selectionArrows,
   shade,
   toMap,
@@ -22,11 +24,21 @@ import {
   type PaintEnv,
   type Rect,
 } from '../common';
+import { geometryAt } from '../geometry';
 
 const SERIF = '"IM Fell English SC", Georgia, serif';
 const INK = '#2b2219';
-/** Tinte dei continenti (nostre, da atlante). */
-const CONTINENT: Record<string, string> = {
+
+/** Carri sulla carta: contorno d'inchiostro, cingoli scuri, ombra sotto. */
+const TANK_THEME: TankTheme = {
+  line: INK,
+  track: '#3a3026',
+  wheel: '#8a7f6e',
+  deepShadow: false,
+  font: 'Georgia, serif',
+};
+/** Tinte dei continenti (nostre, da atlante): anche la carta dell'obiettivo le usa. */
+export const CONTINENT: Record<string, string> = {
   nordamerica: '#93ad7e',
   sudamerica: '#d6a65f',
   europa: '#c98468',
@@ -61,6 +73,100 @@ function waveTile(): HTMLCanvasElement {
   return waves;
 }
 
+/**
+ * Increspature attorno alle coste: quattro bande larghe e trasparenti, la parte più costosa del
+ * tabellone da tracciare (centinaia di millisecondi). Si disegnano una volta per livello di zoom
+ * su un'immagine in coordinate mappa e poi si riusano.
+ */
+const ripples = new Map<string, HTMLCanvasElement>();
+/** Livelli di zoom delle increspature: 1, 2, 4 o 8 volte la vista d'insieme. */
+const BANDS = [1, 2, 4, 8];
+const rippleBand = (z: number) => 2 ** clamp(Math.round(Math.log2(Math.max(1, z))), 0, 3);
+function rippleImage(env: Pick<PaintEnv, 'geo' | 'fit' | 'dpr'>, band: number): HTMLCanvasElement {
+  const { geo, fit, dpr } = env;
+  const { width: W, height: H } = geo;
+  const k = `${geo.board.id}|${band}|${fit.toFixed(6)}|${dpr}`;
+  const done = ripples.get(k);
+  if (done) return done;
+  // metà della risoluzione dello schermo a quello zoom (sono bande sfumate), al massimo 2,5 milioni di pixel
+  const res = Math.min((fit * band * dpr) / 2, Math.sqrt(2.5e6 / (W * H)));
+  const img = document.createElement('canvas');
+  img.width = Math.ceil(W * res);
+  img.height = Math.ceil(H * res);
+  const g = img.getContext('2d')!;
+  g.setTransform(res, 0, 0, res, 0, 0);
+  g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(32, 78, 98, 0.13)';
+  // bande larghe e sfumate: bastano contorni precisi a un pixel e mezzo dell'immagine
+  const land = geometryAt(geo, res / 3).land;
+  for (const w of [46, 32, 20, 10]) {
+    g.lineWidth = (w * Math.min(2, Math.sqrt(band))) / (fit * band);
+    g.stroke(land);
+  }
+  if (ripples.size >= BANDS.length) ripples.delete(ripples.keys().next().value!);
+  ripples.set(k, img);
+  return img;
+}
+
+/** Prepara gli altri livelli quando il browser non ha niente da fare, così il primo zoom non si ferma. */
+let warming = '';
+function warmRipples(env: PaintEnv) {
+  const { geo, fit, dpr } = env;
+  const k = `${geo.board.id}|${fit.toFixed(6)}|${dpr}`;
+  if (warming === k) return;
+  warming = k;
+  const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 200));
+  const next = (i: number) => {
+    if (i >= BANDS.length || warming !== k) return;
+    idle(() => {
+      rippleImage({ geo, fit, dpr }, BANDS[i]!);
+      next(i + 1);
+    });
+  };
+  next(0);
+}
+
+/**
+ * Grana "multiply" rifatta come velo nero normale: moltiplicare per un grigio v con opacità a
+ * è lo stesso che coprire di nero con opacità a·(1 − v), ma costa molto meno da disegnare.
+ */
+const veils = new Map<string, HTMLCanvasElement>();
+function grainVeil(tile: HTMLCanvasElement, alpha: number, key: string): HTMLCanvasElement {
+  const done = veils.get(key);
+  if (done) return done;
+  const veil = document.createElement('canvas');
+  veil.width = tile.width;
+  veil.height = tile.height;
+  const src = tile.getContext('2d')!.getImageData(0, 0, tile.width, tile.height);
+  const g = veil.getContext('2d')!;
+  const out = g.createImageData(tile.width, tile.height);
+  for (let i = 0; i < src.data.length; i += 4) out.data[i + 3] = Math.round(255 * alpha * (1 - src.data[i]! / 255));
+  g.putImageData(out, 0, 0);
+  veils.set(key, veil);
+  return veil;
+}
+
+/** Panno verde del tavolo con la sua grana: dipende solo dalla misura dello schermo. */
+let felt: HTMLCanvasElement | null = null;
+function feltImage(cw: number, ch: number, dpr: number): HTMLCanvasElement {
+  if (felt && felt.width === cw && felt.height === ch) return felt;
+  felt = document.createElement('canvas');
+  felt.width = cw;
+  felt.height = ch;
+  const g = felt.getContext('2d')!;
+  const grad = g.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
+  grad.addColorStop(0, '#1f4232');
+  grad.addColorStop(1, '#0f231a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, cw, ch);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.globalAlpha = 0.12;
+  g.globalCompositeOperation = 'overlay';
+  g.fillStyle = g.createPattern(noiseTile(200, 110, 'panno'), 'repeat')!;
+  g.fillRect(0, 0, cw / dpr, ch / dpr);
+  return felt;
+}
+
 export const classico: BoardStyle = {
   id: 'classico',
   name: 'Tavolo classico',
@@ -78,18 +184,7 @@ export const classico: BoardStyle = {
 
     // panno verde del tavolo
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const felt = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
-    felt.addColorStop(0, '#1f4232');
-    felt.addColorStop(1, '#0f231a');
-    ctx.fillStyle = felt;
-    ctx.fillRect(0, 0, cw, ch);
-    toScreen(env);
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.fillStyle = ctx.createPattern(noiseTile(200, 110, 'panno'), 'repeat')!;
-    ctx.fillRect(0, 0, cw / dpr, ch / dpr);
-    ctx.restore();
+    ctx.drawImage(feltImage(cw, ch, dpr), 0, 0);
 
     // plancia: bordo color crema con filo scuro
     toMap(env);
@@ -124,12 +219,9 @@ export const classico: BoardStyle = {
     ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1;
     // increspature attorno alle coste
+    ctx.drawImage(rippleImage(env, rippleBand(z)), 0, 0, W, H);
+    warmRipples(env);
     ctx.lineJoin = 'round';
-    for (const w of [46, 32, 20, 10]) {
-      ctx.lineWidth = w * px * Math.min(2, Math.sqrt(z));
-      ctx.strokeStyle = 'rgba(32, 78, 98, 0.13)';
-      ctx.stroke(geo.land);
-    }
     ctx.fillStyle = '#93bccb';
     ctx.fill(geo.land, 'evenodd');
 
@@ -238,9 +330,7 @@ export const classico: BoardStyle = {
     ctx.rect(-m, -m, W + 2 * m, H + 2 * m);
     ctx.clip();
     toScreen(env);
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = ctx.createPattern(noiseTile(220, 80, 'stampa'), 'repeat')!;
+    ctx.fillStyle = ctx.createPattern(grainVeil(noiseTile(220, 80, 'stampa'), 0.1, 'stampa'), 'repeat')!;
     ctx.fillRect(0, 0, cw / dpr, ch / dpr);
     ctx.restore();
   },
@@ -252,8 +342,28 @@ export const classico: BoardStyle = {
     const colorOf = (id: string) => state.owners.get(id) ?? '#888888';
 
     toMap(env);
+    // su cosa si può agire adesso: contorno d'inchiostro con un filo chiaro, che pulsa (non si spegne niente)
+    const now = performance.now();
+    const lit = actionable(state);
+    if (lit.length > 0) {
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.45 + 0.55 * pulseLevel(now);
+      ctx.lineWidth = 4.4 * px;
+      ctx.strokeStyle = INK;
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.lineWidth = 2.2 * px;
+      ctx.strokeStyle = '#fff3c8';
+      for (const id of lit) ctx.stroke(geo.paths.get(id)!);
+      ctx.globalAlpha = 1;
+    }
+    for (const id of state.flashes?.keys() ?? []) {
+      const k = flashLevel(state, id, now);
+      if (k <= 0) continue;
+      ctx.fillStyle = `rgba(255, 244, 214, ${0.6 * k})`;
+      ctx.fill(geo.paths.get(id)!, 'evenodd');
+    }
     if (state.selected) {
-      for (const n of geo.neighbours.get(state.selected) ?? []) {
+      for (const n of state.arrows ? state.arrows.to : (geo.neighbours.get(state.selected) ?? [])) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
         ctx.fill(geo.paths.get(n)!, 'evenodd');
       }
@@ -262,6 +372,15 @@ export const classico: BoardStyle = {
       ctx.lineWidth = 3.2 * px;
       ctx.strokeStyle = INK;
       ctx.stroke(geo.paths.get(state.selected)!);
+    }
+    if (state.target && geo.paths.has(state.target)) {
+      ctx.fillStyle = 'rgba(255, 250, 230, 0.3)';
+      ctx.fill(geo.paths.get(state.target)!, 'evenodd');
+      ctx.setLineDash([7 * px, 4 * px]);
+      ctx.lineWidth = 2.6 * px;
+      ctx.strokeStyle = INK;
+      ctx.stroke(geo.paths.get(state.target)!);
+      ctx.setLineDash([]);
     }
     if (state.hover && state.hover !== state.selected) {
       ctx.fillStyle = 'rgba(255, 250, 230, 0.22)';
@@ -272,7 +391,7 @@ export const classico: BoardStyle = {
     const r = clamp(11 + (z - 1) * 1.5, 11, 17);
     // frecce piene col colore di chi attacca
     const mine = state.selected ? colorOf(state.selected) : INK;
-    for (const { enemy, shape } of selectionArrows(env, r + 4, 0.2)) {
+    for (const { enemy, chosen, shape } of selectionArrows(env, r + 4, 0.2)) {
       const head = 15;
       const tEnd = 1 - head / Math.max(1, shape.length);
       const pts: [number, number][] = [];
@@ -288,9 +407,11 @@ export const classico: BoardStyle = {
       tip.lineTo(base[0] + hy * 10, base[1] - hx * 10);
       tip.closePath();
       ctx.save();
+      // scelto il bersaglio, le altre frecce passano in secondo piano
+      if (state.target && !chosen) ctx.globalAlpha = 0.38;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.lineWidth = enemy ? 9 : 6;
+      ctx.lineWidth = enemy ? (chosen ? 11 : 9) : chosen ? 8 : 6;
       ctx.strokeStyle = INK;
       if (!enemy) ctx.setLineDash([8, 6]);
       ctx.stroke(body);
@@ -309,67 +430,23 @@ export const classico: BoardStyle = {
       ctx.restore();
     }
 
-    // pedine: dischi di plastica impilati (più armate, pila più alta)
+    // pedine: carri armati col numero sulla fiancata
     const taken: Rect[] = [];
-    for (const t of visibleTerritories(env)) {
-      const [x, y] = screenOf(env, t.anchor);
-      const color = colorOf(t.id);
-      const armies = state.armies.get(t.id) ?? 0;
+    for (const t of state.tokens === false ? [] : visibleTerritories(env)) {
+      if (!state.armies.has(t.id)) continue; // ancora libero: nessuna pedina
+      if (state.hidden?.has(t.id)) continue; // ci sono i carri della battaglia
       const active = t.id === state.selected || t.id === state.hover;
-      const discs = clamp(Math.ceil(armies / 4), 1, 4);
-      const th = r * 0.32; // spessore di un disco
-      const ry = r * 0.55;
-      const lift = active ? 3 : 0;
-      const topY = y - (discs - 1) * th * 0.5 - lift;
-      taken.push([x - r - 2, topY - ry - 2, x + r + 2, y + (discs - 1) * th * 0.5 + th + ry + 2]);
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-      ctx.shadowBlur = 5;
-      ctx.shadowOffsetY = 3 + lift;
-      ctx.beginPath();
-      ctx.ellipse(x, y + (discs - 1) * th * 0.5 + th, r, ry, 0, 0, Math.PI * 2);
-      ctx.fillStyle = shade(color, -0.4);
-      ctx.fill();
-      ctx.restore();
-      for (let i = discs - 1; i >= 0; i--) {
-        const cy = topY + i * th;
-        // fianco
-        ctx.beginPath();
-        ctx.ellipse(x, cy + th, r, ry, 0, 0, Math.PI);
-        ctx.lineTo(x - r, cy);
-        ctx.ellipse(x, cy, r, ry, 0, Math.PI, 0, true);
-        ctx.closePath();
-        const side = ctx.createLinearGradient(x - r, 0, x + r, 0);
-        side.addColorStop(0, shade(color, -0.35));
-        side.addColorStop(0.4, shade(color, -0.05));
-        side.addColorStop(1, shade(color, -0.45));
-        ctx.fillStyle = side;
-        ctx.fill();
-        ctx.lineWidth = 0.8;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.stroke();
-        // faccia superiore
-        ctx.beginPath();
-        ctx.ellipse(x, cy, r, ry, 0, 0, Math.PI * 2);
-        const top = ctx.createLinearGradient(x, cy - ry, x, cy + ry);
-        top.addColorStop(0, shade(color, 0.22));
-        top.addColorStop(1, color);
-        ctx.fillStyle = top;
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.font = `700 ${r * 0.95}px Georgia, serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = luminance(color) > 0.4 ? '#1b1510' : '#ffffff';
-      ctx.fillText(String(armies), x, topY + 0.5);
+      const box = drawTankToken(env, t.id, state.armies.get(t.id) ?? 0, colorOf(t.id), r, active, TANK_THEME);
+      taken.push(box);
+      const add = state.pending?.get(t.id);
+      if (add) pendingBadge(env, box[2] - 4, box[1] - 2, add, { font: '700 11px Georgia, serif', fill: '#efe6cf', ink: INK, edge: INK });
     }
 
     const fs = clamp(11 + (z - 1) * 1, 11, 15);
     placeLabels(env, taken, {
       font: `400 ${fs}px ${SERIF}`,
       size: fs,
-      offsetY: r + 6,
+      offsetY: r * 1.55 + 6,
       draw: (text, x, y) => {
         ctx.lineJoin = 'round';
         ctx.lineWidth = 3;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSession } from '../game/store';
+import { useSession } from '../store';
 
 /** "Segnala un problema": il testo va nel registro del server insieme al contesto della partita. */
 export function ReportModal({ onClose }: { onClose: () => void }) {
@@ -35,7 +35,7 @@ export function ReportModal({ onClose }: { onClose: () => void }) {
           rows={5}
           maxLength={2000}
           value={text}
-          placeholder="Es. ho attaccato Ornia con 6 carri ma nel resoconto non c'è la battaglia"
+          placeholder="Es. ho attaccato il Brasile con 3 dadi ma il registro dice 2"
           aria-label="Descrizione del problema"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

@@ -25,7 +25,14 @@ export const ConquestRules = z.strictObject({
   /** Armate iniziali per numero di giocatori ("3": 38). */
   initialArmies: z.record(z.string().regex(/^\d$/), Int.positive()),
   setup: z.strictObject({
-    /** A giri come al tavolo (in ordine di gioco, poche armate per volta) o tutti insieme. */
+    /** Prima di tutto ognuno legge il suo obiettivo: si comincia quando hanno chiuso tutti (o scade il tempo). */
+    briefing: z.boolean(),
+    /**
+     * Come si dividono i territori: scelti a turno uno alla volta in ordine di gioco (ognuno ci
+     * mette un'armata delle sue), o distribuiti a caso a giro.
+     */
+    distribution: z.enum(['draft', 'random']),
+    /** Armate rimaste dopo i territori: a giri come al tavolo (in ordine di gioco, poche per volta) o tutti insieme. */
     placement: z.enum(['rounds', 'simultaneous']),
     /** Armate per giro (solo a giri). */
     perRound: Int.min(1),
@@ -68,6 +75,14 @@ export const ConquestRules = z.strictObject({
     turnSeconds: Int.min(10),
     /** Tempo per ogni giro di piazzamento (a giri) o per tutto il piazzamento (tutti insieme). */
     setupSeconds: Int.min(10),
+    /** Tempo per leggere l'obiettivo all'inizio. */
+    briefingSeconds: Int.min(5),
+    /** Tempo per ogni territorio scelto a turno (scaduto, sceglie il server). */
+    pickSeconds: Int.min(5),
+    /** Secondi restituiti a chi attacca per ogni tiro di dadi: il tempo per guardare la battaglia. */
+    battleSeconds: Int.min(0),
+    /** Al massimo tanti secondi restituiti in un turno. */
+    battleMaxSeconds: Int.min(0),
   }),
   modes: z.array(GameMode).min(1),
 });

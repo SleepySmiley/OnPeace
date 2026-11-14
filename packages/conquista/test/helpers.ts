@@ -16,13 +16,31 @@ export function worldContext(patch?: (rules: Record<string, unknown>) => void): 
   return ctx;
 }
 
+let classic: GameContext | null = null;
+/**
+ * Come al tavolo: territori distribuiti a caso e niente lettura dell'obiettivo, si parte dal
+ * piazzamento. Per provare tutto il resto senza passare ogni volta dall'inizio.
+ */
+export function classicContext(patch?: (rules: Record<string, unknown>) => void): GameContext {
+  if (!patch && classic) return classic;
+  const ctx = worldContext((r) => {
+    const setup = r.setup as { briefing: boolean; distribution: string };
+    setup.briefing = false;
+    setup.distribution = 'random';
+    patch?.(r);
+  });
+  if (!patch) classic = ctx;
+  return ctx;
+}
+
 export const PLAYERS = ['ada', 'bruno', 'carla', 'dario', 'elena', 'franco'].map((id, i) => ({
   id,
   name: id[0]!.toUpperCase() + id.slice(1),
   color: ['#2f5fb3', '#c8302c', '#2e8b47', '#e2b72f', '#7b3fa0', '#e07a1f'][i]!,
 }));
 
-export function newGame(n = 4, mode: GameMode = 'objectives', seed: number | readonly number[] = 1234, ctx = worldContext()): GameState {
+/** Partita nuova; con le regole classiche (vedi classicContext) se non si dice altro. */
+export function newGame(n = 4, mode: GameMode = 'objectives', seed: number | readonly number[] = 1234, ctx = classicContext()): GameState {
   return createGame(ctx, PLAYERS.slice(0, n), mode, seed);
 }
 
