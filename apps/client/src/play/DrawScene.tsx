@@ -1,7 +1,8 @@
 /**
- * Scena della pesca (i tempi e le fasi sono in draw.ts): la carta grande col suo retro, il mazzo e
- * i tre modi di farla arrivare. Il punto d'arrivo è il bottone "Carte e obiettivo"
- * (data-hand-pill); nel modo "angolo" il mazzo vive accanto a lui (data-hand-deck).
+ * Scena della pesca (i tempi e le fasi sono in draw.ts): sopra un velo il mazzo cade al centro,
+ * la prima carta (quella vera, coperta) sale, si gira grande e vola sul bottone "Carte e
+ * obiettivo" (data-hand-pill). Qui anche il collegamento col gioco: le carte pescate arrivano
+ * dalla partita, e la scena aspetta le battaglie proprie.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { Card } from '@onpeace/conquista';
@@ -9,15 +10,19 @@ import { shade } from '../board/common';
 import { geometryAt, type BoardGeometry } from '../board/geometry';
 import { CONTINENT } from '../board/styles/classico';
 import { useLook } from '../look';
+import { useSession } from '../store';
+import { useBattle } from './battle';
 import { Chip, SymbolIcon } from './bits';
 import { SYMBOL_NAME } from './describe';
-import { AUTO_MS, FAN, flipMs, flyMs, useDraw, type Drawing } from './draw';
+import { AUTO_MS, FLIP_MS, FLY_MS, setDrawGate, useDraw, type Drawing } from './draw';
 import { skinOf, type Skin } from './objective';
 import { useGame } from './useGame';
 import './draw.css';
 
-/** Altezza della carta grande (px, larga 220): le altre sono questa in scala. */
+/** Altezza della carta grande (px, larga 220): il mazzo e il volo sono questa in scala. */
 const CARD_H = 308;
+/** Carte nel mazzo disegnato (sotto quella vera). */
+const DECK = 6;
 
 // ---------------------------------------------------------------- la mappa sulla carta
 
@@ -187,12 +192,12 @@ function useFaceInfo(card: Card): FaceInfo {
 }
 
 /** La carta che si gira: retro e fronte uno dietro l'altro. */
-function BigCard({ drawing, className, style, onClick, cardRef }: { drawing: Drawing; className: string; style?: CSSProperties; onClick?: () => void; cardRef?: RefObject<HTMLDivElement | null> }) {
+function BigCard({ drawing, className }: { drawing: Drawing; className: string }) {
   const { board } = useGame();
   const skin = useLook((s) => skinOf(s.style.id));
   const info = useFaceInfo(drawing.card);
   return (
-    <div ref={cardRef} className={`dc ${className}`} style={style} onClick={onClick}>
+    <div className={`dc ${className}`}>
       <div className="dc-inner">
         <CardBack />
         <CardFront card={drawing.card} info={info} geo={board.geo} skin={skin} />
@@ -202,9 +207,9 @@ function BigCard({ drawing, className, style, onClick, cardRef }: { drawing: Dra
 }
 
 /** Pila di retri (il mazzo). */
-function Deck({ count, className, onClick }: { count: number; className?: string; onClick?: () => void }) {
+function Deck({ count }: { count: number }) {
   return (
-    <div className={`dc-deck ${className ?? ''}`} onClick={onClick}>
+    <div className="dc-deck">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="dc dc-stacked" style={{ ['--k' as string]: i }}>
           <div className="dc-inner">
@@ -218,7 +223,7 @@ function Deck({ count, className, onClick }: { count: number; className?: string
 
 // ---------------------------------------------------------------- misure
 
-type Delta = { x: number; y: number; r?: number; s?: number };
+type Delta = { x: number; y: number; s: number };
 
 const centerOf = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
 
@@ -236,32 +241,29 @@ function useFlyDelta(active: boolean, slot: RefObject<HTMLElement | null>): Delt
   return d;
 }
 
-/** Classe della carta: "fly" solo quando si sa dove volare (fino ad allora resta ferma, girata). */
-const cardStage = (d: Drawing, fly: Delta | null) => (d.stage === 'fly' && !fly ? 'is-reveal' : `is-${d.stage}`);
-
-const flyVars = (d: Delta | null): CSSProperties =>
-  d ? ({ '--fx': `${d.x}px`, '--fy': `${d.y}px`, '--fs': d.s ?? 0.12 } as CSSProperties) : {};
-
-/** Barra che si svuota: quando finisce la carta parte da sola. */
-function AutoBar({ id }: { id: number }) {
-  return (
-    <span className="dl-auto" aria-hidden>
-      <i key={id} style={{ animationDuration: `${AUTO_MS}ms` }} />
-    </span>
-  );
+/** Quante carte restano nel mazzo, a parole. */
+function deckLeft(n: number): string {
+  if (n === 0) return 'Era l’ultima carta del mazzo';
+  return n === 1 ? 'Resta una carta nel mazzo' : `${n} carte nel mazzo`;
 }
 
-// ---------------------------------------------------------------- A: al centro
+// ---------------------------------------------------------------- la scena
 
-function Centro({ d }: { d: Drawing }) {
+function Scene({ d }: { d: Drawing }) {
   const { view } = useGame();
   const take = useDraw((s) => s.take);
   const skip = useDraw((s) => s.skip);
   const slot = useRef<HTMLDivElement>(null);
   const fly = useFlyDelta(d.stage === 'fly', slot);
-  const style = { '--flip': `${flipMs('centro')}ms`, '--fly': `${flyMs('centro')}ms`, ...flyVars(fly) } as CSSProperties;
+  // la carta comincia il volo solo quando si sa dove andare (fino ad allora resta ferma, girata)
+  const cardStage = d.stage === 'fly' && !fly ? 'is-reveal' : `is-${d.stage}`;
+  const style = {
+    '--flip': `${FLIP_MS}ms`,
+    '--fly': `${FLY_MS}ms`,
+    ...(fly ? { '--fx': `${fly.x}px`, '--fy': `${fly.y}px`, '--fs': fly.s } : {}),
+  } as CSSProperties;
   return (
-    <div className={`draw-layer dl-centro is-${d.stage}`} style={style} onClick={() => (d.stage === 'offer' ? take() : skip())}>
+    <div className={`draw-layer is-${d.stage}`} style={style} onClick={() => (d.stage === 'offer' ? take() : skip())}>
       <div className="dl-veil" />
       <div className="dl-stage">
         <div className="dl-head">
@@ -269,161 +271,30 @@ function Centro({ d }: { d: Drawing }) {
           <h2 className="dl-title">Pesca la tua carta</h2>
         </div>
         <div className="dl-slot" ref={slot}>
-          <Deck count={6} className="dl-deck" />
-          <BigCard key={d.id} drawing={d} className={`dl-card ${cardStage(d, fly)}`} />
+          <div className="dl-deck">
+            <Deck count={DECK} />
+          </div>
+          <BigCard key={d.id} drawing={d} className={`dl-card ${cardStage}`} />
         </div>
         <div className="dl-foot">
           <span>
             Tocca il mazzo <kbd>Invio</kbd>
           </span>
-          <AutoBar id={d.id} />
-          <span className="dim">{view.deckCount} carte nel mazzo</span>
+          <span className="dl-auto" aria-hidden>
+            <i key={d.id} style={{ animationDuration: `${AUTO_MS}ms` }} />
+          </span>
+          <span className="dim">{deckLeft(view.deckCount)}</span>
         </div>
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------- B: ventaglio
-
-/** Posa di ogni carta del ventaglio (i: -2..2). */
-function fanPose(i: number) {
-  return { x: i * 78, y: Math.abs(i) * Math.abs(i) * 7, r: i * 7 };
-}
-
-function Ventaglio({ d }: { d: Drawing }) {
-  const take = useDraw((s) => s.take);
-  const skip = useDraw((s) => s.skip);
-  const slot = useRef<HTMLDivElement>(null);
-  const fan = useRef<HTMLDivElement>(null);
-  const [from, setFrom] = useState<Delta | null>(null);
-  const fly = useFlyDelta(d.stage === 'fly', slot);
-
-  // la carta toccata parte da dov'era nel ventaglio (si misura prima di disegnarla al centro)
-  useLayoutEffect(() => {
-    if (d.stage !== 'reveal') return;
-    const el = fan.current?.querySelector<HTMLElement>(`[data-fan="${d.chosen}"]`);
-    if (!el || !slot.current) return setFrom({ x: 0, y: 200, r: 0 });
-    const a = centerOf(slot.current.getBoundingClientRect());
-    const b = centerOf(el.getBoundingClientRect());
-    setFrom({ x: b.x - a.x, y: b.y - a.y, r: fanPose(d.chosen - Math.floor(FAN / 2)).r });
-  }, [d.stage, d.chosen, d.id]);
-
-  const style = {
-    '--flip': `${flipMs('ventaglio')}ms`,
-    '--fly': `${flyMs('ventaglio')}ms`,
-    ...(from ? { '--sx': `${from.x}px`, '--sy': `${from.y}px`, '--sr': `${from.r}deg` } : {}),
-    ...flyVars(fly),
-  } as CSSProperties;
-  const showCard = d.stage !== 'offer' && from;
-  return (
-    <div className={`draw-layer dl-ventaglio is-${d.stage}`} style={style}>
-      <div className="dl-shade" />
-      <div className="dl-slot" ref={slot} onClick={skip}>
-        {showCard && <BigCard key={d.id} drawing={d} className={`dl-card ${cardStage(d, fly)}`} />}
-      </div>
-      <div className="dl-fan-wrap">
-        <div className="dl-head">
-          <h2 className="dl-title">Pesca una carta</h2>
-          <p className="dl-eyebrow">Scegline una dal ventaglio</p>
-          <AutoBar id={d.id} />
-        </div>
-        <div className="dl-fan" ref={fan}>
-          {Array.from({ length: FAN }, (_, k) => {
-            const p = fanPose(k - Math.floor(FAN / 2));
-            const picked = d.stage !== 'offer' && k === d.chosen;
-            return (
-              <button
-                key={`${d.id}-${k}`}
-                type="button"
-                data-fan={k}
-                className={`dl-fan-card${picked ? ' picked' : ''}`}
-                style={{ transform: `translate(${p.x}px, ${p.y}px) rotate(${p.r}deg)`, ['--k' as string]: k }}
-                disabled={d.stage !== 'offer'}
-                onClick={() => take(k)}
-                aria-label={`Carta ${k + 1}`}
-              >
-                <span className="dl-fan-lift">
-                  <span className="dc">
-                    <span className="dc-inner">
-                      <CardBack />
-                    </span>
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- C: nell'angolo
-
-function Angolo({ d }: { d: Drawing }) {
-  const take = useDraw((s) => s.take);
-  const skip = useDraw((s) => s.skip);
-  const slot = useRef<HTMLDivElement>(null);
-  const [from, setFrom] = useState<Delta | null>(null);
-  const fly = useFlyDelta(d.stage === 'fly', slot);
-
-  // la carta sale dal mazzetto accanto alle carte
-  useLayoutEffect(() => {
-    const deck = document.querySelector<HTMLElement>('[data-hand-deck]');
-    if (!deck || !slot.current) return setFrom({ x: 0, y: 120, s: 0.15 });
-    const a = centerOf(slot.current.getBoundingClientRect());
-    const b = centerOf(deck.getBoundingClientRect());
-    setFrom({ x: b.x - a.x, y: b.y - a.y, s: deck.offsetHeight / CARD_H });
-  }, [d.id]);
-
-  const style = {
-    '--flip': `${flipMs('angolo')}ms`,
-    '--fly': `${flyMs('angolo')}ms`,
-    ...(from ? { '--sx': `${from.x}px`, '--sy': `${from.y}px`, '--ss': from.s } : {}),
-    ...flyVars(fly),
-  } as CSSProperties;
-  return (
-    <div className={`draw-layer dl-angolo is-${d.stage}`} style={style}>
-      <div className="dl-slot" ref={slot} onClick={() => (d.stage === 'offer' ? take() : skip())}>
-        {from && <BigCard key={d.id} drawing={d} className={`dl-card ${cardStage(d, fly)}`} />}
-      </div>
-      <div className="dl-tag panel">
-        <b>Una carta per te</b>
-        <span className="dim">Toccala per girarla</span>
-        <AutoBar id={d.id} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Modo "angolo": il mazzetto accanto al bottone delle carte, sempre lì. Nel tuo turno, appena
- * conquisti un territorio, si accende: a fine turno peschi.
- */
-export function HandDeck() {
-  const style = useDraw((s) => s.style);
-  const busy = useDraw((s) => s.current !== null);
-  const { view, me } = useGame();
-  if (style !== 'angolo') return null;
-  const earned = view.turn?.player === me && view.turn?.conquered === true && view.phase !== 'over';
-  const title = earned ? 'Hai conquistato: a fine turno peschi una carta' : `Mazzo: ${view.deckCount} carte. Conquista un territorio nel tuo turno per pescarne una.`;
-  return (
-    <span className={`hand-deck${earned ? ' earned' : ''}${busy ? ' busy' : ''}`} data-hand-deck title={title} aria-label={title}>
-      <Deck count={3} />
-      {earned && <span className="hand-deck-badge">+1</span>}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------- strato
 
 /** La scena della pesca sopra il tabellone (niente quando non si pesca). */
 export function DrawLayer() {
   const current = useDraw((s) => s.current);
-  const style = useDraw((s) => s.style);
 
-  // Invio o spazio: pesca, poi manda la carta tra le altre
+  // Invio o spazio: pesca, poi manda la carta tra le altre (anche Esc, a carta girata)
   useEffect(() => {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
@@ -440,8 +311,53 @@ export function DrawLayer() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [current]);
 
-  if (!current) return null;
-  if (style === 'ventaglio') return <Ventaglio d={current} />;
-  if (style === 'angolo') return <Angolo d={current} />;
-  return <Centro d={current} />;
+  return current ? <Scene d={current} /> : null;
+}
+
+// ---------------------------------------------------------------- collegamento col gioco
+
+/** Dopo una battaglia propria la carta aspetta un attimo: spesso ne arriva subito un'altra. */
+const BATTLE_GAP_MS = 700;
+
+/** Una battaglia propria è in scena (o in arrivo): la pesca aspetta che finisca. */
+function battleBusy(): boolean {
+  const b = useBattle.getState();
+  const p = b.playing;
+  return (p !== null && !p.small && p.eng.role !== 'spectator') || b.queue.some((e) => e.role !== 'spectator');
+}
+
+/**
+ * Le carte pescate dal giocatore, appena arrivano dalla partita, vanno in scena. Se intanto
+ * comincia una battaglia propria la carta aspetta, e torna quando la battaglia è finita.
+ */
+export function connectDrawFeed(): () => void {
+  setDrawGate(battleBusy);
+  let idle: ReturnType<typeof setTimeout> | null = null;
+  const offBattle = useBattle.subscribe(() => {
+    if (battleBusy()) {
+      if (idle) clearTimeout(idle);
+      idle = null;
+      useDraw.getState().yieldToBattle();
+    } else if (!idle) {
+      idle = setTimeout(() => {
+        idle = null;
+        useDraw.getState().kick();
+      }, BATTLE_GAP_MS);
+    }
+  });
+  let seen: unknown = useSession.getState().fresh;
+  const off = useSession.subscribe((s) => {
+    if (s.fresh === seen) return;
+    seen = s.fresh;
+    if (!s.fresh) return;
+    const me = s.online.me;
+    for (const { event: e } of s.fresh.events) if (e.type === 'card' && e.player === me && e.card) useDraw.getState().push(e.card satisfies Card);
+  });
+  return () => {
+    off();
+    offBattle();
+    if (idle) clearTimeout(idle);
+    setDrawGate(() => false);
+    useDraw.getState().clear();
+  };
 }

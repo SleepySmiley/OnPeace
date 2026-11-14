@@ -20,34 +20,21 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 - **M12.8 — scena della battaglia coi carri armati (proposta E).** Su cinque proposte (tavolo, duello, mappa, riquadro, carri) hai scelto i carri: la camera vola sui due territori, su ciascuno i carri schierati (uno per armata, al massimo 8, le retrovie avanzano), i dadi 3D rotolano in primo piano, poi i carri si sparano: per ogni coppia di dadi spara chi la vince e il carro colpito esplode. Alla conquista tre carri entrano nel territorio preso. Clic salta, Esc chiude, Invio tira ancora; i comandi restano nella barra in basso. I carri della scena sono visti dall'alto: la torretta gira verso il bersaglio prima di sparare. Chi guarda una battaglia degli altri la vede in piccolo in alto. Suoni nuovi (dadi, colpo d'aria, cannonata). Corretto anche un bug dei suoni: il volume delle battaglie degli altri veniva preso come ritardo.
 - **M12.9 — carri armati al posto dei numeri (proposta D).** Su quattro modi (targa, squadra con bandierina, dall'alto, numero sulla fiancata) hai scelto la fiancata: ogni territorio ha un carro di lato nel colore del padrone col numero dipinto sullo scafo, girato verso il nemico confinante più vicino. A mappa intera i carri sono più piccoli e crescono avvicinandosi; sul vetro un'ombra scura li stacca dal territorio dello stesso colore. Via i dischi.
 - **M12.10 — battaglia: carri dall'alto e tempo restituito.** I carri della scena sono visti dall'alto (la torretta gira verso il bersaglio). Ogni tiro di dadi ridà 3 secondi a chi attacca, fino a 60 per turno (regole: `timers.battleSeconds`, `timers.battleMaxSeconds`), anche a tempo fermato: guardare la battaglia non mangia il turno. Restano com'erano "fino in fondo" tiro per tiro e la battaglia degli altri in piccolo (si possono ancora cambiare nella pagina di prova `battaglia.html`).
+- **M12.11 — pesca della carta a fine turno (proposta A).** Su tre proposte (al centro, ventaglio, nell'angolo) hai scelto il centro: se hai conquistato, a fine turno la mappa si scurisce, il mazzo cade al centro, lo tocchi (o Invio) e la prima carta sale, si gira grande e vola su "Carte e obiettivo", che conta la carta solo quando arriva. È solo scena: la carta la decide il server come prima e, se non tocchi, parte da sola dopo 6 secondi. Carta nuova nei due temi: retro con la rosa dei venti, fronte con il pezzo di mappa del territorio, il simbolo e di chi è ("Tuo: +2 nel tris"); il territorio lampeggia anche sulla mappa. Suoni nuovi (mazzo, carta che si gira). La pesca aspetta che finisca la tua battaglia; se ti attaccano mentre il mazzo aspetta, si toglie di mezzo e torna dopo. Pagina di prova: `pesca.html` (pescate finte, anche insieme alle battaglie).
 
 ## Da fare
 
-### 1. Pesca della carta a fine turno
-
-Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazzo e ricevere la carta in modo scenico.
-
-**Da decidere.** Il clic può essere solo scena (la carta la decide comunque il server e le regole non cambiano), oppure una mossa vera con tempo limite e pesca automatica se non clicchi. Consiglio la prima: è più semplice e non rallenta la partita.
-
-**Proposte pronte (14/11), da scegliere.** Pagina di prova `pesca.html` (`?modo=centro|ventaglio|angolo`), col gioco vero: per ora il clic è solo scena, e se non clicchi la carta parte da sola dopo 6 secondi.
-
-- **A — Al centro.** Velo scuro, il mazzo cade al centro, la prima carta sale, si gira grande e vola su "Carte e obiettivo".
-- **B — Ventaglio.** Cinque carte coperte a ventaglio sopra la barra in basso, ne tocchi una (è solo scena: la carta è sempre quella decisa dal server), sale al centro, si gira e vola.
-- **C — Nell'angolo.** Un mazzetto sta sempre accanto a "Carte e obiettivo" e si accende con "+1" appena conquisti nel tuo turno; a fine turno la carta sale da lì, si gira nell'angolo e scende tra le carte. La mappa resta libera.
-
-In comune: carta grande nuova nei due temi (retro con la rosa dei venti, fronte con la mappa del territorio, il simbolo e di chi è), il territorio lampeggia sulla mappa, suoni nuovi (mazzo, carta che si gira), Invio o spazio per pescare, il contatore delle carte sale quando la carta arriva. La pesca aspetta che finisca la tua battaglia; se ti attaccano mentre il mazzo aspetta, si toglie di mezzo e torna dopo.
-
-### 2. Mappa più leggibile
+### 1. Mappa più leggibile
 
 Hai segnalato che pedine, numeri, colori e confini sono poco chiari. In più, l'ho visto in prova: col tema vetro, durante la scelta a turno, i territori liberi sono tutti grigi e i continenti non si distinguono.
 
 Le pedine ormai sono i carri (M12.9). Qui restano 3-4 proposte su: colori dei giocatori, territori attivi o spenti, confini tra continenti.
 
-### 3. "Cosa devo fare adesso" e il resto dell'interfaccia
+### 2. "Cosa devo fare adesso" e il resto dell'interfaccia
 
 Ogni fase deve dire chiaramente cosa fare: fasi nella barra in alto, istruzioni, avvisi. Nell'essenziale vanno sistemati anche i cassetti "Carte e obiettivo" e "Registro e chat".
 
-### 4. Pulizia e chiusura di M12
+### 3. Pulizia e chiusura di M12
 
 - Togliere quello che resta del vecchio gioco in stile atWar:
   - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;

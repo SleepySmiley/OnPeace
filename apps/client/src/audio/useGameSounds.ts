@@ -46,7 +46,6 @@ export function useGameSounds({ me, fresh, deadline, paused, myMove, chat }: Arg
     else if (won) sfx.play('capture');
     else if (battles.some((b) => b.player === me || b.defender === me)) sfx.play(battles.some((b) => b.attackerLosses === 0) ? 'hit' : 'battle', 0, 0.7);
     else if (battles.length > 0) sfx.play('battle', 0, 0.35);
-    if (events.some((e) => e.type === 'card' && e.player === me)) sfx.play('build', 0, 0.5);
   }, [fresh, me]);
 
   // ---------------------------------------------------------------- tempo che sta per finire

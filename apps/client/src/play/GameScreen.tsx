@@ -19,8 +19,8 @@ import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned }
 import { ObjectiveCard } from './ObjectiveCard';
 import { connectBattleFeed, useBattle } from './battle';
 import { BattleLayer } from './BattleScene';
-import { cardsInScene, connectDrawFeed, useDraw } from './draw';
-import { DrawLayer, HandDeck } from './DrawScene';
+import { cardsInScene, useDraw } from './draw';
+import { connectDrawFeed, DrawLayer } from './DrawScene';
 import { BattlePanel, HandPanel, LogChat, PlayersPanel, TerritoryInfo } from './panels';
 import { TopBar } from './TopBar';
 import { useGame } from './useGame';
@@ -230,7 +230,6 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
       {extra}
       {move.kind !== 'briefing' && <CommandBar />}
       <div className="corner-tools">
-        <HandDeck />
         <button type="button" className="pill panel" data-hand-pill aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>
           Carte e obiettivo{' '}
           <span key={landed} className={`count${landed ? ' bump' : ''}`}>

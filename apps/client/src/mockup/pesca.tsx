@@ -1,14 +1,15 @@
 /**
  * Pagina di prova della pesca (/pesca.html in sviluppo): la partita vera che gira nel browser
- * contro quattro avversari automatici, con la scena della pesca a fine turno. Dal pannello in alto
- * a destra si sceglie una delle tre proposte (al centro, a ventaglio, nell'angolo) e si fanno
- * partire pescate finte senza giocare un turno intero. Le scelte restano nell'indirizzo.
+ * contro quattro avversari automatici, con la scena della pesca a fine turno com'è nel gioco. Dal
+ * pannello in alto a destra si fanno partire pescate finte senza giocare un turno intero: un
+ * territorio tuo o di altri, il jolly, due carte di fila, e gli incroci con le battaglie.
  */
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Card } from '@onpeace/conquista';
 import { PLAYER_COLORS } from '@onpeace/protocol';
-import { DRAW_STYLES, useDraw, type DrawStyle } from '../play/draw';
+import { useBattle } from '../play/battle';
+import { useDraw } from '../play/draw';
 import { GameScreen } from '../play/GameScreen';
 import { useLook } from '../look';
 import { setLinkFactory, useSession } from '../store';
@@ -30,15 +31,6 @@ Storage.prototype.removeItem = function (key: string) {
 };
 
 const params = new URLSearchParams(location.search);
-const startStyle = params.get('modo') as DrawStyle | null;
-useDraw.getState().setStyle(startStyle && DRAW_STYLES.includes(startStyle) ? startStyle : 'centro');
-
-function saveChoice() {
-  const url = new URLSearchParams(location.search);
-  url.set('modo', useDraw.getState().style);
-  history.replaceState(null, '', `?${url}`);
-}
-saveChoice();
 
 let game: LocalGame | null = null;
 function boot(start: Start) {
@@ -99,37 +91,16 @@ function demo(id: (typeof DEMOS)[number]['id']) {
 }
 
 // per le prove automatiche dalla console
-if (import.meta.env.DEV) Object.assign(window, { __pesca: useDraw, __demoPesca: demo, __look: useLook });
+if (import.meta.env.DEV) Object.assign(window, { __pesca: useDraw, __demoPesca: demo, __look: useLook, __battaglia: useBattle });
 
 // ---------------------------------------------------------------- pannello delle scelte
 
-const NAMES: Record<DrawStyle, string> = { centro: 'Al centro', ventaglio: 'Ventaglio', angolo: "Nell'angolo" };
-
 function Controls() {
-  const style = useDraw((s) => s.style);
   return (
     <aside className="bt-dock panel" aria-label="Prova della pesca">
       <span className="bt-dock-title">
         <span className="mock-tag">Prova</span> Pesca della carta
       </span>
-      <div className="bt-seg" role="radiogroup" aria-label="Proposta">
-        {DRAW_STYLES.map((s, i) => (
-          <button
-            key={s}
-            type="button"
-            role="radio"
-            aria-checked={style === s}
-            onClick={(e) => {
-              e.currentTarget.blur();
-              useDraw.getState().clear();
-              useDraw.getState().setStyle(s);
-              saveChoice();
-            }}
-          >
-            <b>{String.fromCharCode(65 + i)}</b> {NAMES[s]}
-          </button>
-        ))}
-      </div>
       <select
         className="mock-restart"
         aria-label="Pesca una carta di prova"
