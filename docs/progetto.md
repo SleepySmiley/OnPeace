@@ -1,7 +1,11 @@
-# OnPeace — Documento di progetto (v0.1)
+# OnPeace — Documento di progetto (v0.2)
 
-Gioco di strategia multiplayer a turni simultanei, da browser desktop, per partite dal vivo tra amici (5–8 giocatori).
-Le meccaniche riprendono quelle di atWar (ricerca completa in [ricerca/](ricerca/)); nome, grafica, mappe, nomi di strategie e unità rare sono nostri.
+Gioco di conquista a turni, da browser desktop, per partite dal vivo tra amici (da 2 a 8 giocatori).
+Le meccaniche sono quelle dei giochi di conquista da tavolo: rinforzi, attacchi coi dadi, carte da combinare in tris, obiettivi segreti. Nome, tabellone, nomi dei territori e grafica sono nostri; la geografia è quella vera.
+
+Fino al 13 novembre 2026 OnPeace era un altro gioco, a turni simultanei in stile atWar (paesi, città, unità, economia, diplomazia). Il 14 novembre si è cambiato genere: server, sala d'attesa, salvataggi, serata col tunnel, suoni e mappa del mondo sono rimasti, il resto è stato tolto. Quel motore, i suoi dati e la ricerca su atWar stanno nella storia di git (ultimo commit che li contiene: `0509a90`).
+
+Cosa resta da fare: [roadmap.md](roadmap.md).
 
 ---
 
@@ -9,350 +13,134 @@ Le meccaniche riprendono quelle di atWar (ricerca completa in [ricerca/](ricerca
 
 | Tema | Decisione |
 |---|---|
-| Scopo | Partite tra amici; il gioco evolverà nel tempo |
+| Scopo | Partite tra amici; il gioco evolve nel tempo |
 | Piattaforma | Solo browser desktop |
-| Regole | Fedeli ad atWar, poi ritocchiamo. Ogni numero sta in file di configurazione |
-| Ritmo | Solo partite dal vivo, turni da 1 a 12 minuti |
-| Giocatori | Di solito 5–8; mappa media |
-| Contenuti v1 | Base + strategie + edifici + unità rare |
-| Fuori dalla v1 | Bot/IA, progressione persistente, partite lunghe, editor in gioco, account, mobile |
-| Mappe | File JSON creati e modificati da Claude su richiesta; quelle reali si costruiscono da `data/mondo/` |
-| Accesso | Nickname + link d'invito, codice di rientro salvato nel browser |
-| Hosting | Server sul PC di uno di noi, gli altri entrano tramite tunnel |
-| Stack | TypeScript: Node.js + WebSocket, PixiJS per la mappa, React per i pannelli |
-| Ambientazione | Mondo reale di oggi: paesi e città veri (una selezione). Mappa del mondo e mappe dei continenti |
+| Genere | Gioco di conquista (dal 14/11/2026); niente nome, tabellone o grafica di giochi esistenti |
+| Ritmo | Solo partite dal vivo: un giocatore alla volta, 3 minuti a turno di base |
+| Giocatori | Da 2 a 8; gli obiettivi segreti da 3 in su |
+| Tabellone | Il mondo di oggi diviso in 47 territori e 6 continenti, costruito dai dati di Natural Earth |
+| Regole | Ogni numero sta in `data/conquista/regole.json`, mai nel codice |
+| Tabelloni e regole nuove | File JSON scritti da Claude su richiesta; niente editor nel gioco |
+| Accesso | Nickname + link d'invito, token di rientro salvato nel browser; niente account |
+| Hosting | Server sul PC di uno di noi, gli altri entrano tramite Cloudflare Tunnel |
+| Stack | TypeScript ovunque: Node.js + WebSocket, React + Canvas 2D per il tabellone |
+| Fuori per ora | Avversari automatici veri (il server gioca solo al posto di chi esce), partita sullo stesso PC, mobile |
 
 ---
 
-## 2. Regole della v1
+## 2. Regole
 
-Riferimenti tra parentesi quadre: `[R1 §x]` = [ricerca/01-regole-core.md](ricerca/01-regole-core.md), `[R2 §x]` = [ricerca/02-unita-combattimento.md](ricerca/02-unita-combattimento.md), `[R3 §x]` = [ricerca/03-multiplayer-meta.md](ricerca/03-multiplayer-meta.md).
+Tutti i valori qui sotto sono quelli di `data/conquista/regole.json` e si cambiano lì.
 
-### 2.1 Flusso della partita
-1. **Sala d'attesa**: chi crea la partita sceglie le opzioni (§2.11) e condivide il link. Gli altri entrano con un nickname, scelgono il colore e premono "Pronto".
-2. **Selezione paesi**: a rotazione, 30 s per scelta. Ogni paese costa il suo "valore" e si paga con i fondi iniziali. Il primo paese scelto è il **paese natale**. Qui si sceglie anche la **strategia**, che resta fissa per tutta la partita. [R1 §1.3]
-3. **Turni**: tutti pianificano in contemporanea. Il turno finisce allo scadere del timer o quando tutti hanno premuto "Fine turno". [R1 §1.4]
-4. **Risoluzione** delle azioni (§2.2), poi la lista dei combattimenti con il replay.
-5. **Fine partita** (§2.10), con schermata riepilogativa e grafici.
+### 2.1 Inizio della partita
+1. **Sala d'attesa.** Chi crea la partita ne è l'host e sceglie: tabellone, modalità (obiettivi segreti o conquista del mondo), come si dividono i territori (scelti a turno o a caso), come si piazzano le armate iniziali (a giri o tutti insieme) e la durata del turno (da 30 secondi a 15 minuti). Gli altri entrano dal link con un nickname e un colore. L'ordine di gioco viene estratto a caso.
+2. **Obiettivo.** Ognuno legge il suo obiettivo segreto (30 secondi); si parte quando l'hanno chiuso tutti.
+3. **Territori.**
+   - *Scelti a turno* (predefinito): in ordine di gioco ognuno prende un territorio libero e ci mette un'armata, finché sono tutti presi; 15 secondi per scelta, poi sceglie il server, vicino ai suoi territori se può.
+   - *A caso*: distribuiti a giro con un'armata ciascuno.
+4. **Armate iniziali.** Le armate che restano si piazzano sui propri territori:
+   - *a giri* (predefinito): in ordine di gioco, 3 per volta, 45 secondi per giro;
+   - *tutti insieme*: ognuno le piazza tutte alla cieca e si scoprono insieme quando hanno confermato tutti.
 
-Al turno 1 tutti sono in pace tra loro; i paesi neutrali sono attaccabili da subito. [R1 §7.2]
+Armate iniziali per numero di giocatori: 2 → 45, 3 → 38, 4 → 32, 5 → 27, 6 → 23, 7 → 20, 8 → 18.
 
-### 2.2 Risoluzione del turno (fedele ad atWar) [R1 §1.5–1.6]
-- **Inizio turno**, in quest'ordine:
-  1. risposte alle proposte diplomatiche;
-  2. rilevamento delle unità stealth;
-  3. incasso del reddito e pagamento del mantenimento;
-  4. ogni 4 turni, ricarica dei rinforzi.
-- **Pianificazione**: ogni giocatore produce una lista **ordinata** di azioni (acquisti, movimenti/attacchi, carico e scarico, diplomazia, invio di denaro, cessione di città). Tutti gli acquisti fatti in una stessa città contano come una sola azione.
-- **Esecuzione**: il server estrae a caso un giocatore che ha ancora azioni ed esegue la sua prossima azione; ripete finché le liste sono vuote. Il caso usa un RNG con seme registrato, così ogni turno è riproducibile.
-- **Intercettazione (turnblock)**: se l'attacco viene risolto prima che la pila bersaglio si sposti, la pila resta bloccata. Si usa la formula di Dave (2021):
-  - una pila con 3 unità o meno resta sempre bloccata;
-  - altrimenti scappa se `rand() > (unità attaccanti / unità bersaglio) × 2`;
-  - le unità caricate sui trasporti non contano;
-  - le linee difensive proteggono dal blocco.
-- Se il blocco fallisce e l'attaccante ha ancora raggio sufficiente, insegue e combatte; altrimenti si ferma come in un movimento normale.
+### 2.2 Il turno
+Si gioca uno alla volta, in ordine. Ogni turno ha tre fasi:
+1. **Rinforzi.** Un'armata ogni 3 territori (mai meno di 3), più il bonus di ogni continente posseduto per intero (Nord America 5, Sud America 2, Europa 5, Africa 3, Asia 7, Oceania 2), più i tris giocati. Si piazzano sui propri territori.
+2. **Attacchi**, quanti se ne vuole. Da un proprio territorio a uno nemico confinante, per terra o via mare: l'attaccante tira da 1 a 3 dadi (serve sempre un'armata in più dei dadi tirati), il difensore tanti dadi quante armate ha, fino a 3. Si confrontano i dadi in ordine dal più alto: per ogni coppia perde un'armata chi ha il dado più basso; a pari vince il difensore. Se il territorio resta vuoto è conquistato e ci si spostano da tante armate quanti erano i dadi a tutte meno una.
+3. **Spostamento.** Uno solo, tra due propri territori confinanti, lasciando almeno un'armata.
 
-### 2.3 Economia [R1 §2]
-- **Reddito**: arriva solo dalle città, più un bonus del 20% per chi possiede un paese intero.
-- **Città "tue"**: sono le città di un paese di cui controlli la capitale.
-  - Dopo la conquista rendono il 50%, poi salgono del 25% a turno fino al 100%.
-  - Oltre il 100% salgono del 2% a turno, fino al 150%.
-- **Città "straniere"**: sono quelle di un paese di cui non controlli la capitale.
-  - Partono dal 10% e salgono del 5% a turno fino al 50%.
-  - Non producono unità.
-- A ogni cambio di proprietario il reddito della città **riparte da capo**.
-- Reddito e rinforzi sono proporzionali alla **popolazione** della città. Gli attacchi la riducono con il danno collaterale.
-- **Mantenimento**: ogni unità costa 1/10 del suo prezzo a ogni turno. Le unità rare non pagano mantenimento.
-- Il denaro si può inviare solo agli alleati.
+A fine turno, chi ha conquistato almeno un territorio pesca una carta.
 
-### 2.4 Produzione [R1 §3]
-- Si compra solo nelle città di paesi di cui si controlla la capitale; le unità navali solo nei porti.
-- **Doppio vincolo**: servono denaro e "rinforzi" disponibili in città. Ogni unità comprata consuma un rinforzo.
-  - I rinforzi dipendono dalla popolazione, fino a un massimo di 7 per città.
-  - Si ricaricano a inizio partita e poi ogni 4 turni.
-- Le unità comprate compaiono subito e possono muoversi nello stesso turno. Un'unità non ancora mossa si può rivendere entro il turno.
-- Chi conquista una città riceve subito **Milizie gratuite**, tante quanti i rinforzi di quella città.
-- Edifici: al massimo uno per tipo in ogni città (§2.9).
+### 2.3 Carte e tris
+- Il mazzo ha una carta per territorio (fanteria, cavalleria o artiglieria, in parti quasi uguali) più 2 jolly. Finito il mazzo, si rimescolano gli scarti.
+- Nei rinforzi si giocano i tris: tre artiglierie 4 armate, tre fanterie 6, tre cavallerie 8, una per tipo 10, jolly più due uguali 12. Ogni carta del tris che mostra un proprio territorio dà 2 armate in più.
+- Chi elimina un giocatore ne prende le carte.
 
-### 2.5 Mappa e movimento [R1 §4, R2 §3]
-- La mappa è fatta di **paesi**, ognuno con una **capitale** e più città. Il movimento è **libero entro un raggio**, senza griglia.
-- Si può spezzare il percorso in più tratti, purché resti raggio disponibile.
-- Se in una pila ci sono unità con raggi diversi, la pila usa la **media** dei raggi.
-- Terra, mare e aria si muovono come gruppi separati.
-- Le unità di terra non entrano in mare senza trasporto; quelle navali stanno in mare o nei porti.
-- **Zone invalicabili**: solo gli aerei le attraversano, e non possono fermarcisi dentro.
-- **Scorciatoie**: brevi tratti di mare attraversabili da truppe di terra, o di terra attraversabili dalle navi.
-- **Linee difensive**: due pile di terra (o due navali non stealth) vicine tra loro formano un muro.
-  - Un nemico in guerra non può attraversarlo senza attaccare.
-  - In pace e tra alleati si passa liberamente.
-- In guerra si possono attraversare le pile nemiche fuori dalle città, salvo quelle che formano un muro.
-- **Conquista**: si entra in una città nemica o neutrale e si vince la battaglia.
-  - Gli aerei non conquistano: distruggono le unità e restano accanto alla città.
-  - I sottomarini non conquistano senza truppe a bordo.
+### 2.4 Obiettivi e vittoria
+- **Obiettivi segreti** (predefinita, da 3 giocatori): vince chi completa il suo obiettivo durante il proprio turno. Per il mondo ce ne sono 10 (`data/conquista/obiettivi/mondo.json`): conquistare un certo numero di territori (anche con un minimo di armate in ciascuno), conquistare due o tre continenti (a volte uno a scelta), eliminare un giocatore (se lo elimina un altro prima, si passa a conquistare 26 territori).
+- **Conquista del mondo**: vince chi resta solo.
+- In tutte e due vince chi resta l'ultimo in gioco.
+- **Nessuna eliminazione nei primi 4 giri**: finché non sono finiti non si può attaccare l'ultimo territorio di un giocatore.
+- Ognuno vede tutto il tabellone ma, degli altri, solo quante carte hanno; gli obiettivi si scoprono a fine partita.
 
-### 2.6 Combattimento [R2 §4]
-- **Attacco e difesa** sono il danno **massimo** di un colpo. Ogni colpo è un tiro da 1 a quel valore.
-- **Critico**: con probabilità pari a Crit% (di solito 5%) si aggiunge al tiro il valore massimo.
-- **Ordine di combattimento**:
-  - nell'attaccante colpisce per prima l'unità con l'attacco più alto;
-  - nel difensore incassa per prima l'unità con la difesa più alta;
-  - il danno in eccesso passa all'unità successiva.
-- **Scambi**: i colpi sono simultanei e si continua fino a eliminare una delle due parti. Se le ultime due unità si distruggono a vicenda, vince il difensore. A fine battaglia i superstiti tornano a pieni HP.
-- **Vantaggio della pila più forte** (formula ricostruita dalla community):
-  - Rapporto di forza: `D = (att totale + n attaccanti) / (dif totale + n difensori + bonus)`, ricalcolato a ogni scambio.
-  - Il lato più debole tira con un riduttore: se D > 1 il riduttore del difensore è `(D+1)/(2D)`; altrimenti quello dell'attaccante è `(D+1)/2`.
-  - Il tiro col riduttore segue una distribuzione geometrica troncata che favorisce i valori bassi.
-- **Bonus "contro X"** (es. contraerea +8 contro aerei): si sommano alla difesa massima e alla formula di D. *Provvisorio.*
-- **Attacco reciproco**: se due pile si attaccano a vicenda, le unità si alternano tra attacco e difesa.
-- **Città**: nelle proprie città si difende sempre.
-- **Trasporti**: il carico non combatte e muore se il trasporto viene distrutto.
-
-### 2.7 Visibilità [R1 §5]
-- Ogni unità ha un raggio visivo; le città vedono attorno a sé.
-- Fuori dal raggio visivo si vede l'icona di una pila nemica, ma non quante unità contiene né di che tipo. Città e proprietari sono sempre visibili. *Provvisorio, facile da cambiare.*
-- **Unità stealth**:
-  - sono invisibili finché non vengono rilevate a inizio turno o finché non combattono;
-  - dopo una battaglia tornano invisibili solo rientrando in una propria città.
-- Gli alleati vedono tutto ciò che vedono gli altri alleati.
-- Il server invia a ogni giocatore **solo** ciò che quel giocatore può vedere: niente informazioni nascoste nel client.
-
-### 2.8 Diplomazia [R1 §7]
-- I rapporti possibili sono guerra, pace e alleanza.
-- Pace e alleanza richiedono il consenso dell'altro giocatore, che risponde a inizio turno; l'alleanza si chiede solo partendo dalla pace.
-- Per tornare in guerra serve preavviso: 1 turno dalla pace, 2 turni dall'alleanza.
-- Tra alleati si condivide la visione, si invia denaro, ci si cede città vuote e si può vincere insieme.
-- Nelle partite a squadre le alleanze sono fisse.
-- Opzione "massimo alleanze" per giocatore (default 3; 0 = diplomazia disattivata).
-
-### 2.9 Contenuti
-- **Unità base**: si usano le statistiche di atWar ([R2 §2]: attacco, difesa, critico, HP, movimento, vista, costo, capacità, collaterale, bonus), con nomi italiani:
-
-  | Gruppo | Unità |
-  |---|---|
-  | Terra | Milizia, Fanteria, Carri, Incursori (stealth), Contraerea |
-  | Mare | Sottomarino (stealth), Trasporto, Cacciatorpediniere |
-  | Aria | Bombardiere, Elicottero, Caccia stealth, Ricognitore, Trasporto aereo |
-
-  Senza progressione persistente, tutte le unità sono disponibili da subito.
-- **Edifici**: Banca, Centro di reclutamento, Radar, Batteria costiera, Difese antiaeree, Fortificazioni [R2 §2.5].
-- **Strategie** (`data/rules/strategies.json`): una per giocatore, nomi militari realistici, valori di partenza da [R2 §5]. Sono 10: Assalto a oltranza, Difesa in profondità, Guerra lampo, Supremazia navale, Supremazia aerea, Operazioni speciali, Mobilitazione di massa, Guerriglia, Potenza industriale, Logistica avanzata. Modificano solo le unità acquistabili e gli edifici, non le rare né il Generale.
-- **Generale** (`data/rules/general.json`): uno per giocatore, compare nella capitale del paese natale al turno 1. È 1/1 con 1 HP: da solo è debolissimo e, se muore, è perso. Dà alla sua pila 3 potenziamenti scelti a inizio partita tra 11, ispirati agli upgrade di atWar [R2 §3.8]; i posti lasciati vuoti si riempiono con Difesa, Fortuna in battaglia e Ricognizione.
-- **Unità rare** (in `units.json`, `"rare": true`): 30 tipi ispirati a [R2 §3.9], con nomi nostri, nucleari comprese. Si trovano conquistando le città (probabilità impostabile), estratte per peso (`rareWeight`): la testata nucleare è la più rara. Le navi compaiono solo nei porti. Non pagano mantenimento e non si comprano.
-
-### 2.10 Vittoria e uscita [R1 §6]
-- **Condizioni** (impostazione della partita):
-  - annientamento totale: si è eliminati quando si perdono tutte le città;
-  - conquista del paese natale o della capitale;
-  - limite di turni (default 50), allo scadere del quale vince chi ha più punti.
-- **Punti in partita**: valore delle unità distrutte e delle città conquistate. Servono solo come spareggio, non c'è progressione tra partite.
-- **Uscita**:
-  - la resa è possibile;
-  - chi si disconnette ha 10 minuti per rientrare, poi è considerato assente: le sue unità restano ferme, reddito e mantenimento continuano;
-  - l'host può espellere chi è assente da almeno 3 turni, e i suoi territori diventano neutrali. *Provvisorio.*
-
-### 2.11 Opzioni di creazione partita (v1)
-- Mappa;
-- giocatori massimi;
-- durata del turno (1–12 min);
-- fondi iniziali;
-- paesi iniziali per giocatore;
-- durata della partita in turni;
-- condizione di vittoria;
-- massimo alleanze;
-- tutti contro tutti oppure 2–4 squadre;
-- probabilità di unità rare (nessuna, 2, 5, 10 o 20%);
-- strategie attive o disattivate;
-- Generale sì o no;
-- ingresso tardivo fino al turno N.
-
-### 2.12 Lacune della ricerca → decisioni provvisorie
-Dove atWar non è documentato decidiamo noi. Tutti i valori qui sotto sono parametri in `data/rules/`.
-
-| Lacuna | Decisione provvisoria |
-|---|---|
-| Tetto del reddito: 150% o 200%? | 150% (valore della FAQ ufficiale) |
-| Saldo negativo | Il mantenimento può portare il saldo sotto zero; con il saldo negativo non si compra |
-| Rinforzi non usati | Non si accumulano: a ogni ricarica si torna al valore della città |
-| Banca: −1 o −10? | −1 sul mantenimento delle unità prodotte in quella città (è il valore misurato in gioco) |
-| Battaglie con 3 o più pile | Non servono regole apposite: ogni azione genera scontri a due in ordine di esecuzione; più pile difensive nella stessa città si fondono |
-| Neutrali | Passivi. Difesi da Milizie (pari ai rinforzi) e da Fanteria nei paesi ricchi; nessun rinforzo |
-| Danno collaterale | Popolazione persa per battaglia = somma dei collaterali degli attaccanti, in punti %, con un tetto del 50%; recupero del 2% a turno |
-| Nebbia di guerra | Vedi §2.7 |
-
-### 2.13 Decisioni prese costruendo il motore (M1)
-Tutte provvisorie; i numeri sono in `data/rules/defaults.json`.
-
-| Tema | Decisione |
-|---|---|
-| Ordini di movimento | Le unità si scelgono per tipo e quantità, come i cursori di atWar. La pila si indica per id, città o posizione, così si muovono anche le unità appena comprate |
-| Edifici | Sono unità immobili da 20 HP che difendono la città; incassa per primo chi ha la difesa più alta contro l'attaccante, quindi la Batteria costiera protegge dalle navi. Se la città cade, sono distrutti |
-| Attacco reciproco | Una sola battaglia, in cui chi attacca e chi difende si scambiano a ogni colpo |
-| Fuga dall'intercettazione | La pila che scappa esegue subito il suo movimento; l'attaccante la insegue se ha raggio, altrimenti fa un movimento normale |
-| Rottura dell'alleanza | Pace dal turno dopo, guerra dopo 2 turni |
-| Proposte diplomatiche | Si possono accettare o rifiutare nel turno successivo, poi scadono |
-| Eliminazione | Le città tornano neutrali, le truppe nelle città diventano presidi neutrali, le altre si sciolgono |
-| Muri | Bloccano terra e mare, non gli aerei; partire o arrivare su un estremo del muro non conta come attraversamento |
-| Invisibilità | Per ora si perde solo combattendo e si recupera rientrando in una città propria. Il rilevamento col raggio visivo arriva con la nebbia di guerra (M3) |
-| Punteggio | Costo delle unità distrutte × 0,1, +10 per città conquistata, +25 per capitale |
-| Neutrali | Milizie pari ai rinforzi della città, più 1 Fanteria per città nei paesi con reddito ≥ 500 |
-| Scelta dei paesi | Valore = reddito nominale + rinforzi × 10; fondi iniziali 2500 |
-
-### 2.14 Decisioni prese con i contenuti (M5)
-Tutte provvisorie, nei file di `data/rules/`.
-
-| Tema | Decisione |
-|---|---|
-| Dottrina | Strategia e potenziamenti del Generale si scelgono in sala d'attesa o durante la scelta dei paesi; si bloccano al turno 1. Fino ad allora sono segrete, poi la strategia è pubblica e i potenziamenti li vedono solo gli alleati |
-| Formato delle strategie | Modificatori per unità, ruolo, dominio o "tutte": prima `set` (valore fissato), poi `add` (valore sommato), più bonus di difesa contro certe unità. Gli edifici hanno modificatori propri |
-| Bonus di comando | Generale e comandanti rari (Ufficiale di campo, Maresciallo dell'aria, Ammiraglio) danno bonus alle unità del loro gruppo: in attacco quelle che si muovono con loro, in difesa la loro pila. Più copie dello stesso comandante non si sommano |
-| Difesa situazionale | Nuovi campi `cityDefence` e `lineDefence`: difesa extra (o malus) quando si difende in una città propria o in una linea difensiva |
-| Armi a uso singolo | Missili, testata nucleare e Guastatori non subiscono danni durante il proprio attacco e si consumano alla fine; la loro perdita non dà punti al nemico. Senza questa regola, con 1 HP, morirebbero al primo scambio e "vince il difensore" lascerebbe sempre un superstite |
-| Cecchini | Attaccando colpiscono per primi Generale e comandanti (`hunts`) |
-| Nomi | Le rare di atWar dal nome poco adatto sono state sostituite: Guastatori al posto dell'attentatore suicida, Volontari al posto dei bambini soldato; la testata finta è stata tolta |
-
-### 2.15 Decisioni prese per la serata (M6)
-Tutte provvisorie.
-
-| Tema | Decisione |
-|---|---|
-| Pausa | Solo l'host ferma e fa ripartire il tempo (turno o scelta dei paesi). In pausa si possono ancora dare ordini e finire il turno; il turno dopo resta in pausa. Alla ripresa restano almeno 15 s |
-| Errore del motore | Se la risoluzione di un turno fallisce, il server salva stato e ordini per riprodurla e riprova togliendo gli ordini di un giocatore alla volta (lui viene avvisato), poi senza ordini. Se fallisce anche così, la partita si ferma con la pausa "errore" e l'host può riprovare |
-| Uscita dell'ultimo | Se esce o viene espulso l'ultimo giocatore che non aveva finito, il turno si risolve subito |
-| Segnalazioni | Pulsante "Segnala" per chi è in partita; gli errori dell'interfaccia partono da soli (al massimo 10 per sessione). Finiscono in `logs/segnalazioni.jsonl`, con lo stato della partita per i feedback scritti |
-
-### 2.16 Decisioni prese con le mappe reali (M7)
-Tutte provvisorie, nei file di `data/mondo/`.
-
-| Tema | Decisione |
-|---|---|
-| Fonte | Natural Earth 5.1.2 (pubblico dominio): confini 1:50 milioni, località 1:10 milioni con popolazione e nome italiano |
-| Mappe | Mondo, Europa, Asia, Africa, Nord America, Sud America, Oceania e Sud-est asiatico. Ogni continente è ritagliato dagli stessi dati: i paesi tagliati dal bordo restano con la parte che si vede |
-| Proiezioni | Mondo: Miller, tagliato a 169°O (lo stretto di Bering), quindi il Pacifico non si attraversa da un bordo all'altro. Continenti: azimutale equivalente di Lambert centrata sul continente |
-| Scala | 1 punto di raggio vale 60 km nel mondo, 36 km in Europa, 50–60 km negli altri continenti: un Carro fa 250–420 km a turno |
-| Paesi | Quelli di oggi. I microstati vanno al vicino con cui confinano di più (Vaticano e San Marino all'Italia, Monaco alla Francia; i buchi che lasciano nel vicino si chiudono, restano solo le enclavi vere come il Lesotho); le isole sotto una soglia e i paesi fatti solo di isole minuscole spariscono. Alaska, Hawaii e Guyana francese sono paesi a sé, perché lontani dalla capitale. Somaliland con la Somalia, Cipro del Nord con Cipro |
-| Paesi grandi | Divisi in regioni per l'equilibrio, con i confini veri di stati e province: Stati Uniti (5), Russia (7, i distretti federali), Cina (6), India (5), Canada (6), Brasile (5, le regioni ufficiali), Australia (5). La regione con la capitale nazionale ha quella come capitale, le altre la città più grande. Nel mondo il paese più ricco (il Giappone) vale 2,4 volte l'Italia; prima gli Stati Uniti valevano 6,6 volte |
-| Confini contesi | Si seguono i confini riconosciuti dall'Italia: la Crimea è dell'Ucraina (in Natural Earth è della Russia) |
-| Città | Sempre la capitale; poi le più popolose, a una distanza minima (4 punti nello stesso paese, 2 tra paesi diversi), in numero proporzionale ad area e popolazione del paese |
-| Popolazione e reddito | Popolazione di gioco = popolazione reale in milioni elevata a 0,38 (tra 0,3 e 3,2). Reddito = 120 × popolazione di gioco × un fattore tra 0,65 e 1,5 che cresce con il PIL pro capite del paese. Gli stessi ordini di grandezza della mappa di prova |
-| Porti | Le città entro 30 km dal mare |
-| Invalicabili | Himalaya e altopiano del Tibet, calotta glaciale della Groenlandia |
-| Passaggi | Per le truppe di terra: tunnel della Manica, ponti di Øresund e Belt, Bosforo, Kerch, Stretto di Gibilterra (per comodità di gioco), tunnel e ponti del Giappone. Un tratto che non si può fare dritto passa da solo per il passaggio che allunga meno, e la deviazione conta nel raggio. Per le navi: Suez, Panama, Gibilterra, Bosforo e Dardanelli, Øresund, Kerch, Messina, Bab el-Mandeb, Hormuz, Singapore |
-| Lettura | A zoom basso si vedono solo i nomi che ci stanno e i presidi neutrali delle città isolate; il resto compare ingrandendo |
-
-### 2.17 Decisioni dopo la prima serata (M8)
-Richieste dei giocatori dopo la partita del 9 novembre 2026.
-
-| Tema | Decisione |
-|---|---|
-| Colori | Paesi neutrali in grigio; i paesi dei giocatori pieni del loro colore. Tavolozza di 8 colori (blu, rosso, verde, giallo, viola, arancione, azzurro, rosa) con ogni coppia ben distinta (ΔE ≥ 16 in visione normale, ≥ 7,5 per i daltonici) |
-| Movimento | Si trascina la pila; la freccia resta nel raggio. Maiusc al rilascio mette una tappa e il cerchio si restringe al raggio rimasto. Nel pannello della pila le unità partono deselezionate; senza scelta si muovono tutte quelle libere |
-| Schede | Passando sopra unità ed edifici nei pannelli si apre una scheda con statistiche, effetti, prezzo e mantenimento |
-| Turno | Riepilogo breve a ogni nuovo turno; il tempo scorre come linea sotto la barra in alto; "Turno inviato" dopo Fine turno |
-| Rinforzi | Sempre visibili in alto (quanti e a che turno si ricaricano); pannello per paese e città; nella città lo stato esaurito con il turno di ripresa |
+### 2.5 Tempo, assenze e pause
+- Il tempo scorre solo per chi deve muoversi. Ogni tiro di dadi ridà 3 secondi a chi attacca (al massimo 60 per turno): guardare la battaglia non mangia il turno.
+- A tempo scaduto il server fa quello che manca (piazza i rinforzi, decide l'occupazione) e passa al prossimo.
+- Chi esce o perde la connessione resta sul tabellone e il server gioca al posto suo; riaprendo il link rientra. L'host può togliere chi ha saltato 2 turni di fila.
+- L'host può fermare il tempo con **Pausa**; alla ripresa restano almeno 15 secondi.
 
 ---
 
 ## 3. Architettura tecnica
 
 ### 3.1 Struttura del repository (monorepo con npm workspaces)
-```
-OnPeace/
-  packages/engine/     regole pure in TypeScript: nessun I/O, RNG con seme, testabile
-  packages/protocol/   tipi dei messaggi client↔server + validazione (zod)
-  apps/server/         Node, WebSocket (ws), stanze, timer, salvataggi JSON
-  apps/client/         Vite + React (pannelli, lobby) + PixiJS 8 (mappa)
-  data/rules/          unità, edifici, parametri predefiniti (JSON); poi strategie e rare
-  data/maps/           mappe (JSON)
-  data/mondo/          configurazione delle mappe reali (inquadrature, paesi, città, montagne, passaggi)
-  data/schema/         JSON Schema generati dagli schemi zod (autocompletamento in VS Code)
-  tools/               mappe reali (tools/mondo), generatore di mappe inventate, verifica dei dati, generazione schemi
-  docs/
-```
 
-### 3.2 Motore delle regole (`packages/engine`)
-- **Stato** serializzabile in JSON: giocatori, paesi, città, pile, diplomazia, turno, seme.
-- **Funzioni principali**:
-  - `validateAction(state, playerId, action)`: usata sia dal client (anteprima) sia dal server (verifica);
-  - `resolveTurn(state, actionsByPlayer, seed)`, che restituisce `{ state, events }`. Gli eventi descrivono tutto ciò che è successo, compresi i singoli colpi dei combattimenti: servono per il replay delle battaglie e per il registro del turno;
-  - `viewFor(state, playerId)`: la proiezione con la nebbia di guerra applicata.
-- **Regole guidate dai dati**: statistiche e parametri vengono da `data/rules/`, il codice non contiene numeri fissi.
+| Cartella | Contenuto |
+|---|---|
+| `packages/engine` | Quello che hanno in comune tutti: formato e controlli del tabellone, errori delle regole, numeri casuali per test e prove |
+| `packages/conquista` | Il motore del gioco: regole, carte, obiettivi, vista di ogni giocatore |
+| `packages/protocol` | Messaggi tra browser e server, validati con zod |
+| `apps/server` | Server Node: sale, timer, salvataggi, registro, WebSocket su `/ws` |
+| `apps/client` | Il gioco nel browser: React per l'interfaccia, Canvas 2D per il tabellone |
+| `data/territori` | Tabelloni (generati, non si ritoccano a mano) |
+| `data/conquista` | Regole e obiettivi di ogni tabellone |
+| `data/mondo` | Configurazione dei tabelloni: inquadratura, paesi, regioni, territori, collegamenti via mare |
+| `data/schema` | JSON Schema generati: autocompletamento e controllo dei JSON in VS Code |
+| `tools` | Costruzione dei tabelloni (`tools/mondo`), verifica dei dati, schemi, serata, prova generale |
 
-### 3.3 Formato mappa (`data/maps/*.json`)
-- **Contenuto**:
-  - dimensioni e scala, cioè quante unità della mappa vale 1 punto di raggio;
-  - paesi, con forma (multipoligono), capitale e, se c'è, il punto dove scriverne il nome. La terra è l'unione dei paesi: tutto il resto è mare. Il valore del paese si calcola dalle sue città;
-  - città, con posizione, paese, popolazione, reddito nominale e flag porto;
-  - zone invalicabili e scorciatoie.
-- Validato da uno **JSON Schema**, così le modifiche fatte da Claude si controllano subito.
-- **Validazione dei percorsi**: all'avvio della partita il server converte i poligoni in una griglia di navigazione (terra/mare/invalicabile) e controlla ogni tratto di percorso campionandolo.
-- **Linee difensive**: segmenti calcolati tra pile alleate vicine; un percorso nemico che ne interseca uno si ferma e deve attaccare.
-- **Mappe reali** (`npm run mondo`, codice in `tools/mondo`): proietta i dati di Natural Earth, ritaglia l'inquadratura, unisce o toglie i paesi troppo piccoli, sceglie le città, segna i porti, aggiunge zone invalicabili e passaggi, poi controlla la mappa come le altre. Le mappe reali hanno fino a ~85.000 vertici: il test terra/mare usa un indice spaziale (caselle e fasce di lati), e il client disegna i confini una volta sola.
+### 3.2 Motore (`packages/conquista`)
+- Funzioni pure: stato + azione → nuovo stato + eventi. Le azioni sono 10 (pronto, scelta di un territorio, piazzamento iniziale, tris, rinforzi, attacco, occupazione, fine attacchi, spostamento, fine turno); ognuna sbagliata viene rifiutata con un messaggio per il giocatore.
+- Il caso usa un generatore da 128 bit (sfc32) seminato con numeri casuali veri e salvato nella partita: le partite sono riproducibili, ma da quello che si vede non si possono indovinare obiettivi, mazzo o dadi futuri.
+- `passFor` e `timeout` fanno al posto di un giocatore quello che manca: le usa il server per il tempo scaduto e per chi è uscito.
+- `viewFor` prepara quello che un giocatore può vedere (§2.4).
+
+### 3.3 Tabellone (`data/territori/*.json`)
+- Contiene: dimensioni, continenti (nome, bonus, dove scriverli), territori (continente, forma, dove mettere la pedina e il nome), collegamenti (via mare con la linea da disegnare, anche quella che esce da un bordo e rientra dall'altro), rosa dei venti e proiezione (Miller, per le immagini della Terra).
+- Il formato e i controlli (id unici, continenti esistenti, ogni territorio collegato e raggiungibile) stanno in `packages/engine`; il motore li ripete quando carica un tabellone, insieme a regole e obiettivi.
+- Si costruisce con `npm run mondo` dai dati di Natural Earth (`tools/mondo`): sistema i paesi (`data/mondo/paesi.json`), divide i paesi grandi in regioni (`data/mondo/regioni.json`), proietta e ritaglia il mondo, toglie le isolette, unisce i paesi minuscoli al vicino, poi raggruppa i paesi in territori secondo `data/mondo/territori.json`. I confini per terra si ricavano dai paesi che si toccano; quelli via mare sono scritti nella configurazione.
+- `npm run mondo:anteprima` ne disegna una pagina HTML per controllarlo senza aprire il gioco.
 
 ### 3.4 Server (`apps/server`)
-- **Autoritativo**: il client invia azioni, il server le valida e le salva subito. Se un giocatore ricarica la pagina, non perde nulla.
-- **Gestione del turno**: timer gestito dal server; "Fine turno" anticipato quando tutti hanno finito; risoluzione con il motore; invio a ciascuno della propria vista più gli eventi visibili.
-- **Persistenza**: un file JSON per partita in `games/`, scritto in modo atomico a ogni azione (piani compresi). Se il PC si riavvia, la partita riprende. (SQLite scartato: il modulo nativo non si installa con gli script npm bloccati, e i file JSON bastano.)
-- **Rete**: un solo processo e una sola porta (3210) servono sia il client compilato sia il WebSocket su `/ws`. È ciò che serve per il tunnel.
-- **Mappe**: all'avvio legge tutte quelle di `data/maps/` e le serve al client su `/mappe` (elenco) e `/mappe/<id>.json` (compresse). L'host sceglie la mappa nella sala d'attesa; contesto delle regole e griglia di navigazione di ogni mappa si calcolano al primo uso.
-- **Accesso**: link `/p/<idPartita>` e token casuale salvato nel browser per rientrare. Chi crea la partita ne è l'host.
-- **Interfaccia di attesa**: mostra in ogni momento chi ha già finito il turno e chi stiamo aspettando. È una delle lamentele principali su atWar.
-- **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; un salvataggio bloccato (OneDrive, antivirus) viene ritentato. Se il processo cade lo stesso, salva tutto prima di uscire.
-- **Registro** in `logs/`: un file al giorno con partite, turni (con i tempi) ed errori; `errori/` con lo stato da cui riprodurre ogni errore; `segnalazioni.jsonl` con le segnalazioni dei giocatori.
-- **Compressione** del WebSocket: a fine partita la vista di un giocatore pesa circa 130 kB, compressa circa 20 kB.
+- **Autoritativo**: il client manda le mosse, il server le valida col motore, le salva e manda a ognuno la sua vista e gli eventi.
+- **Persistenza**: un file JSON per partita in `games/`, scritto in modo atomico a ogni mossa; se il PC si riavvia la partita riprende. Un salvataggio bloccato (OneDrive, antivirus) viene ritentato.
+- **Rete**: un solo processo e una sola porta (3210) servono il client compilato, i tabelloni (compressi) e il WebSocket su `/ws`.
+- **Accesso**: link `/p/<codice>` e token salvato nel browser per rientrare.
+- **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; tetti al numero di partite e di segnalazioni; al riavvio si cancellano le partite finite e le sale mai partite ferme da più di una settimana.
+- **Registro** in `logs/`: un file al giorno, `errori/` con lo stato da cui riprodurre ogni errore, `segnalazioni.jsonl` con le segnalazioni dei giocatori.
 
 ### 3.5 Client (`apps/client`)
-- **Mappa con PixiJS 8**, a strati:
-  1. sfondo, mare e terra;
-  2. confini e colori dei proprietari;
-  3. città;
-  4. pile;
-  5. raggi di movimento e di visione;
-  6. percorsi pianificati.
-
-  Zoom e spostamento con la rotellina e il trascinamento.
-- **Pannelli React** flottanti e trascinabili: Città, Muovi truppe, Combattimento (replay), Eventi, Giocatori/Diplomazia, Finanze, chat. Barra in basso con turno, saldo, timer e "Fine turno".
-- **Motore condiviso**: il client lo usa per l'anteprima (raggi, costi, percorsi validi), ma decide sempre il server.
+- **Tabellone** su Canvas 2D a due strati: quello fisso (mare, territori, confini) si ridisegna solo quando cambiano vista o padroni, quello sopra a ogni fotogramma (selezione, frecce, pedine, nomi). Contorni semplificati a seconda dello zoom; sotto, le foto della Terra (NASA) riproiettate. Due temi: Tavolo classico e Vetro.
+- **Pedine**: un carro armato di lato nel colore del padrone, col numero di armate sullo scafo, girato verso il nemico più vicino. I territori su cui si può agire adesso hanno un contorno che pulsa.
+- **Schermata di gioco** (una sola disposizione): giocatori in alto a sinistra; al centro della barra in alto chi gioca, le fasi del turno e il tempo; barra dei comandi in basso; carte e obiettivo in mano in basso a sinistra; registro e chat in un cassetto a destra. Una fascia annuncia il turno e le fasi, quello che fanno gli altri compare sui territori.
+- **Scene**: carta dell'obiettivo all'inizio, battaglia coi carri e i dadi 3D, pesca della carta a fine turno.
+- **Suoni** sintetizzati nel browser (Web Audio, nessun file).
+- **Pagine di prova** (con `npm run dev`): `prova.html` è una partita vera nel browser contro 4 avversari automatici, senza server; `tabellone.html`, `carta.html`, `battaglia.html` e `pesca.html` mostrano un pezzo alla volta.
 
 ### 3.6 Hosting sul PC di casa
-- `npm run serata` (`tools/serata.ts`) fa tutto con un comando:
-  - compila il client se è più vecchio del codice o dei dati;
-  - avvia il server e **Cloudflare Tunnel**, che lo espone su HTTPS senza aprire porte del router;
-  - passa al server l'indirizzo pubblico, che finisce nel link d'invito;
-  - riavvia il server se cade e riapre il tunnel se si chiude.
-  Istruzioni nel README.
-- Il tunnel rapido è gratuito ma cambia indirizzo a ogni avvio. Un tunnel con nome e un dominio proprio danno invece un indirizzo fisso.
-- La partita esiste solo mentre il PC è acceso; grazie ai salvataggi JSON in `games/` riprende dopo un riavvio.
+- `npm run serata` (`tools/serata.ts`) fa tutto con un comando: compila il client se serve, avvia server e Cloudflare Tunnel, passa al server l'indirizzo pubblico per il link d'invito, riavvia il server se cade e riapre il tunnel se si chiude. Istruzioni nel README.
+- Il tunnel rapido è gratuito ma cambia indirizzo a ogni avvio; per un indirizzo fisso serve un tunnel con nome e un dominio.
 
 ### 3.7 Test
-- **Vitest sul motore**:
-  - test "dorati" con tiri forzati, per esempio l'esempio ufficiale "1 Carro contro Fanteria + Milizia" [R2 §4.3];
-  - simulazioni Monte Carlo per confrontare le medie con i dati della ricerca, per esempio il danno medio del Carro ≈ 4,90 [R2 §4.4];
-  - test di risoluzione del turno con seme fisso.
-- **Test del server** (Vitest): sala d'attesa, turni, timer, pausa, rientro, ripiego quando il motore va in errore, salvataggi ritentati.
-- **Prova generale** (`npm run prova`): da 2 a 8 giocatori simulati giocano una partita intera via WebSocket contro un server vero, usando solo la propria vista. Su 8 giocatori e 50 turni: circa 4.800 ordini, 640 battaglie, 20 cadute e rientri, risoluzione media 11 ms.
-- **Playwright** per i flussi principali nel browser (creare la partita, entrare dal link, giocare un turno): per ora controlli a mano con `playwright-cli`, test automatici da fare.
+- **Vitest**: regole del motore (con dadi e mazzo forzati), partite casuali fino alla fine, server (sala d'attesa, turni, tempo, pausa, rientro, chi esce), controlli del tabellone, pesca delle carte nel client.
+- **Prova generale** (`npm run prova`): da 2 a 8 giocatori simulati giocano una partita intera via WebSocket contro un server vero, con mosse sbagliate apposta, cadute e rientri, e uno che esce a metà.
+- **Nel browser**: controlli con Playwright (`playwright-cli`) su `prova.html`.
 
 ---
 
-## 4. Piano di sviluppo
+## 4. Storia
 
-| Tappa | Contenuto | Risultato visibile |
-|---|---|---|
-| **M0 Fondamenta** ✅ | Monorepo, TypeScript, lint, test; schemi JSON; dati delle unità; **mappa di prova inventata** (12 paesi, 60 città) | La mappa disegnata nel browser |
-| **M1 Motore** ✅ | Economia, acquisti, movimento con validazione geometrica, linee difensive, combattimento, risoluzione del turno con turnblock, diplomazia, vittoria; test | Test verdi e simulazioni |
-| **M2 Sandbox** ✅ | Client con mappa e pannelli base che usa il motore in locale (più giocatori sullo stesso PC) | Si gioca un turno completo sullo stesso PC |
-| **M3 Multiplayer** ✅ | Server, link d'invito, sala d'attesa, selezione paesi, timer, nebbia filtrata, chat, riconnessione, salvataggio | Partita vera tra più browser |
-| **M4 Interfaccia completa** ✅ | Replay delle battaglie, eventi, diplomazia, finanze, registro del turno, "chi stiamo aspettando", schermata di fine partita | Partita completa dall'inizio alla fine |
-| **M5 Contenuti** ✅ | Strategie, Generale, unità rare (gli edifici erano già in M1) | Varietà e bilanciamento |
-| **M6 Serata di prova** ✅ | Avvio sul PC con il tunnel, guida rapida per gli amici, correzioni. `npm run serata`, guida in gioco, pausa, segnalazioni, prova generale. Prima serata il 9 novembre 2026; le correzioni chieste sono in M8 | Prima partita tra amici |
-| **M7 Mondo reale** ✅ | Mappa del mondo e dei continenti con paesi e città veri, costruite dai dati di Natural Earth; paesi grandi divisi in regioni; scelta della mappa; mappe grandi leggibili | Si gioca sul mondo o su un continente |
-| **M8 Chiarezza** ✅ | Dopo la prima serata: colori neutrali e dei giocatori, ordini trascinando le pile, schede di unità ed edifici, imbarco più chiaro, Gibilterra a piedi e percorsi che passano da soli per stretti e tunnel, inizio e fine del turno, stato dei rinforzi | Si capisce chi possiede cosa e cosa fa ogni scelta |
-| **M9 Suoni** ✅ | Suoni sintetizzati nel browser (Web Audio, nessun file): azioni (scelta, presa e rilascio delle pile, attacco, acquisto, costruzione, imbarco, fine turno), nuovo turno con l'esito (battaglie, città prese o perse), ultimi secondi, il tuo turno di scelta, chat, ingressi in sala, replay delle battaglie, vittoria e sconfitta. Livelli misurati e mixati su tre fasce; volume e muto nella barra in alto | Il gioco si sente |
+| Tappa | Contenuto |
+|---|---|
+| **M0–M9** ✅ | Il primo gioco, in stile atWar, e l'infrastruttura che è rimasta: server con sale e salvataggi, link d'invito e rientro, serata col tunnel, guida, pausa e segnalazioni, prova generale, mappa del mondo da Natural Earth con i paesi grandi divisi in regioni, suoni. Prima serata tra amici il 9 novembre 2026 |
+| **M10** ✅ | Tabellone a territori (47 territori, 6 continenti) dal mondo reale; temi Tavolo classico e Vetro |
+| **M11** ✅ | Motore del gioco di conquista (`packages/conquista`): preparazione, turni, carte, obiettivi, regola dei primi giri, piazzamento alla cieca, seme a 128 bit |
+| **M12** ✅ | La partita nel browser: sale sul server, schermata di gioco, tabellone senza scatti, inizio con obiettivo e territori scelti a turno, barra dei comandi, battaglia coi carri, carri sul tabellone, tempo restituito a ogni tiro, pesca delle carte, mappa leggibile, cosa fare adesso. Chiusa con la pulizia del vecchio gioco (motore, mappe e regole, strumenti, ricerca) |
 
 ---
 
 ## 5. Da decidere più avanti
-- Equilibrio tra paesi e regioni dopo le prime partite: se serve, altre divisioni (Messico, Argentina, Indonesia, Kazakistan) o limiti nella scelta iniziale.
-- Bilanciamento di strategie, potenziamenti del Generale e rare, dopo le prime partite.
-- Voto sulle impostazioni durante la partita, spettatori, replay completo dell'intera partita: tutti facili da aggiungere grazie al registro degli eventi.
-- Bot che sostituiscano gli assenti (fuori dalla v1).
+- Bilanciamento dopo le prime partite: bonus dei continenti, obiettivi, armate iniziali.
+- Altri tabelloni (per esempio un continente solo) o un mondo diviso in modo diverso: bastano una voce in `data/mondo/territori.json` e un file di obiettivi.
+- Avversari automatici veri per giocare in pochi o da soli.
+- Le cose lasciate indietro di proposito sono elencate in fondo alla [roadmap](roadmap.md).

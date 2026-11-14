@@ -3,7 +3,7 @@ import { useSession } from '../store';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 
-/** Chat della partita (con l'orario: una delle mancanze lamentate su atWar). */
+/** Chat della partita, con l'orario di ogni messaggio. */
 export function ChatPanel() {
   const chat = useSession((s) => s.online.chat);
   const me = useSession((s) => s.online.me);

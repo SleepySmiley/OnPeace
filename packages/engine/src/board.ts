@@ -1,11 +1,21 @@
-import { z } from 'zod';
-import { Id } from './rules';
-import { MultiPolygonS, PointS } from './map';
-
 /**
  * Tabellone a territori: il mondo diviso in territori raggruppati in continenti, con l'elenco
  * esplicito di chi confina con chi (per terra o via mare). È la mappa del gioco di conquista.
+ * Coordinate in unità del tabellone, con la y verso il basso.
  */
+import { z } from 'zod';
+
+/** Identificativo leggibile: minuscole, cifre e underscore. */
+export const Id = z.string().regex(/^[a-z][a-z0-9_]*$/, 'id: solo minuscole, cifre e _');
+
+export type Point = readonly [number, number];
+const PointS = z.tuple([z.number(), z.number()]);
+/** Anello chiuso implicitamente: l'ultimo punto non ripete il primo. */
+const RingS = z.array(PointS).min(3);
+/** Primo anello = contorno esterno, gli altri = buchi (laghi, enclavi). */
+const PolygonS = z.array(RingS).min(1);
+const MultiPolygonS = z.array(PolygonS);
+
 export const ContinentDef = z.strictObject({
   id: Id,
   name: z.string().min(1),

@@ -1,4 +1,4 @@
-/** Geometria 2D di base per mappa e movimento. Coordinate in unità mappa. */
+/** Geometria 2D per costruire il tabellone. Coordinate in unità del tabellone. */
 
 export type Point = readonly [number, number];
 /** Anello chiuso implicitamente (l'ultimo punto non ripete il primo). */
@@ -6,10 +6,6 @@ export type Ring = readonly Point[];
 /** Primo anello = contorno esterno, gli altri = buchi. */
 export type Polygon = readonly Ring[];
 export type MultiPolygon = readonly Polygon[];
-
-export function distance(a: Point, b: Point): number {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
 
 /** Ray casting: true se il punto è dentro l'anello. */
 export function pointInRing(p: Point, ring: Ring): boolean {
@@ -52,24 +48,7 @@ export function multiPolygonArea(mp: MultiPolygon): number {
   return mp.reduce((s, p) => s + polygonArea(p), 0);
 }
 
-/** Baricentro dell'anello esterno. */
-export function ringCentroid(ring: Ring): Point {
-  let a = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [x0, y0] = ring[j]!;
-    const [x1, y1] = ring[i]!;
-    const f = x0 * y1 - x1 * y0;
-    a += f;
-    cx += (x0 + x1) * f;
-    cy += (y0 + y1) * f;
-  }
-  if (a === 0) return ring[0] ?? [0, 0];
-  return [cx / (3 * a), cy / (3 * a)];
-}
-
-/** Il poligono più grande di un multipoligono (utile per etichette). */
+/** Il poligono più grande di un multipoligono. */
 export function largestPolygon(mp: MultiPolygon): Polygon | undefined {
   let best: Polygon | undefined;
   let bestArea = -1;
@@ -121,4 +100,31 @@ export function bounds(mp: MultiPolygon): [number, number, number, number] {
     }
   }
   return [minX, minY, maxX, maxY];
+}
+
+// ---------------------------------------------------------------- risultati di polygon-clipping
+export type Pt = [number, number];
+export type MPoly = Pt[][][];
+
+export const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/** Da risultato di polygon-clipping (anelli chiusi) ad anelli aperti, arrotondati, senza doppioni. */
+export function tidy(mp: readonly (readonly (readonly (readonly number[])[])[])[]): MPoly {
+  const out: MPoly = [];
+  for (const poly of mp) {
+    const rings: Pt[][] = [];
+    for (const ring of poly) {
+      const r: Pt[] = [];
+      for (const [x, y] of ring) {
+        const p: Pt = [round1(x!), round1(y!)];
+        const prev = r[r.length - 1];
+        if (!prev || prev[0] !== p[0] || prev[1] !== p[1]) r.push(p);
+      }
+      while (r.length > 1 && r[0]![0] === r[r.length - 1]![0] && r[0]![1] === r[r.length - 1]![1]) r.pop();
+      if (r.length >= 3) rings.push(r);
+      else if (rings.length === 0) break; // contorno degenere: si scarta tutto il poligono
+    }
+    if (rings.length > 0) out.push(rings);
+  }
+  return out;
 }

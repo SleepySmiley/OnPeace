@@ -1,47 +1,41 @@
 /**
- * Costruisce i tabelloni a territori (data/territori/<id>.json) raggruppando i paesi di una
- * mappa reale già costruita (data/maps/<base>.json) secondo data/mondo/territori.json.
+ * Costruisce i tabelloni a territori (data/territori/<id>.json) dai dati di Natural Earth:
+ * i paesi del mondo (paesi.ts) raggruppati in territori e continenti secondo data/mondo/territori.json.
  *
- *   npm run mondo:territori            tutti i tabelloni
- *   npm run mondo:territori -- mondo   solo alcuni
+ *   npm run mondo            tutti i tabelloni
+ *   npm run mondo -- mondo   solo alcuni
  *
  * I confini per terra si ricavano dalla geografia (paesi che si toccano); quelli via mare
  * sono scritti a mano nella configurazione ("viaMare"), con gli estremi della linea in gradi.
  * "nonConfinanti" toglie un confine per terra che non si vuole (per esempio un punto di contatto).
+ * I file in data/territori/ generati da qui non vanno ritoccati a mano.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import * as pcModule from 'polygon-clipping';
 import type { Geom } from 'polygon-clipping';
+import { BoardDef, checkBoard, type BoardLinkDef, type TerritoryDef } from '@onpeace/engine';
+import { dataDir, readJson } from '../data-io';
 import {
-  BoardDef,
-  MapDef,
   bounds,
-  checkBoard,
   distanceToBoundary,
   largestPolygon,
   multiPolygonArea,
   pointInMultiPolygon,
-  type BoardLinkDef,
+  round1,
+  tidy,
   type MultiPolygon,
-  type TerritoryDef,
-} from '@onpeace/engine';
-import { dataDir, readJson } from '../data-io';
-import { laea, miller, type Projection } from './proiezioni';
-import type { LonLat } from './fonti';
-
-const pc = ((pcModule as unknown as { default?: typeof pcModule }).default ?? pcModule) as typeof pcModule;
+  type Pt,
+} from './geometria';
+import { FrameCfgS, buildCountries, makeFrame, pc, type Country } from './paesi';
 
 // ---------------------------------------------------------------- configurazione
 const IdS = z.string().regex(/^[a-z][a-z0-9_]*$/);
 const LonLatS = z.tuple([z.number(), z.number()]);
-const BoardCfgS = z.strictObject({
+const BoardCfgS = FrameCfgS.extend({
   id: IdS,
   nome: z.string().min(1),
   descrizione: z.string(),
-  /** Mappa reale (data/maps/<base>.json) da cui si prendono i paesi. */
-  base: IdS,
   /** Dove disegnare la rosa dei venti, in gradi. */
   rosa: LonLatS.optional(),
   continenti: z.array(
@@ -59,86 +53,6 @@ const BoardCfgS = z.strictObject({
 });
 type BoardCfg = z.infer<typeof BoardCfgS>;
 const FileS = z.strictObject({ tabelloni: z.array(BoardCfgS) });
-
-/** Solo la parte di data/mondo/mappe.json che serve per proiettare i punti. */
-const ProjCfgS = z.object({
-  mappe: z.array(
-    z.object({
-      id: z.string(),
-      kmPerPunto: z.number(),
-      proiezione: z.discriminatedUnion('tipo', [
-        z.object({
-          tipo: z.literal('miller'),
-          /** Tra 0 e 180: il taglio del mondo al meridiano opposto è scritto per questi valori. */
-          meridianoCentrale: z.number().min(0).max(180),
-          latMin: z.number(),
-          latMax: z.number(),
-        }),
-        z.object({ tipo: z.literal('laea'), centro: LonLatS, larghezzaKm: z.number(), altezzaKm: z.number() }),
-      ]),
-    }),
-  ),
-});
-
-const RANGE_SCALE = 16; // uguale a costruisci.ts: unità mappa per punto
-type Pt = [number, number];
-const round1 = (v: number) => Math.round(v * 10) / 10;
-
-/** Proiezione della mappa base, da scrivere nel tabellone (solo Miller per ora). */
-function projectionOf(baseId: string): BoardDef['projection'] {
-  const cfg = ProjCfgS.parse(readJson(join(dataDir, 'mondo', 'mappe.json'))).mappe.find((m) => m.id === baseId);
-  if (!cfg || cfg.proiezione.tipo !== 'miller') return undefined;
-  const pr = cfg.proiezione;
-  return { type: 'miller', centralMeridian: pr.meridianoCentrale, latMin: pr.latMin, latMax: pr.latMax, kmPerUnit: cfg.kmPerPunto / RANGE_SCALE };
-}
-
-/** Da gradi a unità della mappa base, con la stessa proiezione usata per costruirla. */
-function pointProjector(baseId: string): (p: LonLat) => Pt {
-  const cfg = ProjCfgS.parse(readJson(join(dataDir, 'mondo', 'mappe.json'))).mappe.find((m) => m.id === baseId);
-  if (!cfg) throw new Error(`mappe.json: nessuna mappa "${baseId}"`);
-  const scale = RANGE_SCALE / cfg.kmPerPunto;
-  const pr = cfg.proiezione;
-  let project: Projection;
-  let xmin: number;
-  let ymax: number;
-  let prepare = (p: LonLat): LonLat => p;
-  if (pr.tipo === 'miller') {
-    const cut = pr.meridianoCentrale - 180;
-    project = miller(pr.meridianoCentrale);
-    prepare = ([x, y]) => [x < cut ? x + 360 : x, y];
-    xmin = project([cut, 0])[0];
-    ymax = project([0, pr.latMax])[1];
-  } else {
-    project = laea(pr.centro);
-    xmin = -pr.larghezzaKm / 2;
-    ymax = pr.altezzaKm / 2;
-  }
-  return (p) => {
-    const [x, y] = project(prepare(p));
-    return [round1((x - xmin) * scale), round1((ymax - y) * scale)];
-  };
-}
-
-/** Da risultato di polygon-clipping ad anelli aperti, arrotondati, senza doppioni. */
-function tidy(mp: Pt[][][]): Pt[][][] {
-  const out: Pt[][][] = [];
-  for (const poly of mp) {
-    const rings: Pt[][] = [];
-    for (const ring of poly) {
-      const r: Pt[] = [];
-      for (const [x, y] of ring) {
-        const p: Pt = [round1(x), round1(y)];
-        const prev = r[r.length - 1];
-        if (!prev || prev[0] !== p[0] || prev[1] !== p[1]) r.push(p);
-      }
-      while (r.length > 1 && r[0]![0] === r[r.length - 1]![0] && r[0]![1] === r[r.length - 1]![1]) r.pop();
-      if (r.length >= 3) rings.push(r);
-      else if (rings.length === 0) break;
-    }
-    if (rings.length > 0) out.push(rings);
-  }
-  return out;
-}
 
 /** Punto dentro il poligono più grande, il più lontano possibile dai bordi. */
 function interiorPoint(shape: MultiPolygon): Pt {
@@ -175,10 +89,10 @@ function densePoints(ring: readonly Pt[], step: number): Pt[] {
 }
 
 /** Coppie di paesi che si toccano: almeno tre punti del contorno dell'uno a meno di `tol` da punti dell'altro. */
-function touchingCountries(map: MapDef, tol: number): Set<string> {
+function touchingCountries(countries: readonly Country[], tol: number): Set<string> {
   const cell = (v: number) => Math.floor(v / tol);
   const grid = new Map<string, Set<string>>();
-  for (const c of map.countries)
+  for (const c of countries)
     for (const poly of c.shape)
       for (const ring of poly)
         for (const [x, y] of densePoints(ring, tol)) {
@@ -186,7 +100,7 @@ function touchingCountries(map: MapDef, tol: number): Set<string> {
           (grid.get(k) ?? grid.set(k, new Set()).get(k)!).add(c.id);
         }
   const counts = new Map<string, number>();
-  for (const c of map.countries) {
+  for (const c of countries) {
     const seenHere = new Map<string, number>();
     for (const poly of c.shape)
       for (const ring of poly)
@@ -206,27 +120,28 @@ function touchingCountries(map: MapDef, tol: number): Set<string> {
 
 // ---------------------------------------------------------------- costruzione
 function buildBoard(cfg: BoardCfg): BoardDef {
-  const base = MapDef.parse(readJson(join(dataDir, 'maps', `${cfg.base}.json`)));
-  const toMap = pointProjector(cfg.base);
+  const frame = makeFrame(cfg);
+  const toMap = frame.toMap;
+  const countries = buildCountries(frame, cfg);
   const problems: string[] = [];
 
-  // ogni paese della mappa base in un solo territorio
+  // ogni paese in un solo territorio
   const territoryOf = new Map<string, string>();
   for (const cont of cfg.continenti)
     for (const t of cont.territori)
       for (const p of t.paesi) {
-        if (!base.countries.some((c) => c.id === p)) problems.push(`${t.id}: il paese "${p}" non c'è nella mappa ${cfg.base}`);
+        if (!countries.some((c) => c.id === p)) problems.push(`${t.id}: il paese "${p}" non c'è (o è stato unito a un vicino)`);
         if (territoryOf.has(p)) problems.push(`il paese "${p}" sta sia in ${territoryOf.get(p)} sia in ${t.id}`);
         territoryOf.set(p, t.id);
       }
-  for (const c of base.countries) if (!territoryOf.has(c.id)) problems.push(`il paese "${c.id}" (${c.name}) non sta in nessun territorio`);
+  for (const c of countries) if (!territoryOf.has(c.id)) problems.push(`il paese "${c.id}" (${c.name}) non sta in nessun territorio`);
   if (problems.length > 0) throw new Error(`${cfg.id}:\n  - ${problems.join('\n  - ')}`);
 
   // forme: unione dei paesi di ogni territorio
   const territories: TerritoryDef[] = [];
   for (const cont of cfg.continenti) {
     for (const t of cont.territori) {
-      const shapes = t.paesi.map((p) => base.countries.find((c) => c.id === p)!.shape);
+      const shapes = t.paesi.map((p) => countries.find((c) => c.id === p)!.shape);
       const union = shapes.length === 1 ? shapes[0]! : pc.union(...(shapes as unknown as [Geom, ...Geom[]]));
       const shape = tidy(union as Pt[][][]);
       const anchor = interiorPoint(shape as MultiPolygon);
@@ -237,7 +152,7 @@ function buildBoard(cfg: BoardCfg): BoardDef {
   // confini per terra dai paesi che si toccano
   const unwanted = new Set(cfg.nonConfinanti.map((p) => [...p].sort().join('|')));
   const links = new Map<string, BoardLinkDef>();
-  for (const key of touchingCountries(base, 1.0)) {
+  for (const key of touchingCountries(countries, 1.0)) {
     const [p, q] = key.split('|') as [string, string];
     const a = territoryOf.get(p)!;
     const b = territoryOf.get(q)!;
@@ -258,7 +173,7 @@ function buildBoard(cfg: BoardCfg): BoardDef {
     }
     const from = toMap(s.da);
     const to = toMap(s.verso);
-    const wrap = Math.abs(from[0] - to[0]) > base.width / 2;
+    const wrap = Math.abs(from[0] - to[0]) > frame.width / 2;
     links.set(k, { a: s.a, b: s.b, sea: true, line: [from, to], ...(wrap ? { wrap: true } : {}) });
   }
 
@@ -267,8 +182,8 @@ function buildBoard(cfg: BoardCfg): BoardDef {
     id: cfg.id,
     name: cfg.nome,
     description: `${cfg.descrizione} Dati geografici: Natural Earth (pubblico dominio).`,
-    width: base.width,
-    height: base.height,
+    width: frame.width,
+    height: frame.height,
     continents: cfg.continenti.map((c) => ({
       id: c.id,
       name: c.nome,
@@ -278,7 +193,13 @@ function buildBoard(cfg: BoardCfg): BoardDef {
     territories,
     links: [...links.values()].sort((l, m) => l.a.localeCompare(m.a) || l.b.localeCompare(m.b)),
     ...(cfg.rosa ? { compass: toMap(cfg.rosa) } : {}),
-    ...(projectionOf(cfg.base) ? { projection: projectionOf(cfg.base) } : {}),
+    projection: {
+      type: 'miller',
+      centralMeridian: cfg.proiezione.meridianoCentrale,
+      latMin: cfg.proiezione.latMin,
+      latMax: cfg.proiezione.latMax,
+      kmPerUnit: cfg.kmPerUnita,
+    },
   });
 }
 

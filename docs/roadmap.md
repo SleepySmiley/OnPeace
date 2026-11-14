@@ -25,15 +25,11 @@ Cosa resta da fare, in ordine. Si lavora un punto alla volta, con calma, anche s
 
 - **M12.13 — cosa fare adesso, avvisi e carte in mano.** Su una pagina di prova con cinque domande hai scelto: in alto al centro chi gioca, il percorso ① Rinforzi ② Attacco ③ Spostamento (✓ le fasi fatte, quella in corso piena nel colore di chi gioca) e il tempo, al posto delle fasi a schede; quando tocca a te una fascia attraversa lo schermo ("Tocca a te · Rinforzi, 3 armate da mettere", poi "Attacco", "Spostamento"; in piccolo in alto quando tocca agli altri) e finché la mossa è tua il bordo dello schermo resta acceso nel tuo colore; quello che fanno gli altri esce dai territori sulla mappa ("+3", "−2", "Marco conquista", "Luca ti prende") e svanisce, mentre eliminazioni, tris e vittoria restano qualche secondo in basso a destra; carte e obiettivo stanno in mano, a ventaglio nell'angolo in basso a sinistra (l'obiettivo coperto per primo), si aprono passandoci sopra e con un clic si vedono grandi al centro coi tris; le carte pescate volano lì. Registro e chat in un cassetto a destra, col bottone in basso a destra. Col vetro le frecce d'attacco sono chiare col bordo scuro (col colore di chi attacca sul suo territorio non si vedevano). La barra dei comandi resta tra la mano e il registro e va a capo se non ci sta. Corretti anche: dopo una tua battaglia la camera non tornava indietro se in coda c'erano solo battaglie degli altri; cambiando lo spazio libero la mappa ingrandita tornava alla vista d'insieme.
 
+- **M12.14 — pulizia e chiusura di M12.** Tolto quello che restava del vecchio gioco in stile atWar: in `packages/engine` restano solo formato e controlli del tabellone, errori e numeri casuali (la geometria è passata agli strumenti del tabellone); via `data/maps`, `data/rules`, gli schemi vecchi, il generatore di mappe inventate, la configurazione di città, montagne e passaggi e la ricerca su atWar. Il tabellone ora si costruisce in un passo solo dai dati di Natural Earth (`npm run mondo`), senza la vecchia mappa del mondo in mezzo, ed esce identico a prima. Riscritti `docs/progetto.md` e il README. `m12-partita` unito in `main`.
+
 ## Da fare
 
-### 1. Pulizia e chiusura di M12
-
-- Togliere quello che resta del vecchio gioco in stile atWar:
-  - in `packages/engine`, tenere solo schema e controlli del tabellone, errori e numeri casuali;
-  - eliminare `data/maps`, `data/rules` e gli strumenti delle vecchie mappe.
-- Riscrivere `docs/progetto.md`, che descrive ancora il vecchio gioco.
-- Unire `m12-partita` in `main`.
+Niente in coda. Il prossimo passo naturale è una serata vera col gioco nuovo: da lì escono le cose da sistemare, che finiscono qui.
 
 ## Lasciati indietro di proposito
 

@@ -1,7 +1,6 @@
 /**
- * Generatore pseudo-casuale deterministico (mulberry32).
- * Ogni turno usa un seme registrato: con lo stesso seme e le stesse azioni
- * il risultato è identico, quindi replay e test sono riproducibili.
+ * Generatore pseudo-casuale deterministico (mulberry32): stesso seme, stessa sequenza.
+ * Serve a test e prove: le partite vere usano quello da 128 bit di @onpeace/conquista (random.ts).
  */
 export interface Rng {
   /** Numero in [0, 1). */
@@ -34,14 +33,4 @@ export function createRng(seed: number): Rng {
     },
     state: () => s,
   };
-}
-
-/** Seme a 32 bit da una stringa (es. id partita + numero turno). */
-export function seedFromString(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
 }
