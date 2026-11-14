@@ -18,6 +18,8 @@ export interface PlayerView {
   objective: string | null;
   setupLeft: number;
   setupDone: boolean;
+  /** Piazzamento tutti insieme: le proprie armate già decise e ancora coperte. */
+  pending: Record<string, number> | null;
   eliminatedBy?: string;
 }
 
@@ -51,6 +53,7 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
         objective: visible && p.objective ? describeObjective(ctx, state, p.objective) : null,
         setupLeft: p.setupLeft,
         setupDone: p.setupDone,
+        pending: visible ? (p.pending ?? null) : null,
         ...(p.eliminatedBy ? { eliminatedBy: p.eliminatedBy } : {}),
       };
     }),
@@ -66,11 +69,13 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
 
 /**
  * Eventi visibili a un giocatore: la carta pescata si vede solo da chi la pesca; il cambio di
- * obiettivo solo dall'interessato (agli altri rivelerebbe chi doveva eliminare chi).
+ * obiettivo solo dall'interessato (agli altri rivelerebbe chi doveva eliminare chi); nel
+ * piazzamento tutti insieme, dove ha messo le armate un altro resta coperto.
  */
 export function eventsFor(events: readonly GameEvent[], viewer: string | null): GameEvent[] {
   return events.flatMap((e) => {
     if (e.type === 'card' && e.player !== viewer) return [{ ...e, card: null }];
+    if (e.type === 'setup-place' && e.hidden && e.player !== viewer) return [{ ...e, placements: {} }];
     if (e.type === 'objective-changed' && e.player !== viewer) return [];
     return [e];
   });

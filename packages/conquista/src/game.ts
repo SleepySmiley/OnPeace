@@ -167,6 +167,11 @@ function endTurn(ctx: GameContext, state: GameState, events: GameEvent[]) {
 
 function finishSetupIfReady(ctx: GameContext, state: GameState, events: GameEvent[]) {
   if (!state.players.every((p) => p.setupDone)) return;
+  // piazzamento tutti insieme: le armate coperte si scoprono adesso, tutte nello stesso momento
+  for (const p of state.players) {
+    for (const [tid, n] of Object.entries(p.pending ?? {})) state.territories[tid]!.armies += n;
+    delete p.pending;
+  }
   state.setupPlayer = null;
   startTurn(ctx, state, state.order[0]!, events);
 }
@@ -255,10 +260,12 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
     assertRule(!rounds || state.setupPlayer === id, 'Non tocca a te piazzare.');
     const step = setupStep(ctx, state, id);
     checkPlacements(ctx, state, id, action.placements, step);
-    for (const [tid, n] of Object.entries(action.placements)) state.territories[tid]!.armies += n;
+    // tutti insieme si piazza alla cieca: le armate restano coperte finché non hanno confermato tutti
+    if (rounds) for (const [tid, n] of Object.entries(action.placements)) state.territories[tid]!.armies += n;
+    else me.pending = action.placements;
     me.setupLeft -= step;
     me.setupDone = me.setupLeft === 0;
-    events.push({ type: 'setup-place', player: id, placements: action.placements, left: me.setupLeft });
+    events.push({ type: 'setup-place', player: id, placements: action.placements, left: me.setupLeft, ...(rounds ? {} : { hidden: true }) });
     if (rounds) state.setupPlayer = nextToPlace(state, id);
     finishSetupIfReady(ctx, state, events);
     return { state, events };

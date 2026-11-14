@@ -28,6 +28,8 @@ export interface PlayerState {
   setupLeft: number;
   /** Ha confermato il piazzamento iniziale. */
   setupDone: boolean;
+  /** Piazzamento tutti insieme: armate già decise ma ancora coperte, si scoprono quando hanno confermato tutti. */
+  pending?: Record<string, number>;
   eliminatedBy?: string;
 }
 
@@ -101,7 +103,7 @@ export const ActionS = z.discriminatedUnion('kind', [
 export type Action = z.infer<typeof ActionS>;
 
 export type GameEvent =
-  | { type: 'setup-place'; player: string; placements: Record<string, number>; left: number }
+  | { type: 'setup-place'; player: string; placements: Record<string, number>; left: number; hidden?: boolean }
   | { type: 'turn'; player: string; number: number; reinforcements: number }
   | { type: 'set'; player: string; cards: Card[]; armies: number }
   | { type: 'reinforce'; player: string; placements: Record<string, number> }

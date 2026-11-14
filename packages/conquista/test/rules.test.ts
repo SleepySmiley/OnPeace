@@ -136,16 +136,30 @@ describe('preparazione tutti insieme (variante)', () => {
   const quick = worldContext((r) => {
     (r.setup as { placement: string }).placement = 'simultaneous';
   });
-  it('ognuno piazza tutto in una volta, senza turni', () => {
+  it('ognuno piazza tutto in una volta, senza turni e alla cieca', () => {
     let s = newGame(2, 'conquest', 7, quick);
     const [a, b] = s.order as [string, string];
     expect(s.setupPlayer).toBeNull();
     const leftB = s.players.find((p) => p.id === b)!.setupLeft;
-    s = applyAction(quick, s, b, { kind: 'setup-place', placements: { [ownedBy(s, b)[0]!]: leftB } }).state;
+    const where = ownedBy(s, b)[0]!;
+    const placed = applyAction(quick, s, b, { kind: 'setup-place', placements: { [where]: leftB } });
+    s = placed.state;
     expect(s.phase).toBe('setup');
+    // a non vede dove ha piazzato b, né sul tabellone né negli eventi; b sì
+    expect(viewFor(quick, s, a).territories[where]!.armies).toBe(1);
+    expect(eventsFor(placed.events, a)[0]).toMatchObject({ type: 'setup-place', placements: {} });
+    expect(viewFor(quick, s, b).players.find((p) => p.id === b)!.pending).toEqual({ [where]: leftB });
+    expect(viewFor(quick, s, a).players.find((p) => p.id === b)!.pending).toBeNull();
+    // quando hanno confermato tutti si scopre tutto insieme
     const r = timeout(quick, s);
     expect(r.state.phase).toBe('reinforce');
     expect(r.state.turn!.player).toBe(a);
+    expect(r.state.territories[where]!.armies).toBe(1 + leftB);
+    for (const p of r.state.players) {
+      const armies = ownedBy(r.state, p.id).reduce((n, t) => n + r.state.territories[t]!.armies, 0);
+      expect(armies).toBe(quick.rules.initialArmies['2']);
+      expect(p.pending).toBeUndefined();
+    }
   });
 });
 
