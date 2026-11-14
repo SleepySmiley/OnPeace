@@ -5,9 +5,11 @@
       "nome": "Mondo",
       "descrizione": "Il mondo di oggi diviso in 47 territori e sei continenti.",
       "base": "mondo",
+      "rosa": [-138, -24],
       "continenti": [
         {
           "id": "nordamerica",
+          "etichetta": [-146, 36],
           "nome": "Nord America",
           "bonus": 5,
           "territori": [
@@ -27,6 +29,7 @@
         },
         {
           "id": "sudamerica",
+          "etichetta": [-102, -30],
           "nome": "Sud America",
           "bonus": 2,
           "territori": [
@@ -39,6 +42,7 @@
         },
         {
           "id": "europa",
+          "etichetta": [-30, 50],
           "nome": "Europa",
           "bonus": 5,
           "territori": [
@@ -60,6 +64,7 @@
         },
         {
           "id": "africa",
+          "etichetta": [-10, -16],
           "nome": "Africa",
           "bonus": 3,
           "territori": [
@@ -83,6 +88,7 @@
         },
         {
           "id": "asia",
+          "etichetta": [80, -6],
           "nome": "Asia",
           "bonus": 7,
           "territori": [
@@ -110,6 +116,7 @@
         },
         {
           "id": "oceania",
+          "etichetta": [110, -38],
           "nome": "Oceania",
           "bonus": 2,
           "territori": [

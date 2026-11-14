@@ -9,32 +9,56 @@
     {
       "id": "nordamerica",
       "name": "Nord America",
-      "bonus": 5
+      "bonus": 5,
+      "label": [
+        682,
+        2285.1
+      ]
     },
     {
       "id": "sudamerica",
       "name": "Sud America",
-      "bonus": 2
+      "bonus": 2,
+      "label": [
+        1986.7,
+        4317.4
+      ]
     },
     {
       "id": "europa",
       "name": "Europa",
-      "bonus": 5
+      "bonus": 5,
+      "label": [
+        4121.6,
+        1780.4
+      ]
     },
     {
       "id": "africa",
       "name": "Africa",
-      "bonus": 3
+      "bonus": 3,
+      "label": [
+        4714.7,
+        3879
+      ]
     },
     {
       "id": "asia",
       "name": "Asia",
-      "bonus": 7
+      "bonus": 7,
+      "label": [
+        7383.3,
+        3578.7
+      ]
     },
     {
       "id": "oceania",
       "name": "Oceania",
-      "bonus": 2
+      "bonus": 2,
+      "label": [
+        8272.9,
+        4584.3
+      ]
     }
   ],
   "territories": [
@@ -1004,5 +1028,9 @@
     {"a":"russia_europea","b":"ucraina","sea":false},
     {"a":"usa_centro","b":"usa_est","sea":false},
     {"a":"usa_centro","b":"usa_ovest","sea":false}
+  ],
+  "compass": [
+    919.2,
+    4126
   ]
 }

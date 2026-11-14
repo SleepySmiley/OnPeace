@@ -42,9 +42,13 @@ const BoardCfgS = z.strictObject({
   descrizione: z.string(),
   /** Mappa reale (data/maps/<base>.json) da cui si prendono i paesi. */
   base: IdS,
+  /** Dove disegnare la rosa dei venti, in gradi. */
+  rosa: LonLatS.optional(),
   continenti: z.array(
     z.strictObject({
       id: IdS,
+      /** Dove scrivere nome e bonus del continente, in gradi. */
+      etichetta: LonLatS.optional(),
       nome: z.string().min(1),
       bonus: z.number().int().min(0),
       territori: z.array(z.strictObject({ id: IdS, nome: z.string().min(1), paesi: z.array(IdS).min(1) })).min(1),
@@ -239,9 +243,15 @@ function buildBoard(cfg: BoardCfg): BoardDef {
     description: `${cfg.descrizione} Dati geografici: Natural Earth (pubblico dominio).`,
     width: base.width,
     height: base.height,
-    continents: cfg.continenti.map((c) => ({ id: c.id, name: c.nome, bonus: c.bonus })),
+    continents: cfg.continenti.map((c) => ({
+      id: c.id,
+      name: c.nome,
+      bonus: c.bonus,
+      ...(c.etichetta ? { label: toMap(c.etichetta) } : {}),
+    })),
     territories,
     links: [...links.values()].sort((l, m) => l.a.localeCompare(m.a) || l.b.localeCompare(m.b)),
+    ...(cfg.rosa ? { compass: toMap(cfg.rosa) } : {}),
   });
 }
 

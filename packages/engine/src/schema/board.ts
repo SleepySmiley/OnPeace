@@ -11,6 +11,8 @@ export const ContinentDef = z.strictObject({
   name: z.string().min(1),
   /** Armate in più a ogni turno per chi tiene tutto il continente. */
   bonus: z.number().int().min(0),
+  /** Dove scrivere nome e bonus del continente (di solito in mare, vicino alla costa). */
+  label: PointS.optional(),
 });
 export type ContinentDef = z.infer<typeof ContinentDef>;
 
@@ -48,6 +50,8 @@ export const BoardDef = z.strictObject({
   continents: z.array(ContinentDef).min(1),
   territories: z.array(TerritoryDef).min(2),
   links: z.array(BoardLinkDef).min(1),
+  /** Dove disegnare la rosa dei venti (facoltativo). */
+  compass: PointS.optional(),
 });
 export type BoardDef = z.infer<typeof BoardDef>;
 
