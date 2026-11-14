@@ -24,7 +24,9 @@
     "prova": "tsx tools/prova-generale.ts",
     "mondo": "tsx tools/mondo/costruisci.ts",
     "mondo:scarica": "tsx tools/mondo/scarica.ts",
-    "mondo:anteprima": "tsx tools/mondo/anteprima.ts"
+    "mondo:anteprima": "tsx tools/mondo/anteprima.ts",
+    "mondo:territori": "tsx tools/mondo/territori.ts",
+    "mondo:anteprima-territori": "tsx tools/mondo/anteprima-territori.ts"
   },
   "engines": {
     "node": ">=22"
