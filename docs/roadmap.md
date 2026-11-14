@@ -36,6 +36,8 @@ Idee di partenza:
 - il duello tra le due pedine;
 - la mappa che zooma sui due territori, con i dadi in primo piano.
 
+**Pagina di prova: `battaglia.html`** (14/11). La partita vera in locale, con la scena in cinque proposte da confrontare giocando: A tavolo, B duello con le sagome dei territori, C mappa che zooma, D riquadro, E **carri armati** (la tua idea: zoom sui due stati, si tirano i dadi e i carri si sparano; carri visti di lato o dall'alto). Dal pannello in alto a destra si scelgono anche "fino in fondo" (tiro per tiro o conto veloce) e cosa vedono gli altri (in piccolo, scena intera, niente), e si possono far partire battaglie finte. Dadi in 3D veri, suoni nuovi (dadi, colpo d'aria, cannonata).
+
 ### 2. Pesca della carta a fine turno
 
 Il problema: oggi la carta arriva senza che te ne accorgi. Vuoi cliccare un mazzo e ricevere la carta in modo scenico.

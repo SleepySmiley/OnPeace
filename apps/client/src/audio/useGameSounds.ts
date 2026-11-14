@@ -3,6 +3,12 @@ import { useEffect, useRef } from 'react';
 import type { ChatLine, LoggedEvent } from '@onpeace/protocol';
 import { sfx } from './sfx';
 
+/** I suoni delle battaglie li fa la scena della battaglia, quando c'è (al momento giusto dei dadi). */
+let battlesByScene = false;
+export function setBattleSoundsByScene(on: boolean): void {
+  battlesByScene = on;
+}
+
 /** Avviso singolo quando mancano questi secondi. */
 const WARN_AT = 30;
 /** Negli ultimi secondi un tic al secondo. */
@@ -32,15 +38,15 @@ export function useGameSounds({ me, fresh, deadline, paused, myMove, chat }: Arg
     }
     if (events.some((e) => e.type === 'eliminated' && e.player === me)) return sfx.play('defeat');
     if (events.some((e) => e.type === 'turn' && e.player === me)) sfx.play('yourPick');
-    else if (events.some((e) => e.type === 'turn' || e.type === 'setup-reveal')) sfx.play('turn', 0.6);
-    const battles = events.filter((e) => e.type === 'battle');
+    else if (events.some((e) => e.type === 'turn' || e.type === 'setup-reveal')) sfx.play('turn', 0, 0.6);
+    const battles = battlesByScene ? [] : events.filter((e) => e.type === 'battle');
     const lost = battles.some((b) => b.conquered && b.defender === me);
     const won = battles.some((b) => b.conquered && b.player === me);
     if (lost) sfx.play('loss');
     else if (won) sfx.play('capture');
-    else if (battles.some((b) => b.player === me || b.defender === me)) sfx.play(battles.some((b) => b.attackerLosses === 0) ? 'hit' : 'battle', 0.7);
-    else if (battles.length > 0) sfx.play('battle', 0.35);
-    if (events.some((e) => e.type === 'card' && e.player === me)) sfx.play('build', 0.5);
+    else if (battles.some((b) => b.player === me || b.defender === me)) sfx.play(battles.some((b) => b.attackerLosses === 0) ? 'hit' : 'battle', 0, 0.7);
+    else if (battles.length > 0) sfx.play('battle', 0, 0.35);
+    if (events.some((e) => e.type === 'card' && e.player === me)) sfx.play('build', 0, 0.5);
   }, [fresh, me]);
 
   // ---------------------------------------------------------------- tempo che sta per finire

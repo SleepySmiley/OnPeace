@@ -45,6 +45,7 @@ export class BoardPainter {
   private readonly resizeObserver: ResizeObserver;
   private destroyed = false;
   private readonly off: (() => void)[] = [];
+  private flight = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -73,6 +74,7 @@ export class BoardPainter {
     this.resizeObserver.disconnect();
     for (const f of this.off) f();
     window.clearTimeout(this.idleTimer);
+    cancelAnimationFrame(this.flight);
   }
 
   // ---------------------------------------------------------------- dall'esterno
@@ -124,10 +126,92 @@ export class BoardPainter {
     this.viewChanged();
   }
 
-  /** Posizione sullo schermo (pixel CSS dentro il canvas) del segnaposto di un territorio. */
-  territoryOnScreen(id: string): [number, number] | null {
+  /** Posizione sullo schermo (pixel CSS dentro il canvas) del segnaposto di un territorio, con la vista attuale o con `view`. */
+  territoryOnScreen(id: string, view: BoardView = this.view): [number, number] | null {
     const t = this.geo.board.territories.find((x) => x.id === id);
-    return t ? this.screenOf(t.anchor) : null;
+    return t ? [t.anchor[0] * view.scale + view.x, t.anchor[1] * view.scale + view.y] : null;
+  }
+
+  /** La vista in questo momento. */
+  currentView(): BoardView {
+    return { ...this.view };
+  }
+
+  /**
+   * La vista che inquadra questi territori nel riquadro libero `box` (pixel CSS: sinistra, alto,
+   * destra, basso), senza ingrandire troppo i territori piccoli né rimpicciolire sotto la vista d'insieme.
+   */
+  viewFor(ids: string[], box: { left: number; top: number; right: number; bottom: number }, maxZoom = 5): BoardView {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const id of ids) {
+      const b = this.geo.boxes.get(id);
+      if (!b) continue;
+      x0 = Math.min(x0, b[0]);
+      y0 = Math.min(y0, b[1]);
+      x1 = Math.max(x1, b[2]);
+      y1 = Math.max(y1, b[3]);
+    }
+    if (!Number.isFinite(x0)) return { ...this.view };
+    const bw = Math.max(1, box.right - box.left);
+    const bh = Math.max(1, box.bottom - box.top);
+    const scale = Math.min(this.fitScale * maxZoom, Math.max(this.fitScale, Math.min(bw / (x1 - x0), bh / (y1 - y0))));
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    return { scale, x: box.left + bw / 2 - cx * scale, y: box.top + bh / 2 - cy * scale };
+  }
+
+  /**
+   * La vista centrata tra i segnaposti di questi territori nel riquadro `box`, ingrandita finché i due più
+   * lontani stanno a `spread` pixel (senza scendere sotto la vista d'insieme né salire oltre `maxZoom`).
+   */
+  viewAround(ids: string[], box: { left: number; top: number; right: number; bottom: number }, spread: number, maxZoom = 5): BoardView {
+    const pts = ids.map((id) => this.geo.board.territories.find((t) => t.id === id)?.anchor).filter((p) => p !== undefined);
+    if (pts.length === 0) return { ...this.view };
+    let far = 0;
+    for (const a of pts) for (const b of pts) far = Math.max(far, Math.hypot(a[0] - b[0], a[1] - b[1]));
+    const scale = Math.min(this.fitScale * maxZoom, Math.max(this.fitScale, spread / Math.max(far, 1)));
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+    return { scale, x: (box.left + box.right) / 2 - cx * scale, y: (box.top + box.bottom) / 2 - cy * scale };
+  }
+
+  /** Porta la vista a `to` con un movimento di macchina da presa (ms); si ferma se si trascina la mappa. */
+  flyTo(to: BoardView, ms = 600): Promise<void> {
+    cancelAnimationFrame(this.flight);
+    const from = { ...this.view };
+    if (ms <= 0) {
+      this.view = { ...to };
+      this.viewChanged();
+      return Promise.resolve();
+    }
+    // allontanandosi, l'ultima immagine nitida copre solo un pezzo dello schermo: si disegna subito quella
+    // dell'arrivo (durante il volo si vede ingrandita, poi torna nitida)
+    if (to.scale < from.scale * 0.98) {
+      this.view = { ...to };
+      this.renderStatic();
+      this.view = from;
+    }
+    // si interpola sulla scala in logaritmo e sul punto del tabellone al centro dello schermo: niente scivolate di lato
+    const { w, h } = this.size();
+    const mid = (v: BoardView) => [(w / 2 - v.x) / v.scale, (h / 2 - v.y) / v.scale] as const;
+    const [ax, ay] = mid(from);
+    const [bx, by] = mid(to);
+    const t0 = performance.now();
+    return new Promise((done) => {
+      const step = (now: number) => {
+        if (this.destroyed || this.drag) return done();
+        const k = Math.min(1, (now - t0) / ms);
+        const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+        const scale = Math.exp(Math.log(from.scale) + (Math.log(to.scale) - Math.log(from.scale)) * e);
+        const px = ax + (bx - ax) * e;
+        const py = ay + (by - ay) * e;
+        this.view = { scale, x: w / 2 - px * scale, y: h / 2 - py * scale };
+        this.viewChanged();
+        if (k < 1) this.flight = requestAnimationFrame(step);
+        else done();
+      };
+      this.flight = requestAnimationFrame(step);
+    });
   }
 
   // ---------------------------------------------------------------- disegno

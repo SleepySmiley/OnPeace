@@ -118,9 +118,15 @@ function Board({ onPainter }: { onPainter: (p: BoardPainter | null) => void }) {
 interface Props {
   /** In più nella barra in alto (pagina di prova). */
   topbarExtra?: ReactNode;
+  /** Per chi sta sopra il tabellone e deve muoverne la vista (pagina di prova). */
+  onPainter?: (p: BoardPainter | null) => void;
+  /** Una scena sopra il tabellone, sotto la barra dei comandi (pagina di prova). */
+  scene?: ReactNode;
+  /** false: la vista non va da sola sul territorio attaccato (ci pensa la scena). */
+  revealBattles?: boolean;
 }
 
-export function GameScreen({ topbarExtra }: Props = {}) {
+export function GameScreen({ topbarExtra, onPainter, scene, revealBattles = true }: Props = {}) {
   const game = useGame();
   const { view, lobby, me, move } = game;
   const online = useSession((s) => s.online);
@@ -152,9 +158,12 @@ export function GameScreen({ topbarExtra }: Props = {}) {
 
   // nuovo turno mio: il territorio conquistato o perso di recente resta in vista
   useEffect(() => {
+    if (!revealBattles) return;
     const battle = fresh?.events.findLast((e) => e.event.type === 'battle');
     if (battle && battle.event.type === 'battle' && battle.event.defender === me) painter?.reveal(battle.event.to);
-  }, [fresh, me, painter]);
+  }, [fresh, me, painter, revealBattles]);
+
+  useEffect(() => onPainter?.(painter), [painter, onPainter]);
 
   // in sviluppo, per le prove automatiche: il tabellone e la sessione raggiungibili dalla console
   useEffect(() => {
@@ -201,6 +210,7 @@ export function GameScreen({ topbarExtra }: Props = {}) {
       <div className="corner-players panel">
         <PlayersPanel />
       </div>
+      {scene}
       {move.kind !== 'briefing' && <CommandBar />}
       <div className="corner-tools">
         <button type="button" className="pill panel" aria-expanded={cardsOpen} onClick={() => setCardsOpen((o) => !o)}>

@@ -111,7 +111,12 @@ const LOG_KEEP = 300;
 /** Se il server non risponde a una mossa entro tanto, si sblocca comunque l'interfaccia. */
 const SEND_TIMEOUT_MS = 8000;
 /** Pausa tra un tiro e l'altro dell'attacco continuo: il tempo di vedere i dadi. */
-const BLITZ_STEP_MS = 420;
+let BLITZ_STEP_MS = 420;
+
+/** La scena della battaglia decide quanto dura un tiro: l'attacco continuo le va dietro. */
+export function setBlitzStep(ms: number): void {
+  BLITZ_STEP_MS = ms;
+}
 
 /** Il collegamento col server: il WebSocket vero, o un server finto nelle pagine di prova. */
 export interface Link {

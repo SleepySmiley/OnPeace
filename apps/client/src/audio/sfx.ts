@@ -32,7 +32,10 @@ export type SoundName =
   | 'defeat'
   | 'hit'
   | 'crit'
-  | 'kill';
+  | 'kill'
+  | 'dice'
+  | 'whoosh'
+  | 'cannon';
 
 type Synth = (ac: BaseAudioContext, out: AudioNode, t: number, noise: AudioBuffer) => void;
 
@@ -266,6 +269,27 @@ export const SOUNDS: Record<SoundName, Synth> = {
     tone(ac, out, t, { freq: 95, to: 40, dur: 0.3, gain: 0.34 });
     noise(ac, out, t, n, { dur: 0.25, gain: 0.16, filter: 'lowpass', freq: 600, to: 200 });
   },
+  /** Dadi che rotolano sul tavolo: colpetti di legno sempre più fitti e più piano, poi fermi. */
+  dice: (ac, out, t, n) => {
+    const hits = [0, 0.075, 0.14, 0.195, 0.245, 0.29, 0.325, 0.355, 0.38];
+    hits.forEach((d, k) => {
+      const g = 0.2 * (1 - k / (hits.length + 1));
+      noise(ac, out, t + d, n, { dur: 0.022, gain: g, filter: 'bandpass', freq: 2600 + ((k * 733) % 1400), q: 3.5 });
+      tone(ac, out, t + d, { type: 'triangle', freq: 900 + ((k * 211) % 500), dur: 0.025, gain: g * 0.35 });
+    });
+    tone(ac, out, t + 0.4, { freq: 210, to: 150, dur: 0.06, gain: 0.12 });
+  },
+  /** Colpo di cannone di un carro: lo schiocco, il botto basso e la coda. */
+  cannon: (ac, out, t, n) => {
+    noise(ac, out, t, n, { dur: 0.03, gain: 0.22, filter: 'bandpass', freq: 2600, q: 0.9 });
+    tone(ac, out, t, { freq: 130, to: 42, dur: 0.28, gain: 0.4 });
+    noise(ac, out, t + 0.01, n, { dur: 0.42, gain: 0.22, filter: 'lowpass', freq: 1400, to: 160 });
+  },
+  /** Ingresso della scena: un colpo d'aria che sale. */
+  whoosh: (ac, out, t, n) => {
+    noise(ac, out, t, n, { dur: 0.32, gain: 0.16, filter: 'bandpass', freq: 380, to: 2600, q: 1.4, attack: 0.16 });
+    tone(ac, out, t + 0.3, { freq: 82, to: 46, dur: 0.35, gain: 0.22 });
+  },
 };
 
 /**
@@ -301,6 +325,9 @@ export const MIX: Record<SoundName, number> = {
   hit: 1,
   crit: 0.65,
   kill: 0.6,
+  dice: 1,
+  whoosh: 0.9,
+  cannon: 0.8,
 };
 
 /** Suona `name` al tempo `t` dentro `out`, al suo livello di mixaggio. */
@@ -386,8 +413,8 @@ class Sfx {
     }
   }
 
-  /** Suona `name` tra `delay` secondi (se l'audio è attivo). */
-  play(name: SoundName, delay = 0): void {
+  /** Suona `name` tra `delay` secondi (se l'audio è attivo), a volume `gain` (1 = il suo livello). */
+  play(name: SoundName, delay = 0, gain = 1): void {
     const ac = this.ac;
     if (!ac || !this.out || !this.noiseBuffer || ac.state !== 'running' || gainFor(this.settings) === 0) return;
     const t = ac.currentTime + 0.005 + delay;
@@ -395,7 +422,13 @@ class Sfx {
     if (t - prev < MIN_GAP) return;
     this.last.set(name, t);
     try {
-      render(name, ac, this.out.input, t, this.noiseBuffer);
+      if (gain === 1) render(name, ac, this.out.input, t, this.noiseBuffer);
+      else {
+        const g = ac.createGain();
+        g.gain.value = gain;
+        g.connect(this.out.input);
+        render(name, ac, g, t, this.noiseBuffer);
+      }
     } catch {
       // un suono che non parte non deve mai fermare il gioco
     }
