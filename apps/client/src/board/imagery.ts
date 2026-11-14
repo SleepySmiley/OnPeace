@@ -47,8 +47,9 @@ function reproject(img: HTMLImageElement, board: BoardDef, outWidth: number): HT
   ctx.imageSmoothingQuality = 'high';
   const sw = img.naturalWidth;
   const sh = img.naturalHeight;
-  // colonna della foto dove comincia il tabellone (longitudine del taglio)
-  const sx0 = ((frame.cut + 180) / 360) * sw;
+  // colonna della foto dove comincia il tabellone (longitudine del taglio, riportata tra -180 e 180:
+  // con un meridiano centrale negativo, per esempio un tabellone delle Americhe, sarebbe fuori dalla foto)
+  const sx0 = (((((frame.cut + 180) % 360) + 360) % 360) / 360) * sw;
   const split = (sw - sx0) * (outWidth / sw);
   for (let oy = 0; oy < out.height; oy++) {
     const lat = frame.lat((oy + 0.5) / s);

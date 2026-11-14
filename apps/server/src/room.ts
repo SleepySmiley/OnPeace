@@ -79,6 +79,8 @@ export interface RoomDeps {
   /** Lo stato della stanza è cambiato: va salvato. */
   changed: (room: Room) => void;
   isConnected: (player: PlayerId) => boolean;
+  /** Chiude le connessioni del giocatore. */
+  disconnect: (player: PlayerId) => void;
   log: Logger;
 }
 
@@ -346,8 +348,10 @@ export class Room {
       const need = this.world.ctx.rules.game.kickAfterInactiveTurns;
       if (seat.inactiveTurns < need) return `Si può espellere solo chi è inattivo da ${need} turni`;
       this.removeFromGame(target);
+      seat.token = newToken(); // il vecchio token non fa più rientrare
     }
     this.deps.send(target, { t: 'kicked', reason: 'Sei stato espulso dalla partita' });
+    this.deps.disconnect(target); // non aspetta che sia il suo browser a chiudere
     this.deps.log.info(`Partita ${this.id}: espulso ${seat.name}`);
     this.touch();
     this.broadcastAll();
@@ -377,12 +381,17 @@ export class Room {
     const state = this.s.state;
     // a partita finita uscire non cambia più nulla
     if (!state || this.s.phase === 'ended' || getPlayer(state, player).status !== 'active') return;
+    const wasPicking = this.picker() === player;
     const events: TurnEvent[] = [];
     eliminate(state, player, events);
     getPlayer(state, player).status = 'left';
     delete this.s.plans[player];
     this.s.done = this.s.done.filter((x) => x !== player);
-    if (this.s.phase === 'selection') this.s.skipped.push(player);
+    if (this.s.phase === 'selection') {
+      this.s.skipped.push(player);
+      // se toccava a lui (o non resta nessuno da aspettare) la scelta va avanti, col tempo che riparte
+      if (wasPicking || this.picker() === null) this.afterPick();
+    }
   }
 
   // ---------------------------------------------------------------- tempo

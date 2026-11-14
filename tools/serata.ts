@@ -17,7 +17,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const args = new Set(process.argv.slice(2));
 const PORT = Number(process.env.PORT ?? 3210);
 const LOCAL = `http://localhost:${PORT}`;
-const TUNNEL_URL = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+// non "api.trycloudflare.com": cloudflared lo scrive nei messaggi d'errore quando il tunnel non parte
+const TUNNEL_URL = /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com/;
 /** Il server esce con 2 quando non ha senso riavviarlo (es. porta occupata). */
 const EXIT_NO_RESTART = 2;
 
@@ -39,7 +40,16 @@ function clientIsStale(): boolean {
   const index = join(root, 'apps', 'client', 'dist', 'index.html');
   if (!existsSync(index)) return true;
   const built = statSync(index).mtimeMs;
-  const sources = ['apps/client/src', 'apps/client/index.html', 'packages/engine/src', 'packages/protocol/src', 'data'];
+  const sources = [
+    'apps/client/src',
+    'apps/client/public',
+    'apps/client/index.html',
+    'apps/client/vite.config.ts',
+    'packages/engine/src',
+    'packages/conquista/src',
+    'packages/protocol/src',
+    'data',
+  ];
   return sources.some((s) => newest(join(root, s)) > built);
 }
 
@@ -128,6 +138,8 @@ function findCloudflared(): string | null {
 }
 
 let tunnel: ChildProcess | null = null;
+/** Riaperture del tunnel di fila senza indirizzo (es. senza Internet): si aspetta sempre di più, fino a un minuto. */
+let tunnelFailures = 0;
 
 function startTunnel(bin: string): void {
   const recent: string[] = [];
@@ -141,6 +153,7 @@ function startTunnel(bin: string): void {
       const m = !found && TUNNEL_URL.exec(line);
       if (m) {
         found = true;
+        tunnelFailures = 0;
         void tunnelReady(m[0]);
       }
     }
@@ -160,7 +173,8 @@ function startTunnel(bin: string): void {
     for (const l of recent.slice(-5)) console.log(`    ${l}`);
     publicUrl = null;
     tellServer();
-    setTimeout(() => !stopping && startTunnel(bin), 3000);
+    if (!found) tunnelFailures++;
+    setTimeout(() => !stopping && startTunnel(bin), Math.min(60_000, 3000 * 2 ** tunnelFailures));
   });
 }
 

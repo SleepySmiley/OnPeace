@@ -93,37 +93,55 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     (Math.abs(a[0] - W) < eps && Math.abs(b[0] - W) < eps) ||
     (Math.abs(a[1]) < eps && Math.abs(b[1]) < eps) ||
     (Math.abs(a[1] - H) < eps && Math.abs(b[1] - H) < eps);
+  /** Tracciato del confine tra due territori; ogni confine lo disegna solo il territorio con l'id minore. */
+  const borderPath = (t: string, other: string): Path2D | null => {
+    if (t > other) return null;
+    const k = `${t}|${other}`;
+    let border = pairs.get(k);
+    if (!border) {
+      border = { a: t, b: other, path: new Path2D(), frontier: continentOf.get(other) !== continentOf.get(t) };
+      pairs.set(k, border);
+    }
+    return border.path;
+  };
+  const alongside = edgesNear(board, NEAR);
   for (const t of board.territories) {
     for (const poly of t.shape) {
       for (const ring of poly) {
         let current: Path2D | null = null;
         let last: Point | null = null;
-        for (let i = 0; i < ring.length; i++) {
-          const a = ring[i]!;
-          const b = ring[(i + 1) % ring.length]!;
-          let target: Path2D | null = null;
-          if (!onFrame(a, b)) {
-            const other = owners.get(edgeKey(a, b))!.find((id) => id !== t.id);
-            if (!other) target = coast;
-            else if (t.id < other) {
-              // ogni confine lo disegna una volta sola il territorio con l'id minore
-              const k = `${t.id}|${other}`;
-              let border = pairs.get(k);
-              if (!border) {
-                border = { a: t.id, b: other, path: new Path2D(), frontier: continentOf.get(other) !== t.continent };
-                pairs.set(k, border);
-              }
-              target = border.path;
-            }
-          }
+        const emit = (a: Point, b: Point, target: Path2D | null) => {
           if (!target) {
             current = null;
-            continue;
+            return;
           }
           if (target !== current || !last || last[0] !== a[0] || last[1] !== a[1]) target.moveTo(a[0], a[1]);
           target.lineTo(b[0], b[1]);
           current = target;
           last = b;
+        };
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i]!;
+          const b = ring[(i + 1) % ring.length]!;
+          if (onFrame(a, b)) {
+            emit(a, b, null);
+            continue;
+          }
+          const other = owners.get(edgeKey(a, b))!.find((id) => id !== t.id);
+          if (other) {
+            emit(a, b, borderPath(t.id, other));
+            continue;
+          }
+          // lato senza gemello identico: i paesi uniti nei territori non hanno sempre gli stessi vertici
+          // (incroci a T, scarti di pochi decimi), quindi si guarda a pezzi se corre lungo un altro territorio
+          const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / STEP));
+          let p: Point = a;
+          for (let k = 1; k <= n; k++) {
+            const q: Point = k === n ? b : [a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n];
+            const near = alongside([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], t.id);
+            emit(p, q, near ? borderPath(t.id, near) : coast);
+            p = q;
+          }
         }
       }
     }
@@ -148,6 +166,53 @@ export function buildGeometry(board: BoardDef): BoardGeometry {
     coast,
     routes: buildRoutes(board),
   };
+}
+
+// ---------------------------------------------------------------- lati vicini
+/** Un lato a meno di tanto dal contorno di un altro territorio è confine, non costa (unità della mappa). */
+const NEAR = 0.5;
+/** Lunghezza dei pezzi in cui si controlla un lato senza gemello. */
+const STEP = 2;
+
+/** Ricerca del territorio (diverso da `self`) il cui contorno passa a meno di `tol` da un punto. */
+function edgesNear(board: BoardDef, tol: number): (p: Point, self: string) => string | null {
+  const C = 16;
+  const grid = new Map<string, { t: string; a: Point; b: Point }[]>();
+  for (const t of board.territories)
+    for (const poly of t.shape)
+      for (const ring of poly)
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i]!;
+          const b = ring[(i + 1) % ring.length]!;
+          const [x0, x1] = [Math.floor((Math.min(a[0], b[0]) - tol) / C), Math.floor((Math.max(a[0], b[0]) + tol) / C)];
+          const [y0, y1] = [Math.floor((Math.min(a[1], b[1]) - tol) / C), Math.floor((Math.max(a[1], b[1]) + tol) / C)];
+          for (let x = x0; x <= x1; x++)
+            for (let y = y0; y <= y1; y++) {
+              const k = `${x},${y}`;
+              (grid.get(k) ?? grid.set(k, []).get(k)!).push({ t: t.id, a, b });
+            }
+        }
+  return (p, self) => {
+    let best: string | null = null;
+    let bestD = tol;
+    for (const e of grid.get(`${Math.floor(p[0] / C)},${Math.floor(p[1] / C)}`) ?? []) {
+      if (e.t === self) continue;
+      const d = distanceToSegment(p, e.a, e.b);
+      if (d < bestD) {
+        bestD = d;
+        best = e.t;
+      }
+    }
+    return best;
+  };
+}
+
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
 }
 
 // ---------------------------------------------------------------- rotte via mare

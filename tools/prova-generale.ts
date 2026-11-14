@@ -51,6 +51,15 @@ const UPGRADES = [...ctx.catalog.generalUpgrades.keys()];
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const log = (line: string) => console.log(`[prova] ${line}`);
+
+/** Aspetta una condizione, ma non per sempre: se il server rifiuta (mappa assente, opzioni sbagliate) si esce con un errore. */
+async function until(cond: () => boolean, what: string, ms = 20_000): Promise<void> {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error(`${what} (dopo ${ms / 1000} s)`);
+    await wait(20);
+  }
+}
 type Rng = ReturnType<typeof createRng>;
 
 // ---------------------------------------------------------------- ordini casuali sulla propria vista
@@ -246,7 +255,7 @@ class Bot {
     this.send({ t: 'plan', actions: toWirePlan(plan) });
     if (this.rng.next() < 0.1) this.send({ t: 'chat', text: `turno ${v.turn}: ${plan.length} ordini` });
     this.send({ t: 'ready', done: true });
-    if (this.rng.next() < 0.04) await this.dropAndRejoin();
+    if (this.rng.next() < 0.04) await this.dropAndRejoin().catch((err: Error) => countError(`rientro non riuscito: ${err.message}`));
   }
 }
 
@@ -255,13 +264,21 @@ class Bot {
 async function startServer(): Promise<{ url: string; logDir: string; proc: ChildProcess }> {
   const dir = mkdtempSync(join(tmpdir(), 'onpeace-prova-'));
   const port = 3399;
+  const busy = await fetch(`http://localhost:${port}`, { signal: AbortSignal.timeout(2000) }).then(
+    () => true,
+    () => false,
+  );
+  if (busy) throw new Error(`la porta ${port} è già occupata: chiudi l'altro server di prova e riprova`);
   const proc = spawn(process.execPath, ['--import', 'tsx', join('apps', 'server', 'src', 'main.ts')], {
     cwd: repoRoot,
     stdio: ['ignore', 'ignore', 'inherit'],
     env: { ...process.env, PORT: String(port), DATA_DIR: join(dir, 'games'), LOG_DIR: join(dir, 'logs') },
   });
+  process.on('exit', () => proc.kill()); // anche se la prova finisce con un errore
   const url = `http://localhost:${port}`;
   for (let i = 0; i < 60; i++) {
+    // il server di prova è caduto (es. porta occupata): altrimenti si proverebbe contro un altro processo
+    if (proc.exitCode !== null) throw new Error(`il server di prova non parte (porta ${port} occupata?)`);
     try {
       await fetch(url); // basta una risposta, anche 503 se il client non è compilato
       return { url, logDir: join(dir, 'logs'), proc };
@@ -296,10 +313,10 @@ async function main() {
     color: host.color,
     settings: { map: MAP_ID, turnSeconds: 60, startingFunds: 3000, maxTurns: TURNS, rareUnitChancePct: 20, strategies: true, general: true },
   });
-  while (!host.lobby) await wait(20);
-  const game = host.lobby.id;
+  await until(() => !!host.lobby, 'la partita non è stata creata');
+  const game = host.lobby!.id; // c'è: lo garantisce until() qui sopra
   for (const b of guests) await b.connect({ t: 'join', game, name: b.name, color: b.color });
-  while ((host.lobby?.players.length ?? 0) < PLAYERS) await wait(20);
+  await until(() => (host.lobby?.players.length ?? 0) >= PLAYERS, 'non sono entrati tutti i giocatori');
   await wait(200); // le dottrine
   host.send({ t: 'start' });
   log(`partita ${game}: scelta dei paesi`);

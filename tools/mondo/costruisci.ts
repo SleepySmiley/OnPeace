@@ -64,7 +64,13 @@ const MapCfgS = z.strictObject({
   nome: z.string().min(1),
   descrizione: z.string(),
   proiezione: z.discriminatedUnion('tipo', [
-    z.strictObject({ tipo: z.literal('miller'), meridianoCentrale: z.number(), latMin: z.number(), latMax: z.number() }),
+    z.strictObject({
+      tipo: z.literal('miller'),
+      /** Tra 0 e 180: il taglio del mondo al meridiano opposto è scritto per questi valori. */
+      meridianoCentrale: z.number().min(0).max(180),
+      latMin: z.number(),
+      latMax: z.number(),
+    }),
     z.strictObject({
       tipo: z.literal('laea'),
       centro: LonLatS,
@@ -472,7 +478,9 @@ function buildMap(cfg: MapCfg, geoCountries: GeoCountry[], places: NePlace[]): M
   for (const geo of geoCountries) {
     const shape = projectShape(frame, geo.shape).filter((poly) => polyArea(poly) >= cfg.isolaMinKm2 * km2);
     if (shape.length === 0) continue;
-    countries.push({ geo, id: geo.id, name: geo.name, shape, label: null, box: bounds(shape as MultiPolygon) });
+    // codici copiati: unendo i paesi piccoli si aggiungono codici, e senza copia passerebbero alle mappe costruite dopo
+    const own = { ...geo, codes: new Set(geo.codes) };
+    countries.push({ geo: own, id: geo.id, name: geo.name, shape, label: null, box: bounds(shape as MultiPolygon) });
   }
 
   // 2. paesi troppo piccoli: uniti al vicino con cui condividono più confine, altrimenti tolti

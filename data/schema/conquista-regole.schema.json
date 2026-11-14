@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "players": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8
+        },
+        "objectivesMin": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "min",
+        "max",
+        "objectivesMin"
+      ],
+      "additionalProperties": false
+    },
+    "initialArmies": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^\\d$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "placement": {
+          "type": "string",
+          "enum": [
+            "rounds",
+            "simultaneous"
+          ]
+        },
+        "perRound": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "placement",
+        "perRound"
+      ],
+      "additionalProperties": false
+    },
+    "reinforcements": {
+      "type": "object",
+      "properties": {
+        "divisor": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minimum": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "divisor",
+        "minimum"
+      ],
+      "additionalProperties": false
+    },
+    "dice": {
+      "type": "object",
+      "properties": {
+        "attackMax": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "defenseMax": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "tiesTo": {
+          "type": "string",
+          "enum": [
+            "defender",
+            "attacker"
+          ]
+        }
+      },
+      "required": [
+        "attackMax",
+        "defenseMax",
+        "tiesTo"
+      ],
+      "additionalProperties": false
+    },
+    "fortify": {
+      "type": "object",
+      "properties": {
+        "moves": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reach": {
+          "type": "string",
+          "enum": [
+            "adjacent",
+            "connected"
+          ]
+        }
+      },
+      "required": [
+        "moves",
+        "reach"
+      ],
+      "additionalProperties": false
+    },
+    "cards": {
+      "type": "object",
+      "properties": {
+        "jokers": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sets": {
+          "type": "object",
+          "properties": {
+            "threeOfAKind": {
+              "type": "object",
+              "properties": {
+                "infantry": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "cavalry": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "artillery": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "infantry",
+                "cavalry",
+                "artillery"
+              ],
+              "additionalProperties": false
+            },
+            "oneOfEach": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "jokerPlusPair": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "threeOfAKind",
+            "oneOfEach",
+            "jokerPlusPair"
+          ],
+          "additionalProperties": false
+        },
+        "ownedTerritoryBonus": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "inheritOnElimination": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "jokers",
+        "sets",
+        "ownedTerritoryBonus",
+        "inheritOnElimination"
+      ],
+      "additionalProperties": false
+    },
+    "elimination": {
+      "type": "object",
+      "properties": {
+        "protectedRounds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "protectedRounds"
+      ],
+      "additionalProperties": false
+    },
+    "timers": {
+      "type": "object",
+      "properties": {
+        "turnSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 9007199254740991
+        },
+        "setupSeconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "turnSeconds",
+        "setupSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "modes": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "objectives",
+          "conquest"
+        ]
+      }
+    }
+  },
+  "required": [
+    "players",
+    "initialArmies",
+    "setup",
+    "reinforcements",
+    "dice",
+    "fortify",
+    "cards",
+    "elimination",
+    "timers",
+    "modes"
+  ],
+  "additionalProperties": false
+}

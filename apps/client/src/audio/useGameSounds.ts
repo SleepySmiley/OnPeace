@@ -81,12 +81,15 @@ export function useGameSounds({ game, me, events, picker, deadline, paused, plan
   }, [picker, me]);
 
   // ---------------------------------------------------------------- chat e sala d'attesa
-  const seenChat = useRef<number | null>(null);
+  // si ricorda l'ultima riga vista, non quante erano: la chat tiene solo le ultime 200 righe, e oltre
+  // quel numero la lunghezza non cresce più (il suono non sarebbe più partito)
+  const seenChat = useRef<ChatLine | null | undefined>(undefined);
   useEffect(() => {
     const before = seenChat.current;
-    seenChat.current = chat.length;
-    if (before === null || chat.length <= before) return;
-    if (chat.slice(before).some((l) => l.from !== me)) sfx.play('chat');
+    seenChat.current = chat.at(-1) ?? null;
+    if (before === undefined) return; // primo giro: la chat che c'era già non suona
+    const fresh = before === null ? chat : chat.slice(chat.indexOf(before) + 1);
+    if (fresh.some((l) => l.from !== me)) sfx.play('chat');
   }, [chat, me]);
 
   const seenPlayers = useRef<number | null>(null);

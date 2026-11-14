@@ -1,7 +1,7 @@
 /** Serve il client compilato (apps/client/dist), con ritorno a index.html per i link d'invito. */
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { extname, join, normalize, resolve } from 'node:path';
+import { extname, join, normalize, resolve, sep } from 'node:path';
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -24,7 +24,8 @@ export function staticHandler(distDir: string) {
     }
     const url = new URL(req.url ?? '/', 'http://x');
     let file = normalize(join(root, decodeURIComponent(url.pathname)));
-    if (!file.startsWith(root)) {
+    // col separatore: senza, "dist-altro" passerebbe per "dist"
+    if (file !== root && !file.startsWith(root + sep)) {
       res.writeHead(403).end();
       return;
     }
@@ -32,6 +33,9 @@ export function staticHandler(distDir: string) {
     const type = TYPES[extname(file)] ?? 'application/octet-stream';
     const cache = file.includes(`${join('assets', '')}`) ? 'public, max-age=31536000, immutable' : 'no-cache';
     res.writeHead(200, { 'content-type': type, 'cache-control': cache });
-    createReadStream(file).pipe(res);
+    // file sparito o bloccato nel frattempo (es. client ricompilato, OneDrive): si chiude solo la risposta
+    createReadStream(file)
+      .on('error', () => res.destroy())
+      .pipe(res);
   };
 }
