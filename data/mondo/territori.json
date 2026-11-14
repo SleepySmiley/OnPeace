@@ -1,0 +1,152 @@
+{
+  "tabelloni": [
+    {
+      "id": "mondo",
+      "nome": "Mondo",
+      "descrizione": "Il mondo di oggi diviso in 47 territori e sei continenti.",
+      "base": "mondo",
+      "rosa": [-138, -24],
+      "continenti": [
+        {
+          "id": "nordamerica",
+          "etichetta": [-146, 36],
+          "nome": "Nord America",
+          "bonus": 5,
+          "territori": [
+            { "id": "pacifico_nord", "nome": "Pacifico del Nord", "paesi": ["alaska", "columbia_britannica"] },
+            { "id": "canada_ovest", "nome": "Canada occidentale", "paesi": ["praterie", "grande_nord"] },
+            { "id": "canada_est", "nome": "Canada orientale", "paesi": ["ontario", "quebec", "canada_atlantico"] },
+            { "id": "groenlandia", "nome": "Groenlandia", "paesi": ["grl"] },
+            { "id": "usa_ovest", "nome": "USA occidentali", "paesi": ["usa_ovest", "hawaii"] },
+            { "id": "usa_centro", "nome": "USA centrali", "paesi": ["usa_midwest", "usa_sudovest"] },
+            { "id": "usa_est", "nome": "USA orientali", "paesi": ["usa_nordest", "usa_sudest"] },
+            {
+              "id": "centroamerica",
+              "nome": "Messico e Centroamerica",
+              "paesi": ["mex", "gtm", "blz", "hnd", "slv", "nic", "cri", "pan", "cub", "jam", "hti", "dom", "pri", "bhs"]
+            }
+          ]
+        },
+        {
+          "id": "sudamerica",
+          "etichetta": [-102, -30],
+          "nome": "Sud America",
+          "bonus": 2,
+          "territori": [
+            { "id": "nord_andino", "nome": "Colombia e Venezuela", "paesi": ["col", "ven", "ecu", "tto"] },
+            { "id": "amazzonia", "nome": "Amazzonia e Guiane", "paesi": ["brasile_nord", "guy", "sur", "guyana_francese"] },
+            { "id": "brasile", "nome": "Brasile", "paesi": ["brasile_nordest", "brasile_centro", "brasile_sudest", "brasile_sud"] },
+            { "id": "ande", "nome": "Perù e Bolivia", "paesi": ["per", "bol"] },
+            { "id": "cono_sud", "nome": "Cono Sud", "paesi": ["arg", "chl", "ury", "pry", "flk"] }
+          ]
+        },
+        {
+          "id": "europa",
+          "etichetta": [-30, 50],
+          "nome": "Europa",
+          "bonus": 5,
+          "territori": [
+            { "id": "isole_britanniche", "nome": "Isole britanniche", "paesi": ["gbr", "irl"] },
+            { "id": "paesi_nordici", "nome": "Paesi nordici", "paesi": ["isl", "nor", "swe", "fin", "dnk"] },
+            { "id": "iberia", "nome": "Penisola iberica", "paesi": ["esp", "prt"] },
+            { "id": "francia", "nome": "Francia e Benelux", "paesi": ["fra", "bel", "nld", "lux"] },
+            { "id": "italia", "nome": "Italia", "paesi": ["ita"] },
+            { "id": "europa_centrale", "nome": "Europa centrale", "paesi": ["deu", "che", "aut", "cze"] },
+            { "id": "baltico", "nome": "Polonia e Baltico", "paesi": ["pol", "ltu", "lva", "est"] },
+            {
+              "id": "balcani",
+              "nome": "Balcani e Carpazi",
+              "paesi": ["hun", "svk", "rou", "mda", "svn", "hrv", "bih", "srb", "mne", "kos", "alb", "mkd", "grc", "bgr"]
+            },
+            { "id": "ucraina", "nome": "Ucraina e Bielorussia", "paesi": ["ukr", "blr"] },
+            { "id": "russia_europea", "nome": "Russia europea", "paesi": ["russia_nordovest", "russia_centrale", "russia_sud", "volga"] }
+          ]
+        },
+        {
+          "id": "africa",
+          "etichetta": [-10, -16],
+          "nome": "Africa",
+          "bonus": 3,
+          "territori": [
+            { "id": "maghreb", "nome": "Maghreb", "paesi": ["mar", "sah", "dza", "tun"] },
+            { "id": "egitto", "nome": "Egitto e Libia", "paesi": ["egy", "lby"] },
+            { "id": "sahel", "nome": "Sahel", "paesi": ["mrt", "mli", "ner", "tcd", "bfa"] },
+            {
+              "id": "golfo_guinea",
+              "nome": "Golfo di Guinea",
+              "paesi": ["sen", "gmb", "gnb", "gin", "sle", "lbr", "civ", "gha", "tgo", "ben", "nga"]
+            },
+            { "id": "corno_africa", "nome": "Sudan e Corno d'Africa", "paesi": ["sdn", "sds", "eth", "eri", "dji", "som"] },
+            { "id": "congo", "nome": "Bacino del Congo", "paesi": ["cmr", "caf", "gnq", "gab", "cog", "cod"] },
+            { "id": "africa_est", "nome": "Africa orientale", "paesi": ["ken", "uga", "tza", "rwa", "bdi", "mdg", "mus"] },
+            {
+              "id": "africa_sud",
+              "nome": "Africa australe",
+              "paesi": ["ago", "zmb", "mwi", "moz", "zwe", "bwa", "nam", "zaf", "lso", "swz"]
+            }
+          ]
+        },
+        {
+          "id": "asia",
+          "etichetta": [80, -6],
+          "nome": "Asia",
+          "bonus": 7,
+          "territori": [
+            { "id": "anatolia", "nome": "Anatolia e Caucaso", "paesi": ["tur", "cyp", "geo", "arm", "aze"] },
+            {
+              "id": "medio_oriente",
+              "nome": "Medio Oriente",
+              "paesi": ["syr", "lbn", "isr", "psx", "jor", "irq", "sau", "yem", "omn", "are", "qat", "kwt"]
+            },
+            { "id": "persia", "nome": "Persia", "paesi": ["irn", "afg"] },
+            { "id": "asia_centrale", "nome": "Asia centrale", "paesi": ["kaz", "uzb", "tkm", "kgz", "tjk"] },
+            { "id": "siberia", "nome": "Siberia", "paesi": ["urali", "siberia"] },
+            { "id": "estremo_oriente", "nome": "Estremo Oriente russo", "paesi": ["estremo_oriente"] },
+            {
+              "id": "india",
+              "nome": "Subcontinente indiano",
+              "paesi": ["pak", "india_nord", "india_centro", "india_est", "india_ovest", "india_sud", "npl", "btn", "bgd", "lka"]
+            },
+            { "id": "mongolia_tibet", "nome": "Mongolia e Tibet", "paesi": ["mng", "cina_nordovest", "cina_sudovest"] },
+            { "id": "cina", "nome": "Cina", "paesi": ["cina_nord", "manciuria", "cina_est", "cina_sud", "twn"] },
+            { "id": "giappone_corea", "nome": "Giappone e Corea", "paesi": ["jpn", "kor", "prk"] },
+            { "id": "indocina", "nome": "Indocina", "paesi": ["mmr", "tha", "lao", "khm", "vnm", "mys"] },
+            { "id": "insulindia", "nome": "Indonesia e Filippine", "paesi": ["idn", "phl", "brn", "tls"] }
+          ]
+        },
+        {
+          "id": "oceania",
+          "etichetta": [110, -38],
+          "nome": "Oceania",
+          "bonus": 2,
+          "territori": [
+            { "id": "australia_ovest", "nome": "Australia occidentale", "paesi": ["australia_ovest", "australia_centro"] },
+            { "id": "australia_est", "nome": "Australia orientale", "paesi": ["queensland", "nuovo_galles", "victoria"] },
+            { "id": "nuova_zelanda", "nome": "Nuova Zelanda", "paesi": ["nzl"] },
+            { "id": "pacifico", "nome": "Nuova Guinea e Pacifico", "paesi": ["png", "slb", "vut", "fji", "ncl", "wsm"] }
+          ]
+        }
+      ],
+      "viaMare": [
+        { "a": "pacifico_nord", "b": "estremo_oriente", "da": [-167.8, 65.6], "verso": [-171.5, 66.0] },
+        { "a": "groenlandia", "b": "canada_ovest", "da": [-62.0, 81.5], "verso": [-69.0, 80.5] },
+        { "a": "groenlandia", "b": "canada_est", "da": [-48.0, 61.5], "verso": [-61.0, 57.5] },
+        { "a": "groenlandia", "b": "paesi_nordici", "da": [-26.0, 68.5], "verso": [-22.5, 66.0] },
+        { "a": "paesi_nordici", "b": "isole_britanniche", "da": [5.3, 60.0], "verso": [-1.8, 57.6] },
+        { "a": "paesi_nordici", "b": "baltico", "da": [24.9, 60.2], "verso": [24.7, 59.4] },
+        { "a": "isole_britanniche", "b": "francia", "da": [1.3, 51.1], "verso": [1.8, 50.9] },
+        { "a": "iberia", "b": "maghreb", "da": [-5.6, 36.1], "verso": [-5.5, 35.7] },
+        { "a": "italia", "b": "maghreb", "da": [12.4, 37.8], "verso": [11.0, 37.0] },
+        { "a": "medio_oriente", "b": "corno_africa", "da": [43.4, 12.8], "verso": [43.2, 11.6] },
+        { "a": "brasile", "b": "golfo_guinea", "da": [-35.2, -5.8], "verso": [-17.3, 14.7] },
+        { "a": "centroamerica", "b": "usa_est", "da": [-81.5, 23.1], "verso": [-80.6, 25.3] },
+        { "a": "cina", "b": "insulindia", "da": [120.8, 22.0], "verso": [121.5, 18.5] },
+        { "a": "giappone_corea", "b": "estremo_oriente", "da": [141.9, 45.4], "verso": [142.0, 46.1] },
+        { "a": "insulindia", "b": "australia_ovest", "da": [125.0, -9.4], "verso": [130.8, -12.4] },
+        { "a": "pacifico", "b": "australia_est", "da": [142.6, -9.3], "verso": [142.5, -10.8] },
+        { "a": "australia_est", "b": "nuova_zelanda", "da": [153.0, -29.0], "verso": [172.7, -34.5] }
+      ],
+      "nonConfinanti": []
+    }
+  ]
+}

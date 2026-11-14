@@ -1,0 +1,285 @@
+/* Pannelli della pagina di prova. Ogni stile della mappa ridefinisce i suoi colori e caratteri. */
+:root,
+body[data-stile='classico'] {
+  --bg: #0f231a;
+  --panel: rgba(239, 230, 207, 0.97);
+  --panel-edge: #2b2219;
+  --ink: #2b2219;
+  --ink-dim: #6b5a45;
+  --accent: #8a2a1f;
+  --font: Georgia, serif;
+  --display: 'IM Fell English SC', Georgia, serif;
+  --num: Georgia, serif;
+  --radius: 6px;
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  --blur: none;
+}
+
+body[data-stile='vetro'] {
+  --bg: #08090c;
+  --panel: rgba(30, 32, 38, 0.62);
+  --panel-edge: rgba(255, 255, 255, 0.12);
+  --ink: #f5f5f7;
+  --ink-dim: #a1a1aa;
+  --accent: #0a84ff;
+  --font: 'Geist', system-ui, sans-serif;
+  --display: 'Geist', system-ui, sans-serif;
+  --num: 'Geist', system-ui, sans-serif;
+  --radius: 18px;
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --blur: blur(24px) saturate(160%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+#board {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+#board.dragging {
+  cursor: grabbing;
+}
+
+#board.pointing {
+  cursor: pointer;
+}
+
+.hud {
+  position: fixed;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+/* selettore degli stili */
+.hud-styles {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  width: min(520px, calc(100vw - 32px));
+}
+
+.hud-styles button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: calc(var(--radius) * 0.7);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.hud-styles button:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.hud-styles button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.hud-styles button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hud-styles kbd {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  font-family: var(--num);
+  font-size: 11px;
+}
+
+.hud-styles span {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.hud-styles small {
+  font-size: 11px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* giocatori */
+.hud-players {
+  left: 16px;
+  bottom: 16px;
+  padding: 10px 4px 8px;
+}
+
+.hud-players h2,
+.hud-card h2 {
+  margin: 0 10px 6px;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.player {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.player .count {
+  font-family: var(--num);
+  font-size: 12px;
+  color: var(--ink-dim);
+  text-align: right;
+}
+
+.player .count b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.chip {
+  display: inline-block;
+  width: 18px;
+  height: 14px;
+  border-radius: calc(var(--radius) * 0.3);
+  background: var(--c);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+body[data-stile='vetro'] .chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+}
+
+/* scheda del territorio */
+.hud-card {
+  right: 16px;
+  top: 92px;
+  width: 290px;
+  padding: 13px 14px 14px;
+}
+
+.hud-card[hidden] {
+  display: none;
+}
+
+.hud-card .name {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.hud-card .continent {
+  margin: 3px 0 10px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.hud-card .owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  padding: 8px 0 11px;
+  border-bottom: 1px solid var(--panel-edge);
+  margin-bottom: 10px;
+}
+
+.hud-card .owner .armies {
+  margin-left: auto;
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.hud-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.hud-card li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 2px;
+}
+
+.hud-card li .tag {
+  font-family: var(--num);
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.hud-card li .tag.enemy {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .hud-styles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hud-styles small {
+    display: none;
+  }
+  .hud-card {
+    left: 16px;
+    right: 16px;
+    top: auto;
+    bottom: 16px;
+    width: auto;
+  }
+}

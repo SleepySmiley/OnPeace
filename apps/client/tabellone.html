@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnPeace · Tabellone</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IM+Fell+English+SC&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/board/preview.css" />
+  </head>
+  <body>
+    <canvas id="board" aria-label="Tabellone del mondo"></canvas>
+    <nav class="hud hud-styles" aria-label="Stile della mappa"></nav>
+    <aside class="hud hud-players" aria-label="Giocatori (partita di prova)"></aside>
+    <aside class="hud hud-card" hidden></aside>
+    <script type="module" src="/src/board/preview.ts"></script>
+  </body>
+</html>
