@@ -1286,9 +1286,10 @@ body[data-stile='vetro'] .topbar.my-move .whose b {
 }
 
 /* --- carta dell'obiettivo a inizio partita: arriva coperta e si gira */
+/* sotto la barra in alto, che resta usabile (pausa, guida, uscita) */
 .objective-reveal {
   position: fixed;
-  inset: 0;
+  inset: 52px 0 0;
   z-index: 55;
   display: grid;
   place-items: center;

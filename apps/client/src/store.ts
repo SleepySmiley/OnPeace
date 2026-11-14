@@ -215,7 +215,13 @@ export const useSession = create<Session>((set, get) => {
 
   function connect() {
     net?.close();
-    net = new Net(onServer, (connected) => patchOnline({ connected }), () => (token ? { t: 'hello', token } : null));
+    // contano solo i messaggi della connessione in uso: quella lasciata può ancora rispondere per un attimo
+    const conn: Net = new Net(
+      (msg) => net === conn && onServer(msg),
+      (connected) => net === conn && patchOnline({ connected }),
+      () => (token ? { t: 'hello', token } : null),
+    );
+    net = conn;
   }
 
   function onServer(msg: ServerMsg) {
@@ -407,11 +413,12 @@ export const useSession = create<Session>((set, get) => {
       net?.send(msg);
     },
     leave() {
-      net?.send({ t: 'leave' });
-      setTimeout(() => {
-        net?.close();
-        net = null;
-      }, 300);
+      // la connessione si chiude poco dopo (il messaggio deve partire), ma le sue risposte non contano più:
+      // altrimenti la partita appena lasciata ricomparirebbe con "sei fuori"
+      const old = net;
+      net = null;
+      old?.send({ t: 'leave' });
+      setTimeout(() => old?.close(), 300);
       token = null;
       saveSession(null);
       setGameInUrl(null);
