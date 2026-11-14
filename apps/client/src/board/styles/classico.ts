@@ -28,8 +28,8 @@ import { geometryAt } from '../geometry';
 
 const SERIF = '"IM Fell English SC", Georgia, serif';
 const INK = '#2b2219';
-/** Tinte dei continenti (nostre, da atlante). */
-const CONTINENT: Record<string, string> = {
+/** Tinte dei continenti (nostre, da atlante): anche la carta dell'obiettivo le usa. */
+export const CONTINENT: Record<string, string> = {
   nordamerica: '#93ad7e',
   sudamerica: '#d6a65f',
   europa: '#c98468',
