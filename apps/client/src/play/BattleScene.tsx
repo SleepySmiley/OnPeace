@@ -1,6 +1,6 @@
 /**
  * La scena della battaglia, sopra il tabellone: la camera vola sui due territori, i carri armati
- * sono schierati su ciascuno, i dadi rotolano in primo piano, poi i carri si sparano (un colpo per
+ * (visti dall'alto) sono schierati su ciascuno, i dadi rotolano in primo piano, poi i carri si sparano (un colpo per
  * coppia di dadi: chi vince la coppia spara, il carro colpito esplode) e alla conquista entrano nel
  * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita. Chi guarda una battaglia
  * degli altri la vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
@@ -10,7 +10,7 @@ import type { BoardView } from '../board/common';
 import type { BoardPainter } from '../board/painter';
 import { Chip, Die } from './bits';
 import { useSession } from '../store';
-import { armiesAfter, pairs, shotTimes, useBattle, type Engagement, type Playing, type TankLook } from './battle';
+import { armiesAfter, pairs, shotTimes, useBattle, type Engagement, type Playing } from './battle';
 import './battle.css';
 
 type Vars = CSSProperties & Record<`--${string}`, string | number>;
@@ -370,22 +370,15 @@ function fleet(start: number, losses: number[]): number[] {
 
 type Pt = [number, number];
 
-/** Posti della formazione: file da tre, la prima verso il nemico. `u` punta al nemico. */
-function slotsFor(look: TankLook, center: Pt, u: Pt, n: number): Pt[] {
+/** Posti della formazione: file da tre perpendicolari alla direzione del nemico, la prima verso di lui. `u` punta al nemico. */
+function slotsFor(center: Pt, u: Pt, n: number): Pt[] {
   const [cx, cy] = center;
   const out: Pt[] = [];
   for (let i = 0; i < n; i++) {
     const r = Math.floor(i / TANK_COLS);
     const inRow = Math.min(TANK_COLS, n - r * TANK_COLS);
     const off = (i % TANK_COLS) - (inRow - 1) / 2;
-    if (look === 'alto') {
-      // visti dall'alto: file perpendicolari alla direzione del nemico
-      out.push([cx - u[0] * r * 58 - u[1] * off * 52, cy - u[1] * r * 58 + u[0] * off * 52]);
-    } else {
-      // di lato: rivolti a destra o a sinistra, a ventaglio
-      const f = u[0] >= 0 ? 1 : -1;
-      out.push([cx - f * (r * 82 + Math.abs(off) * 12), cy + off * 44 + r * 5]);
-    }
+    out.push([cx - u[0] * r * 58 - u[1] * off * 52, cy - u[1] * r * 58 + u[0] * off * 52]);
   }
   return out;
 }
@@ -398,38 +391,21 @@ const unit = (from: Pt, to: Pt): Pt => {
 };
 const deg = (v: Pt) => (Math.atan2(v[1], v[0]) * 180) / Math.PI;
 
-/** Un carro armato disegnato da zero: visto dall'alto (torretta che ruota) o di lato. */
-function TankShape({ look }: { look: TankLook }) {
-  if (look === 'alto') {
-    return (
-      <svg className="tk-svg" viewBox="-22 -16 44 32" aria-hidden>
-        <rect className="tk-track" x="-19" y="-15" width="36" height="8" rx="2.5" />
-        <rect className="tk-track" x="-19" y="7" width="36" height="8" rx="2.5" />
-        <path className="tk-tread" d="M-16 -11h30M-16 11h30" />
-        <rect className="tk-hull" x="-17" y="-10" width="32" height="20" rx="4" />
-        <rect className="tk-deck" x="-14" y="-7" width="10" height="14" rx="2" />
-        <g className="tk-turret">
-          <rect className="tk-barrel" x="3" y="-2" width="20" height="4" rx="1.4" />
-          <rect className="tk-brake" x="20" y="-2.8" width="4" height="5.6" rx="1" />
-          <circle className="tk-dome" r="7.5" />
-          <circle className="tk-hatch" cx="-2" cy="-1.5" r="2.6" />
-          <circle className="tk-flash" cx="27" cy="0" r="6" />
-        </g>
-      </svg>
-    );
-  }
+/** Un carro armato visto dall'alto, disegnato da zero: scafo, cingoli e la torretta che ruota verso il bersaglio. */
+function TankShape() {
   return (
-    <svg className="tk-svg" viewBox="-28 -20 56 36" aria-hidden>
-      <path className="tk-track" d="M-22 4h40a6 6 0 0 1 0 12h-40a6 6 0 0 1 0-12z" />
-      {[-18, -9, 0, 9, 17].map((x) => (
-        <circle key={x} className="tk-wheel" cx={x} cy="10" r="3.6" />
-      ))}
-      <path className="tk-hull" d="M-24 4l4-9h38l6 9z" />
+    <svg className="tk-svg" viewBox="-22 -16 44 32" aria-hidden>
+      <rect className="tk-track" x="-19" y="-15" width="36" height="8" rx="2.5" />
+      <rect className="tk-track" x="-19" y="7" width="36" height="8" rx="2.5" />
+      <path className="tk-tread" d="M-16 -11h30M-16 11h30" />
+      <rect className="tk-hull" x="-17" y="-10" width="32" height="20" rx="4" />
+      <rect className="tk-deck" x="-14" y="-7" width="10" height="14" rx="2" />
       <g className="tk-turret">
-        <rect className="tk-barrel" x="4" y="-13.5" width="22" height="3.6" rx="1.2" />
-        <rect className="tk-brake" x="23" y="-14.3" width="4" height="5.2" rx="1" />
-        <path className="tk-dome" d="M-12 -5c1-6 4-10 11-10h6c5 0 8 4 9 10z" />
-        <circle className="tk-flash" cx="31" cy="-11.7" r="6.5" />
+        <rect className="tk-barrel" x="3" y="-2" width="20" height="4" rx="1.4" />
+        <rect className="tk-brake" x="20" y="-2.8" width="4" height="5.6" rx="1" />
+        <circle className="tk-dome" r="7.5" />
+        <circle className="tk-hatch" cx="-2" cy="-1.5" r="2.6" />
+        <circle className="tk-flash" cx="27" cy="0" r="6" />
       </g>
     </svg>
   );
@@ -447,7 +423,6 @@ interface Shot {
 
 function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) {
   const { eng, roll, p } = m;
-  const look = useBattle((s) => s.tankLook);
   const spots = useCamera(painter, p, { side: 200, top: TOPBAR + LETTERBOX + 40, bottom: TRAY_BOTTOM + 70 }, 7, Math.min(620, window.innerWidth * 0.4));
   const size = 52;
   if (!spots) {
@@ -474,11 +449,11 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
   const push = Math.min(40, dist * 0.1);
   const centerA: Pt = [spots.a[0] + uA[0] * push, spots.a[1] + uA[1] * push];
   const centerD: Pt = [spots.d[0] + uD[0] * push, spots.d[1] + uD[1] * push];
-  const slotsA = slotsFor(look, centerA, uA, fleetA.length);
-  const slotsD = slotsFor(look, centerD, uD, fleetD.length);
+  const slotsA = slotsFor(centerA, uA, fleetA.length);
+  const slotsD = slotsFor(centerD, uD, fleetD.length);
   // conquista: i primi carri entrano nel territorio preso
   const taking = m.result?.conquered === true;
-  const enter = taking ? slotsFor(look, spots.d, uA, Math.min(3, fleetA.length)) : [];
+  const enter = taking ? slotsFor(spots.d, uA, Math.min(3, fleetA.length)) : [];
 
   // la sparatoria: un colpo per coppia di dadi, chi vince la coppia spara
   const shots: Shot[] = [];
@@ -501,10 +476,9 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
     const mine = shots.filter((s) => s.side === side && s.shooter === i);
     const hitBy = shots.find((s) => s.side !== side && s.target === i);
     const shot = mine[0];
-    const f = u[0] >= 0 ? 1 : -1;
-    // dall'alto il carro guarda il nemico e la torretta punta il bersaglio; di lato guarda a destra o a sinistra
-    const hull = look === 'alto' ? deg(u) : 0;
-    const aim = look === 'alto' && shot ? deg(unit(shot.from, shot.to)) - hull : 0;
+    // il carro guarda il nemico, la torretta punta il bersaglio quando spara
+    const hull = deg(u);
+    const aim = shot ? deg(unit(shot.from, shot.to)) - hull : 0;
     const target = taking && side === 'a' && i < enter.length ? enter[i]! : pos;
     const style = {
       left: target[0],
@@ -513,20 +487,19 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
       '--c': side === 'a' ? eng.a.color : eng.d.color,
       '--hull': `${hull}deg`,
       '--aim': `${aim}deg`,
-      '--flip': look === 'lato' ? f : 1,
       '--fire': `${shot?.fire ?? 0}ms`,
       '--hit': `${hitBy?.hit ?? 0}ms`,
       '--back': `${-u[0] * 60}px, ${-u[1] * 60}px`,
       // quelli schierati all'inizio arrivano quando la camera è quasi ferma; le riserve subito
       '--enter': `${id < Math.min(side === 'a' ? eng.a.armies : eng.d.armies, TANKS_MAX) ? (eng.again ? 150 : 700) : 0}ms`,
     } as Vars;
-    const cls = ['tk', `tk-${look}`, side === 'a' ? 'att' : 'def', shot ? 'firing' : '', hitBy ? 'hit' : '', taking && side === 'a' && i < enter.length ? 'moving' : '']
+    const cls = ['tk', side === 'a' ? 'att' : 'def', shot ? 'firing' : '', hitBy ? 'hit' : '', taking && side === 'a' && i < enter.length ? 'moving' : '']
       .filter(Boolean)
       .join(' ');
     return (
       <span key={`${side}${id}`} className={cls} style={style}>
         <span className="tk-body" key={shot || hitBy ? m.rollKey : 'calm'}>
-          <TankShape look={look} />
+          <TankShape />
         </span>
       </span>
     );
@@ -557,19 +530,18 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
   };
 
   return (
-    <div className={`mp-wrap tk-wrap tk-look-${look}`} style={spotlight(spots, 60)}>
+    <div className="mp-wrap tk-wrap" style={spotlight(spots, 60)}>
       <div className="mp-light" />
       {fleetA.map((id, i) => tank('a', id, i, slotsA[i]!))}
       {fleetD.map((id, i) => tank('d', id, i, slotsD[i]!))}
       {shots.map((s, i) => {
         const dx = s.to[0] - s.from[0];
         const dy = s.to[1] - s.from[1];
-        const arc = look === 'lato' ? Math.min(150, Math.hypot(dx, dy) * 0.32) : 0;
         return (
           <span key={`${m.rollKey}-s${i}`}>
             <span
-              className={`tk-shell${look === 'lato' ? ' arc' : ''}`}
-              style={{ left: s.from[0], top: s.from[1], '--dx': `${dx}px`, '--dy': `${dy}px`, '--arc': `${-arc}px`, '--fire': `${s.fire}ms`, '--flight': `${s.hit - s.fire}ms`, '--rot': `${deg([dx, dy])}deg` } as Vars}
+              className="tk-shell"
+              style={{ left: s.from[0], top: s.from[1], '--dx': `${dx}px`, '--dy': `${dy}px`, '--fire': `${s.fire}ms`, '--flight': `${s.hit - s.fire}ms`, '--rot': `${deg([dx, dy])}deg` } as Vars}
             >
               <i />
             </span>

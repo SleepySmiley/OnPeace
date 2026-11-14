@@ -1,14 +1,13 @@
 /**
  * Pagina di prova della battaglia (/battaglia.html in sviluppo): la partita vera che gira nel
  * browser contro quattro avversari automatici, con la scena dei carri armati com'è nel gioco. Dal
- * pannello in alto a destra si provano le scelte ancora aperte: i carri della battaglia di lato o
- * dall'alto, "fino in fondo" tiro per tiro o col conto veloce, che cosa vede chi non combatte; e si
- * fanno partire battaglie finte senza giocare.
+ * pannello in alto a destra si provano le scelte ancora aperte ("fino in fondo" tiro per tiro o col
+ * conto veloce, che cosa vede chi non combatte) e si fanno partire battaglie finte senza giocare.
  */
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
-import { feedRoll, fighter, useBattle, type BlitzMode, type Role, type Roll, type TankLook, type Watch } from '../play/battle';
+import { feedRoll, fighter, useBattle, type BlitzMode, type Role, type Roll, type Watch } from '../play/battle';
 import { GameScreen } from '../play/GameScreen';
 import { setLinkFactory, useSession } from '../store';
 import { LocalGame, localBoard, type Start } from './locale';
@@ -31,7 +30,6 @@ const params = new URLSearchParams(location.search);
 const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);
 
 useBattle.getState().setOptions({
-  tankLook: pick(params.get('carro'), ['lato', 'alto'] as const, 'lato'),
   blitzMode: pick(params.get('fino'), ['tiri', 'conto'] as const, 'tiri'),
   watch: pick(params.get('altri'), ['piccola', 'intera', 'niente'] as const, 'piccola'),
 });
@@ -40,7 +38,6 @@ useBattle.getState().setOptions({
 function saveChoices() {
   const s = useBattle.getState();
   const url = new URLSearchParams(location.search);
-  url.set('carro', s.tankLook);
   url.set('fino', s.blitzMode);
   url.set('altri', s.watch);
   history.replaceState(null, '', `?${url}`);
@@ -147,7 +144,6 @@ if (import.meta.env.DEV) Object.assign(window, { __battaglia: useBattle, __demo:
 // ---------------------------------------------------------------- pannello delle scelte
 
 function Controls() {
-  const tankLook = useBattle((s) => s.tankLook);
   const blitzMode = useBattle((s) => s.blitzMode);
   const watch = useBattle((s) => s.watch);
   const setOptions = useBattle((s) => s.setOptions);
@@ -160,18 +156,6 @@ function Controls() {
       <span className="bt-dock-title">
         <span className="mock-tag">Prova</span> Battaglia
       </span>
-      <select
-        className="mock-restart"
-        aria-label="Come sono i carri nella battaglia"
-        value={tankLook}
-        onChange={(e) => {
-          e.target.blur();
-          choose({ tankLook: e.target.value as TankLook });
-        }}
-      >
-        <option value="lato">Battaglia: carri di lato</option>
-        <option value="alto">Battaglia: carri dall'alto</option>
-      </select>
       <select
         className="mock-restart"
         aria-label="Fino in fondo"

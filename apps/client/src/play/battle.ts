@@ -13,8 +13,6 @@ import { setBlitzStep, territoryName, useSession } from '../store';
 
 /** "Fino in fondo": ogni tiro con i suoi dadi, oppure il conto delle perdite che scorre. */
 export type BlitzMode = 'tiri' | 'conto';
-/** Come sono disegnati i carri armati: di lato o visti dall'alto. */
-export type TankLook = 'alto' | 'lato';
 /** Che cosa vede chi non combatte. */
 export type Watch = 'piccola' | 'intera' | 'niente';
 export type Role = 'attacker' | 'defender' | 'spectator';
@@ -121,12 +119,11 @@ const BLITZ_STEP: Record<BlitzMode, number> = { tiri: 1000, conto: 380 };
 // ---------------------------------------------------------------- stato
 
 interface BattleState {
-  tankLook: TankLook;
   blitzMode: BlitzMode;
   watch: Watch;
   playing: Playing | null;
   queue: Engagement[];
-  setOptions(patch: Partial<Pick<BattleState, 'tankLook' | 'blitzMode' | 'watch'>>): void;
+  setOptions(patch: Partial<Pick<BattleState, 'blitzMode' | 'watch'>>): void;
   /** Clic sulla scena: salta al risultato, o chiude. */
   skip(): void;
   /** Esc: chiude subito. */
@@ -134,7 +131,6 @@ interface BattleState {
 }
 
 export const useBattle = create<BattleState>((set, get) => ({
-  tankLook: 'lato',
   blitzMode: 'tiri',
   watch: 'piccola',
   playing: null,

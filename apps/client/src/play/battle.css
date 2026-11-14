@@ -613,6 +613,8 @@ body[data-stile='vetro'] {
 
 .tk {
   position: absolute;
+  width: 58px;
+  height: 42px;
   translate: -50% -50%;
   transition:
     left 0.7s cubic-bezier(0.3, 0.7, 0.3, 1),
@@ -623,16 +625,6 @@ body[data-stile='vetro'] {
 
 .tk.moving {
   transition-duration: 1.2s;
-}
-
-.tk-alto {
-  width: 58px;
-  height: 42px;
-}
-
-.tk-lato {
-  width: 76px;
-  height: 49px;
 }
 
 @keyframes tk-enter {
@@ -651,7 +643,7 @@ body[data-stile='vetro'] {
 .tk-body {
   position: absolute;
   inset: 0;
-  transform: rotate(var(--hull)) scaleX(var(--flip));
+  transform: rotate(var(--hull));
   filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.55));
 }
 
@@ -699,12 +691,6 @@ body[data-stile='vetro'] .tk-body {
   stroke: rgba(255, 255, 255, 0.22);
   stroke-width: 1.2;
   stroke-dasharray: 2 2.4;
-}
-
-.tk-wheel {
-  fill: #77736c;
-  stroke: var(--tk-track);
-  stroke-width: 1.2;
 }
 
 .tk-turret {
@@ -762,24 +748,24 @@ body[data-stile='vetro'] .tk-body {
 @keyframes tk-die {
   4% {
     filter: brightness(3);
-    transform: rotate(var(--hull)) scaleX(var(--flip)) translate(3px, -2px);
+    transform: rotate(var(--hull)) translate(3px, -2px);
   }
   14% {
-    transform: rotate(var(--hull)) scaleX(var(--flip)) translate(-3px, 2px);
+    transform: rotate(var(--hull)) translate(-3px, 2px);
   }
   35% {
     opacity: 1;
     filter: brightness(0.3) sepia(0.4);
-    transform: rotate(var(--hull)) scaleX(var(--flip)) scale(0.94);
+    transform: rotate(var(--hull)) scale(0.94);
   }
   100% {
     opacity: 0;
     filter: brightness(0.2);
-    transform: rotate(var(--hull)) scaleX(var(--flip)) scale(0.75);
+    transform: rotate(var(--hull)) scale(0.75);
   }
 }
 
-/* proiettile: si muove dal cannone al bersaglio; di lato fa una parabola */
+/* proiettile: dal cannone al bersaglio, dritto */
 .tk-shell {
   position: absolute;
   z-index: 2000;
@@ -816,24 +802,6 @@ body[data-stile='vetro'] .tk-body {
   background: linear-gradient(90deg, transparent, #ffc65c 45%, #fffbe8);
   box-shadow: 0 0 10px 3px rgba(255, 170, 60, 0.75);
   rotate: var(--rot);
-}
-
-.tk-shell.arc i {
-  animation: tk-arc var(--flight) var(--fire) both;
-}
-
-@keyframes tk-arc {
-  0% {
-    translate: 0 0;
-    animation-timing-function: cubic-bezier(0.3, 0.6, 0.6, 1);
-  }
-  50% {
-    translate: 0 var(--arc);
-    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.4);
-  }
-  100% {
-    translate: 0 0;
-  }
 }
 
 /* esplosione: palla di fuoco, onda d'urto, fumo */
