@@ -4,6 +4,7 @@ import {
   applyAction,
   buildDeck,
   createContext,
+  createGame,
   describeObjective,
   eventsFor,
   objectiveMet,
@@ -17,7 +18,7 @@ import {
   type Card,
   type GameState,
 } from '../src';
-import { classicContext, data, newGame, setTerritories, skipSetup, worldContext } from './helpers';
+import { classicContext, data, newGame, PLAYERS, setTerritories, skipSetup, worldContext } from './helpers';
 
 const ctx = classicContext();
 
@@ -87,6 +88,22 @@ describe('nuova partita', () => {
     };
     const objectives = { board: 'mondo', objectives: [{ id: 't3', kind: 'territories', count: 3, text: 'x' }] };
     expect(() => createContext(small, data('conquista/regole.json'), objectives)).toThrow(/solo 4 territori/);
+  });
+
+  it('gli obiettivi devono bastare per tutti i giocatori, già quando si carica il tabellone', () => {
+    type Def = { id: string; kind: string; fallback?: string };
+    const board = BoardDef.parse(data('territori/mondo.json'));
+    const rules = data('conquista/regole.json');
+    const all = data('conquista/obiettivi/mondo.json').objectives as Def[];
+    const plain = all.filter((o) => o.kind !== 'eliminate');
+    const few = { board: 'mondo', objectives: plain.slice(0, 3) };
+    expect(() => createContext(board, rules, few)).toThrow(/ne servono almeno/);
+    // a conquista gli obiettivi non servono
+    expect(() => createContext(board, { ...rules, modes: ['conquest'] }, few)).not.toThrow();
+    // con un "elimina" ne basta uno normale (la sua riserva): ce n'è uno per ogni bersaglio
+    const elim = all.find((o) => o.kind === 'eliminate')!;
+    const tiny = createContext(board, rules, { board: 'mondo', objectives: [plain.find((o) => o.id === elim.fallback), elim] });
+    for (let seed = 1; seed <= 30; seed++) expect(() => createGame(tiny, PLAYERS, 'objectives', seed)).not.toThrow();
   });
 
   it('con gli obiettivi segreti servono almeno 3 giocatori (in 2 si vincerebbe senza combattere)', () => {
@@ -526,13 +543,32 @@ describe('obiettivi', () => {
       const r = applyAction(ctx, s, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 3 });
       if (!r.state.turn!.occupation) continue;
       expect(r.state.players.find((p) => p.id === c)!.objective).toEqual({ id: 'territori_26' });
-      expect(r.events.some((e) => e.type === 'objective-changed' && e.player === c)).toBe(true);
+      expect(r.events.find((e) => e.type === 'eliminated')).toMatchObject({ player: b, by: a, fallback: [c] });
+      expect(r.events.some((e) => e.type === 'objective-changed')).toBe(false);
       // il cambio di obiettivo lo vede solo c: agli altri rivelerebbe che doveva eliminare b
-      expect(eventsFor(r.events, c).some((e) => e.type === 'objective-changed')).toBe(true);
-      expect(eventsFor(r.events, a).some((e) => e.type === 'objective-changed')).toBe(false);
+      expect(eventsFor(r.events, c).find((e) => e.type === 'eliminated')).toEqual({
+        type: 'eliminated',
+        player: b,
+        by: a,
+        cardsTaken: expect.any(Number),
+        objectiveChanged: true,
+      });
+      for (const viewer of [a, b, null]) {
+        const seen = eventsFor(r.events, viewer).find((e) => e.type === 'eliminated')!;
+        expect(seen).not.toHaveProperty('fallback');
+        expect(seen).not.toHaveProperty('objectiveChanged');
+      }
+      // e lo stesso numero di eventi per tutti: un buco nel registro direbbe lo stesso
+      for (const viewer of [a, b, c, null]) expect(eventsFor(r.events, viewer)).toHaveLength(r.events.length);
       return;
     }
     throw new Error('nessuna conquista');
+  });
+
+  it('partite salvate prima: il vecchio "objective-changed" lo vede ancora solo chi riguarda', () => {
+    const old = [{ type: 'objective-changed', player: 'carla' }] as const;
+    expect(eventsFor(old, 'carla')).toEqual(old);
+    expect(eventsFor(old, 'ada')).toEqual([]);
   });
 });
 
