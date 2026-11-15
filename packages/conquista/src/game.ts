@@ -243,16 +243,19 @@ function eliminate(ctx: GameContext, state: GameState, victim: string, by: strin
     player(state, by).cards.push(...v.cards);
   } else state.discard.push(...v.cards);
   v.cards = [];
-  events.push({ type: 'eliminated', player: victim, by, cardsTaken: taken });
-  // chi doveva eliminarlo ma è stato battuto sul tempo passa all'obiettivo di riserva
+  // chi doveva eliminarlo ma è stato battuto sul tempo passa all'obiettivo di riserva; lo dice
+  // l'evento stesso (non uno a parte, che gli altri non vedrebbero: il buco nei numeri
+  // rivelerebbe che qualcuno doveva eliminarlo)
+  const fallback: string[] = [];
   for (const p of state.players) {
     if (p.id === by || !p.alive || p.objective?.target !== victim) continue;
     const def = objectiveDef(ctx, p.objective.id);
     if (def.kind === 'eliminate') {
       p.objective = { id: def.fallback };
-      events.push({ type: 'objective-changed', player: p.id });
+      fallback.push(p.id);
     }
   }
+  events.push({ type: 'eliminated', player: victim, by, cardsTaken: taken, ...(fallback.length > 0 ? { fallback } : {}) });
 }
 
 function areLinked(ctx: GameContext, a: string, b: string) {

@@ -122,6 +122,8 @@ export function setBlitzStep(ms: number): void {
 export interface Link {
   send(msg: ClientMsg): void;
   close(): void;
+  /** Chiude dopo aver consegnato i messaggi in coda (anche alla prossima riconnessione), al massimo dopo `maxMs`. */
+  closeAfterFlush(maxMs: number): void;
 }
 
 export type LinkFactory = (onMessage: (msg: ServerMsg) => void, onStatus: (connected: boolean) => void, greeting: () => ClientMsg | null) => Link;
@@ -133,11 +135,15 @@ export function setLinkFactory(factory: LinkFactory): void {
   openLink = factory;
 }
 
+/** Dopo "Esci" a linea caduta: per quanto si prova ancora a riconnettersi per consegnare l'uscita. */
+const LEAVE_FLUSH_MS = 30_000;
+
 let net: Link | null = null;
-let token: string | null = null;
 let actCounter = 0;
 let sendTimer: ReturnType<typeof setTimeout> | null = null;
 let blitzTimer: ReturnType<typeof setTimeout> | null = null;
+/** Il prossimo messaggio di chat è lo storico che il server manda a ogni entrata (welcome). */
+let chatHistoryNext = false;
 
 // ---------------------------------------------------------------- tabellone
 
@@ -228,15 +234,32 @@ export const useSession = create<Session>((set, get) => {
     return myMove(view, online.me, r, left);
   };
 
-  function connect() {
+  /** Apre un collegamento nuovo; `token` (se c'è) è quello con cui si saluta il server a ogni connessione. */
+  function connect(token: string | null) {
     net?.close();
+    // ogni collegamento ha il suo token: dopo "Esci" a linea caduta, quello lasciato deve ancora
+    // potersi presentare al server alla riconnessione, per consegnare l'uscita
+    const auth = { token };
     // contano solo i messaggi della connessione in uso: quella lasciata può ancora rispondere per un attimo
     const conn: Link = openLink(
-      (msg) => net === conn && onServer(msg),
+      (msg) => {
+        if (net !== conn) return;
+        if (msg.t === 'welcome') auth.token = msg.token;
+        onServer(msg);
+      },
       (connected) => net === conn && patchOnline({ connected }),
-      () => (token ? { t: 'hello', token } : null),
+      () => (auth.token ? { t: 'hello', token: auth.token } : null),
     );
     net = conn;
+  }
+
+  /** Il server ha chiuso la sessione (espulsi, token scaduto, entrata rifiutata): si torna all'inizio. */
+  function dropSession(message: string) {
+    net?.close();
+    net = null;
+    if (sendTimer) clearTimeout(sendTimer);
+    if (blitzTimer) clearTimeout(blitzTimer);
+    set({ online: { ...emptyOnline }, view: null, log: [], draft: emptyDraft, fresh: null, sending: null, notice: message });
   }
 
   function onServer(msg: ServerMsg) {
@@ -246,7 +269,7 @@ export const useSession = create<Session>((set, get) => {
         patchOnline({ publicUrl: msg.publicUrl });
         return;
       case 'welcome':
-        token = msg.token;
+        chatHistoryNext = true;
         saveSession({ game: msg.game, token: msg.token });
         setGameInUrl(msg.game);
         patchOnline({ game: msg.game, me: msg.you });
@@ -275,41 +298,55 @@ export const useSession = create<Session>((set, get) => {
         return;
       }
       case 'chat': {
+        const history = chatHistoryNext;
+        chatHistoryNext = false;
         const known = new Set(s.online.chat.map((l) => `${l.at}:${l.from}`));
         const fresh = msg.lines.filter((l) => !known.has(`${l.at}:${l.from}`));
         if (fresh.length === 0) return;
+        // lo storico all'entrata: dopo un ricaricamento (chat vuota) è roba già letta; dopo una
+        // riconnessione sono nuove solo le righe arrivate mentre si era fuori (le altre sono doppioni)
+        const unseen = history && s.online.chat.length === 0 ? 0 : fresh.filter((l) => l.from !== s.online.me).length;
         patchOnline({
           chat: [...s.online.chat, ...fresh].slice(-200),
-          unread: s.online.unread + fresh.filter((l) => l.from !== s.online.me).length,
+          unread: s.online.unread + unseen,
         });
         return;
       }
       case 'notice':
         set({ notice: msg.message });
         return;
-      case 'error':
+      case 'error': {
         if (msg.ack !== undefined && msg.ack === s.sending) {
           clearTimeout(sendTimer!);
           set({ sending: null, draft: { ...get().draft, blitz: false } });
         }
-        // token di una partita che non c'è più: si torna all'inizio
-        if (/Sessione scaduta|Partita non trovata/.test(msg.message) && !s.online.me) {
-          saveSession(null);
-          token = null;
-          net?.close();
-          net = null;
-          set({ online: { ...emptyOnline }, view: null, log: [], notice: msg.message });
+        // in attesa di entrare (join o rientro col token): qualunque errore è un'entrata rifiutata
+        const entering = !s.online.me && s.online.game !== null;
+        const expired = /Sessione scaduta/.test(msg.message);
+        if (entering || expired || /Partita non trovata/.test(msg.message)) {
+          const game = s.online.game;
+          dropSession(msg.message);
+          if (!entering) {
+            // partita sparita, o posto perso mentre si era scollegati (es. espulsi): il token non serve più
+            saveSession(null);
+            setGameInUrl(null);
+          } else if (expired) {
+            // rientro all'avvio con un token che il server non conosce più
+            saveSession(null);
+          } else {
+            // join rifiutato (nome già usato, partita cominciata o piena): il codice resta nel link,
+            // così la pagina iniziale riapre «Entra» già compilata per riprovare con un altro nome
+            setGameInUrl(game);
+          }
           return;
         }
         notice(msg.message);
         return;
+      }
       case 'kicked':
         saveSession(null);
-        token = null;
-        net?.close();
-        net = null;
         setGameInUrl(null);
-        set({ online: { ...emptyOnline }, view: null, log: [], draft: emptyDraft, notice: msg.reason });
+        dropSession(msg.reason);
         return;
     }
   }
@@ -346,6 +383,11 @@ export const useSession = create<Session>((set, get) => {
         if (draft.target && msg.view.territories[draft.target]?.owner === s.online.me && now.kind !== 'fortify') draft = { ...draft, target: null };
       }
     }
+    // al rientro l'attacco continuo non riparte da solo (continueBlitz qui sotto non gira): si spegne
+    if (msg.sync) {
+      if (blitzTimer) clearTimeout(blitzTimer);
+      if (draft.blitz) draft = { ...draft, blitz: false };
+    }
     set({
       view: msg.view,
       log,
@@ -371,7 +413,11 @@ export const useSession = create<Session>((set, get) => {
     }
     if (blitzTimer) clearTimeout(blitzTimer);
     blitzTimer = setTimeout(() => {
-      if (get().draft.blitz) get().attack(true);
+      const d = get().draft;
+      if (!d.blitz) return;
+      // nel frattempo la scelta è stata tolta: l'attacco continuo finisce qui
+      if (!d.selected || !d.target) return setDraft({ blitz: false });
+      get().attack(true);
     }, BLITZ_STEP_MS);
   }
 
@@ -402,15 +448,13 @@ export const useSession = create<Session>((set, get) => {
     hover: null,
 
     create(name, color, settings) {
-      token = null;
-      set({ online: { ...emptyOnline }, view: null, log: [], draft: emptyDraft });
-      connect();
+      set({ online: { ...emptyOnline }, view: null, log: [], draft: emptyDraft, fresh: null });
+      connect(null);
       net!.send({ t: 'create', name, color, settings });
     },
     join(game, name, color) {
-      token = null;
-      set({ online: { ...emptyOnline, game }, view: null, log: [], draft: emptyDraft });
-      connect();
+      set({ online: { ...emptyOnline, game }, view: null, log: [], draft: emptyDraft, fresh: null });
+      connect(null);
       net!.send({ t: 'join', game, name, ...(color ? { color } : {}) });
     },
     resume() {
@@ -419,22 +463,23 @@ export const useSession = create<Session>((set, get) => {
       const saved = loadSession();
       const linked = gameFromUrl();
       if (!saved || (linked && linked !== saved.game)) return false;
-      token = saved.token;
       set({ online: { ...emptyOnline, game: saved.game } });
-      connect();
+      connect(saved.token);
       return true;
     },
     send(msg) {
       net?.send(msg);
     },
     leave() {
-      // la connessione si chiude poco dopo (il messaggio deve partire), ma le sue risposte non contano più:
-      // altrimenti la partita appena lasciata ricomparirebbe con "sei fuori"
+      // la connessione si chiude dopo aver consegnato l'uscita (a linea caduta: alla riconnessione, che
+      // si presenta col suo token), ma le sue risposte non contano più: altrimenti la partita appena
+      // lasciata ricomparirebbe con "sei fuori"
       const old = net;
       net = null;
       old?.send({ t: 'leave' });
-      setTimeout(() => old?.close(), 300);
-      token = null;
+      // non ancora entrati (Annulla): niente da consegnare dopo, la coda (crea, entra) si butta via
+      if (get().online.me) old?.closeAfterFlush(LEAVE_FLUSH_MS);
+      else setTimeout(() => old?.close(), 300);
       saveSession(null);
       setGameInUrl(null);
       set({ online: { ...emptyOnline }, view: null, log: [], draft: emptyDraft, fresh: null });
@@ -503,9 +548,9 @@ export const useSession = create<Session>((set, get) => {
       if (move.kind === 'attack') {
         if (right) return setDraft({ selected: null, target: null, blitz: false });
         if (mine) {
-          if (d.selected === id) return setDraft({ selected: null, target: null });
+          if (d.selected === id) return setDraft({ selected: null, target: null, blitz: false });
           if (t.armies < 2) {
-            setDraft({ selected: id, target: null });
+            setDraft({ selected: id, target: null, blitz: false });
             return notice(`Da ${name(id)} non si può attaccare: serve almeno 2 armate.`);
           }
           sfx.play('select');

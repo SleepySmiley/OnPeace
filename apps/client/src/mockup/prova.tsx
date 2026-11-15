@@ -8,10 +8,14 @@ import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
 import { GameScreen } from '../play/GameScreen';
+import { sfx } from '../audio/sfx';
 import { setLinkFactory, useSession } from '../store';
 import { LocalGame, localBoard, type Start } from './locale';
 import '../styles.css';
 import './prova.css';
+
+// come in main.tsx: il browser fa suonare solo dopo un gesto
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sfx.unlock(), { capture: true });
 
 // la sessione della prova non deve prendere il posto di quella di una partita vera (stesso indirizzo)
 const SESSION_KEY = 'onpeace.session';

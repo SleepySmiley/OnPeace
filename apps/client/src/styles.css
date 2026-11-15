@@ -1262,7 +1262,8 @@ body[data-stile='vetro'] .tb-mine {
 .objective-reveal {
   position: fixed;
   inset: 52px 0 0;
-  z-index: 55;
+  /* sotto la barra in alto (30: i suoi menu restano sopra il velo), gli avvisi e le finestre */
+  z-index: 29;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2475,6 +2476,13 @@ body[data-stile='vetro'] .hf-objective b {
   overflow-y: auto;
   padding: 18px 22px 20px;
   animation: sheet-up 0.2s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
 }
 
 .hand-table .sc-close {

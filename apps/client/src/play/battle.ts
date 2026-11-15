@@ -70,8 +70,8 @@ export interface Playing {
   ms: number;
   /** Vista in piccolo (chi guarda). */
   small: boolean;
-  /** Tiri veloci col conto che scorre. */
-  quick: boolean;
+  /** Ritmo del tiro in corso ('quick': tiri veloci col conto che scorre). */
+  pace: Pace;
   /** Ogni fase ha un numero suo: le animazioni ripartono quando cambia. */
   tick: number;
 }
@@ -107,14 +107,38 @@ export function shotsOf(r: Roll): boolean[] {
 const INTRO_MS = 1100;
 const OUTRO_MS = 600;
 
-function throwMs(k: number, quick: boolean) {
-  return quick ? 280 : k === 0 ? 900 : 620;
+/**
+ * Ritmo di un tiro: normale; svelto per i tiri di un "fino in fondo" dopo il primo (stanno nel passo
+ * dell'attacco continuo, così la scena non resta indietro); veloce col conto che scorre.
+ */
+export type Pace = 'normal' | 'blitz' | 'quick';
+
+/**
+ * Ritmo del tiro `k` quando ne sono arrivati `arrived`: veloce se i tiri si accumulano, e per un "fino
+ * in fondo" (dal secondo tiro) col conto veloce o quando la scena è rimasta indietro di un tiro.
+ */
+export function paceOf(k: number, arrived: number, blitz: boolean, mode: BlitzMode): Pace {
+  const behind = arrived - 1 - k;
+  if (behind > 2) return 'quick';
+  if (k === 0) return 'normal';
+  if (mode === 'conto' && (blitz || behind > 0)) return 'quick';
+  if (blitz) return behind > 0 ? 'quick' : 'blitz';
+  return 'normal';
 }
-function resolveMs(k: number, quick: boolean, tanks: boolean, shots: number) {
+
+export function throwMs(k: number, pace: Pace) {
+  return pace === 'quick' ? 280 : k === 0 ? 900 : pace === 'blitz' ? 440 : 620;
+}
+export function resolveMs(k: number, pace: Pace, tanks: boolean, shots: number) {
   // coi carri il confronto è la sparatoria: un colpo per coppia di dadi, uno dopo l'altro
-  // (a colpi possono essere tanti: oltre sei si spara più fitto, la scena non si allunga)
-  if (tanks) return quick ? 520 : (k === 0 ? 700 : 560) + Math.min(shots, 6) * (k === 0 ? 520 : 420);
-  return quick ? 180 : k === 0 ? 760 : 520;
+  // (a colpi possono essere tanti: oltre sei si spara più fitto, la scena non si allunga;
+  // nel "fino in fondo" già oltre tre)
+  if (tanks) {
+    if (pace === 'quick') return 520;
+    if (pace === 'blitz') return 380 + Math.min(shots, 3) * 160;
+    return (k === 0 ? 700 : 560) + Math.min(shots, 6) * (k === 0 ? 520 : 420);
+  }
+  return pace === 'quick' ? 180 : k === 0 ? 760 : 520;
 }
 
 /** Colpi della sparatoria dei carri: quando parte ognuno e quando arriva (ms dall'inizio del confronto). */
@@ -135,8 +159,15 @@ const END_MS = 1700;
 const TIE_MS = 650;
 const REROLL_MS = 640;
 
-/** Passo dell'attacco continuo: quanto dura un tiro nella scena (poco meno, per non farla aspettare). */
-const BLITZ_STEP: Record<BlitzMode, number> = { tiri: 1000, conto: 380 };
+/**
+ * Passo dell'attacco continuo: quanto dura un tiro nella scena (poco meno, per non farla aspettare).
+ * Tiro per tiro: un tiro svelto con due colpi; se la scena resta indietro di un tiro, il successivo è
+ * veloce e la riporta in pari. Col conto veloce: un tiro veloce.
+ */
+export const BLITZ_STEP: Record<BlitzMode, number> = {
+  tiri: throwMs(1, 'blitz') + resolveMs(1, 'blitz', true, 2) - 140,
+  conto: throwMs(1, 'quick') + resolveMs(1, 'quick', true, 2) - 40,
+};
 
 // ---------------------------------------------------------------- stato
 
@@ -164,17 +195,21 @@ export const useBattle = create<BattleState>((set, get) => ({
   },
   skip() {
     const p = get().playing;
-    if (!p) return;
-    if (p.stage === 'hold' || p.stage === 'end' || p.stage === 'outro') return outro();
-    // al risultato dell'ultimo tiro arrivato, subito
+    // l'uscita è già partita: un clic in più non la rifà da capo
+    if (!p || p.stage === 'outro') return;
+    if (p.stage === 'hold' || p.stage === 'end') return outro();
+    // al risultato dell'ultimo tiro arrivato, subito: i colpi già in programma si zittiscono
     const last = p.eng.rolls.length - 1;
     if (last < 0) return outro();
+    silence();
     put({ shown: last, rr: p.eng.rolls[last]!.rerolls?.length ?? 0, stage: 'resolve', ms: 120 });
     schedule(140, afterResolve);
   },
   close() {
     const p = get().playing;
-    if (p && p.stage !== 'outro') outro();
+    if (!p || p.stage === 'outro') return;
+    silence();
+    outro();
   },
 }));
 
@@ -199,9 +234,18 @@ const keyOf = (e: Engagement) => `${e.a.territory}>${e.d.territory}`;
 function gainOf(p: Playing) {
   return p.eng.role === 'spectator' ? (p.small ? 0.35 : 0.6) : 1;
 }
+
+/** Uscita dei suoni della scena: i colpi sono in programma in anticipo, saltando o chiudendo si zittiscono. */
+let bus: GainNode | null = null;
+function silence() {
+  if (bus) sfx.mute(bus);
+  bus = null;
+}
 function play(name: SoundName, delay = 0) {
   const p = useBattle.getState().playing;
-  if (p) sfx.play(name, delay, gainOf(p));
+  if (!p) return;
+  bus ??= sfx.bus();
+  sfx.play(name, delay, gainOf(p), bus ?? undefined);
 }
 
 /** "Fino in fondo" in corso per questo scontro. */
@@ -212,25 +256,40 @@ function blitzOn(eng: Engagement): boolean {
   return d.blitz && d.selected === eng.a.territory && d.target === eng.d.territory;
 }
 
+/** La coda con uno scontro in più: chi combatte passa davanti a chi guarda, e di chi guarda resta solo l'ultimo. */
+export function queueWith(queue: Engagement[], eng: Engagement): Engagement[] {
+  if (eng.role === 'spectator') return [...queue.filter((e) => e.role !== 'spectator'), eng];
+  const i = queue.findIndex((e) => e.role === 'spectator');
+  return i < 0 ? [...queue, eng] : [...queue.slice(0, i), eng, ...queue.slice(i)];
+}
+
+/** Il prossimo scontro da mostrare (prima chi combatte, poi chi guarda) e la coda che resta. */
+export function nextOf(queue: Engagement[]): { next: Engagement | undefined; rest: Engagement[] } {
+  const i = Math.max(0, queue.findIndex((e) => e.role !== 'spectator'));
+  return { next: queue[i], rest: queue.filter((_, k) => k !== i) };
+}
+
 function enqueue(eng: Engagement) {
   const s = useBattle.getState();
   const p = s.playing;
-  // chi guarda vede solo l'ultima; e lascia subito il posto a chi combatte
-  if (p && p.eng.role === 'spectator' && (eng.role !== 'spectator' || p.small)) {
-    useBattle.setState({ playing: null, queue: s.queue.filter((e) => e.role !== 'spectator') });
-    return start(eng);
-  }
   if (!p) return start(eng);
-  const queue = eng.role === 'spectator' ? [...s.queue.filter((e) => e.role !== 'spectator'), eng] : [...s.queue, eng];
-  useBattle.setState({ queue });
+  // chi guarda vede solo l'ultima; e lascia subito il posto a chi combatte (prima a chi aspettava già)
+  if (p.eng.role === 'spectator' && (eng.role !== 'spectator' || p.small)) {
+    const { next, rest } = nextOf(queueWith(s.queue.filter((e) => e.role !== 'spectator'), eng));
+    silence();
+    useBattle.setState({ playing: null, queue: rest });
+    return start(next!);
+  }
+  useBattle.setState({ queue: queueWith(s.queue, eng) });
+  // chi combatte non aspetta la pausa della scena prima (a meno che lì vada avanti un "fino in fondo")
+  if (eng.role !== 'spectator' && p.stage === 'hold' && !blitzOn(p.eng)) outro();
 }
 
 function start(eng: Engagement) {
   const s = useBattle.getState();
   const small = eng.role === 'spectator' && s.watch === 'piccola';
-  const quick = false;
   const intro = small ? 120 : Math.round(INTRO_MS * (eng.again ? 0.45 : 1));
-  useBattle.setState({ playing: { eng, shown: -1, rr: 0, stage: 'intro', ms: intro, small, quick, tick: 0 } });
+  useBattle.setState({ playing: { eng, shown: -1, rr: 0, stage: 'intro', ms: intro, small, pace: 'normal', tick: 0 } });
   if (!small && !eng.again) play('whoosh');
   schedule(intro, nextRoll);
 }
@@ -240,14 +299,14 @@ function nextRoll() {
   if (!p) return;
   const k = p.shown + 1;
   if (k >= p.eng.rolls.length) return p.eng.over ? end() : hold();
-  // "conto" veloce: dal secondo tiro di un fino in fondo; e se i tiri si accumulano, si accelera
+  // fino in fondo: svelto dal secondo tiro, veloce col conto o se resta indietro; se i tiri si accumulano, si accelera
   const behind = p.eng.rolls.length - 1 - k;
-  const quick = (useBattle.getState().blitzMode === 'conto' && k > 0 && (blitzOn(p.eng) || behind > 0)) || behind > 2;
-  const speed = p.small ? 0.55 : behind > 0 && !quick ? 0.7 : 1;
-  const ms = Math.round(throwMs(k, quick) * speed);
+  const pace = paceOf(k, p.eng.rolls.length, blitzOn(p.eng), useBattle.getState().blitzMode);
+  const speed = p.small ? 0.55 : behind > 0 ? 0.7 : 1;
+  const ms = Math.round(throwMs(k, pace) * speed);
   // in piccolo e col conto veloce i pari ritirati non si guardano: si vedono subito i dadi finali
-  const rr = p.small || quick ? (p.eng.rolls[k]!.rerolls?.length ?? 0) : 0;
-  put({ shown: k, rr, stage: 'throw', ms, quick });
+  const rr = p.small || pace === 'quick' ? (p.eng.rolls[k]!.rerolls?.length ?? 0) : 0;
+  put({ shown: k, rr, stage: 'throw', ms, pace });
   play('dice');
   schedule(ms, afterThrow);
 }
@@ -278,7 +337,7 @@ function resolve() {
   const speed = p.small ? 0.55 : 1;
   const shots = shotsOf(roll).length;
   const tanks = !p.small;
-  const ms = Math.round(resolveMs(p.shown, p.quick, tanks, shots) * speed);
+  const ms = Math.round(resolveMs(p.shown, p.pace, tanks, shots) * speed);
   put({ stage: 'resolve', ms });
   if (tanks) {
     // cannonata alla partenza, esplosione all'arrivo
@@ -286,7 +345,7 @@ function resolve() {
       play('cannon', t.fire / 1000);
       play('kill', t.hit / 1000);
     }
-  } else if (p.quick) play('hit');
+  } else if (p.pace === 'quick') play('hit');
   else shotsOf(roll).slice(0, 6).forEach((_, i) => play('hit', 0.12 + i * 0.13));
   schedule(ms, afterResolve);
 }
@@ -302,7 +361,9 @@ function afterResolve() {
 function hold() {
   const p = useBattle.getState().playing;
   if (!p) return;
-  const ms = p.small ? 1600 : holdMs(p.eng.role);
+  // se aspetta uno scontro di chi gioca, la pausa è breve (quelli in piccolo degli altri aspettano)
+  const ownNext = useBattle.getState().queue.some((e) => e.role !== 'spectator');
+  const ms = ownNext ? 300 : p.small ? 1600 : holdMs(p.eng.role);
   put({ stage: 'hold', ms });
   const wait = () => {
     const cur = useBattle.getState().playing;
@@ -337,9 +398,19 @@ function outro() {
 function finish() {
   const s = useBattle.getState();
   if (s.playing) lastClosed = { key: keyOf(s.playing.eng), at: performance.now() };
-  const [next, ...rest] = s.queue;
+  silence();
+  const { next, rest } = nextOf(s.queue);
   useBattle.setState({ playing: null, queue: rest });
   if (next) start(next);
+}
+
+/** Via tutte le scene, senza uscita (si lascia la partita): non restano timer né suoni in programma. */
+export function resetBattle(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  lastClosed = null;
+  silence();
+  useBattle.setState({ playing: null, queue: [] });
 }
 
 /** Un tiro nuovo: si aggiunge allo scontro in corso sugli stessi territori, o ne apre uno. */
@@ -410,7 +481,7 @@ function roleOf(me: string | null, e: { player: string; defender: string }): Rol
 /** Collega il regista alla partita: ogni messaggio con battaglie nuove le passa alla scena. */
 export function connectBattleFeed(): () => void {
   let seen: unknown = useSession.getState().fresh;
-  return useSession.subscribe((s) => {
+  const off = useSession.subscribe((s) => {
     if (s.fresh === seen) return;
     seen = s.fresh;
     if (!s.fresh || !s.view || !s.board) return;
@@ -431,4 +502,9 @@ export function connectBattleFeed(): () => void {
       feedRoll({ role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null }, roll, a - e.attackerLosses);
     }
   });
+  // lasciando la partita le scene finiscono qui: niente suoni sulla schermata iniziale
+  return () => {
+    off();
+    resetBattle();
+  };
 }

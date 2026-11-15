@@ -17,6 +17,14 @@ export function createContext(board: BoardDef, rulesData: unknown, objectivesDat
   if (board.territories.length < rules.players.max) {
     throw new Error(`regole: ${rules.players.max} giocatori ma solo ${board.territories.length} territori`);
   }
+  // un obiettivo diverso a testa: senza "elimina" (che vale uno per bersaglio) ne servono tanti
+  // quanti i giocatori; con almeno un "elimina" bastano, perché la sua riserva è un obiettivo normale
+  if (rules.modes.includes('objectives')) {
+    const plain = objectives.objectives.filter((o) => o.kind !== 'eliminate').length;
+    if (plain === objectives.objectives.length && plain < rules.players.max) {
+      throw new Error(`obiettivi: ne servono almeno ${rules.players.max} (uno per giocatore), ce ne sono ${plain}`);
+    }
+  }
   for (let n = rules.players.min; n <= rules.players.max; n++) {
     if (!rules.initialArmies[String(n)]) throw new Error(`regole: mancano le armate iniziali per ${n} giocatori`);
     if (rules.initialArmies[String(n)]! < Math.ceil(board.territories.length / n)) {

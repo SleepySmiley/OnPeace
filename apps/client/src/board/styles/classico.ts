@@ -3,6 +3,7 @@
  * zero. Continenti in tinte da atlante, mare chiaro con le increspature incise, nomi in
  * maiuscoletto antico, pedine dei giocatori come dischi di plastica impilati.
  */
+import type { BoardDef } from '@onpeace/engine';
 import { drawTankToken, type TankTheme } from '../tanks';
 import {
   actionable,
@@ -82,10 +83,23 @@ const ripples = new Map<string, HTMLCanvasElement>();
 /** Livelli di zoom delle increspature: 1, 2, 4 o 8 volte la vista d'insieme. */
 const BANDS = [1, 2, 4, 8];
 const rippleBand = (z: number) => 2 ** clamp(Math.round(Math.log2(Math.max(1, z))), 0, 3);
+
+/**
+ * Numero di ogni versione del tabellone, per le chiavi delle immagini: un tabellone aggiornato sul
+ * server ha lo stesso id ma è un oggetto nuovo, con coste che possono essere cambiate.
+ */
+const versions = new WeakMap<BoardDef, number>();
+let lastVersion = 0;
+function versionOf(board: BoardDef): number {
+  let n = versions.get(board);
+  if (n === undefined) versions.set(board, (n = ++lastVersion));
+  return n;
+}
+
 function rippleImage(env: Pick<PaintEnv, 'geo' | 'fit' | 'dpr'>, band: number): HTMLCanvasElement {
   const { geo, fit, dpr } = env;
   const { width: W, height: H } = geo;
-  const k = `${geo.board.id}|${band}|${fit.toFixed(6)}|${dpr}`;
+  const k = `${versionOf(geo.board)}|${band}|${fit.toFixed(6)}|${dpr}`;
   const done = ripples.get(k);
   if (done) return done;
   // metà della risoluzione dello schermo a quello zoom (sono bande sfumate), al massimo 2,5 milioni di pixel
@@ -112,7 +126,7 @@ function rippleImage(env: Pick<PaintEnv, 'geo' | 'fit' | 'dpr'>, band: number): 
 let warming = '';
 function warmRipples(env: PaintEnv) {
   const { geo, fit, dpr } = env;
-  const k = `${geo.board.id}|${fit.toFixed(6)}|${dpr}`;
+  const k = `${versionOf(geo.board)}|${fit.toFixed(6)}|${dpr}`;
   if (warming === k) return;
   warming = k;
   const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 200));
@@ -363,7 +377,9 @@ export const classico: BoardStyle = {
       ctx.fill(geo.paths.get(id)!, 'evenodd');
     }
     if (state.selected) {
-      for (const n of state.arrows ? state.arrows.to : (geo.neighbours.get(state.selected) ?? [])) {
+      // come le frecce: senza `arrows` tutti i confinanti (pagina di prova), con null nessuno
+      const near = state.arrows === undefined ? (geo.neighbours.get(state.selected) ?? []) : (state.arrows?.to ?? []);
+      for (const n of near) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
         ctx.fill(geo.paths.get(n)!, 'evenodd');
       }

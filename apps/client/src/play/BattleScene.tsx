@@ -28,6 +28,9 @@ const PIPS: Record<number, number[]> = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0,
 /** A coppie: vinto, perso, senza coppia, pari (prima di ritirarlo). A colpi: colpo (won) o a vuoto (lost). */
 type DieState = 'won' | 'lost' | 'spare' | 'tie' | null;
 
+/** Chi ha chiesto meno movimento al sistema: dadi e camera arrivano subito (le animazioni CSS le accorcia battle.css). */
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export function Die3D({
   value,
   side,
@@ -66,7 +69,10 @@ export function Die3D({
     const spinY = 360 * (1 + Math.floor(Math.random() * 2)) * sign();
     const rot = (ax: number, ay: number, az: number) =>
       `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) rotateZ(${az}deg) rotateX(${ax}deg) rotateY(${ay}deg)`;
-    const timing = { duration: Math.max(60, dur), delay: wait, fill: 'both' as const };
+    // anche l'ultimo dado della fila si ferma entro il lancio (il ritardo si mangia un pezzo del volo);
+    // chi chiede meno movimento vede subito il dado fermo
+    const w = reducedMotion() ? 0 : Math.min(wait, dur * 0.35);
+    const timing = { duration: reducedMotion() ? 1 : Math.max(60, dur - w), delay: w, fill: 'both' as const };
     const anims = [
       cube.current!.animate([{ transform: rot(fx + spinX, fy + spinY, tilt.z + 220 * sign()) }, { transform: rot(fx, fy, tilt.z) }], {
         ...timing,
@@ -252,6 +258,10 @@ interface Spots {
 
 /** Vista di prima della prima battaglia di fila: ci si torna quando non ce ne sono altre in coda. */
 let home: BoardView | null = null;
+/** Vista verso cui la camera sta tornando: se una scena parte prima che arrivi, la vista di prima resta questa. */
+let homing: BoardView | null = null;
+
+const near = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) < 0.5 && Math.abs(a[1] - b[1]) < 0.5;
 
 /**
  * Camera: all'ingresso vola sui due territori (lasciando i margini chiesti), all'uscita torna dov'era
@@ -266,6 +276,7 @@ function useCamera(
   spread?: number,
 ): Spots | null {
   const [spots, setSpots] = useState<Spots | null>(null);
+  const id = p.eng.id;
   const from = p.eng.a.territory;
   const to = p.eng.d.territory;
   const { side, top, bottom } = margin;
@@ -273,7 +284,11 @@ function useCamera(
     if (!painter) return;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    home ??= painter.currentView();
+    // la camera del gioco prende il comando: un trascinamento in corso finisce qui
+    painter.cancelDrag();
+    // a metà di un volo (anche di ritorno) la vista di prima è dove arriva, non dove si trova adesso
+    home ??= homing ?? painter.restingView();
+    homing = null;
     const box = { left: side, top, right: w - side, bottom: h - bottom };
     let far = spread ?? 0;
     if (spread) {
@@ -293,16 +308,30 @@ function useCamera(
     const a = painter.territoryOnScreen(from, view);
     const d = painter.territoryOnScreen(to, view);
     if (a && d) setSpots({ a, d });
-    void painter.flyTo(view, useBattle.getState().playing?.ms ?? 700);
-  }, [painter, from, to, side, top, bottom, maxZoom, spread]);
+    let live = true;
+    void painter.flyTo(view, reducedMotion() ? 0 : (useBattle.getState().playing?.ms ?? 700)).then(() => {
+      // se il volo non è arrivato fin lì (fermato), la scena si rimette dove la mappa è davvero
+      const a2 = painter.territoryOnScreen(from);
+      const d2 = painter.territoryOnScreen(to);
+      if (live && a2 && d2) setSpots((s) => (s && near(s.a, a2) && near(s.d, d2) ? s : { a: a2, d: d2 }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [painter, id, from, to, side, top, bottom, maxZoom, spread]);
   const leaving = p.stage === 'outro';
   useEffect(() => {
     // resta lì solo se dopo c'è un'altra scena grande: quelle piccole degli altri non muovono la camera
     const s = useBattle.getState();
     const bigNext = s.queue.some((e) => e.role !== 'spectator' || s.watch !== 'piccola');
     if (!leaving || !painter || !home || bigNext) return;
-    void painter.flyTo(home, p.ms + 160);
+    // la vista di prima resta in `homing` finché la camera non ci arriva
+    const target = home;
     home = null;
+    homing = target;
+    void painter.flyTo(target, reducedMotion() ? 0 : p.ms + 160).then(() => {
+      if (homing === target) homing = null;
+    });
   }, [leaving, painter, p.ms]);
   return spots;
 }
@@ -718,25 +747,48 @@ export function BattleLayer({ painter }: { painter: BoardPainter | null }) {
   const me = useSession((st) => st.online.me);
   const m = useMemo(() => (playing ? moment(playing, me) : null), [playing, me]);
 
+  // Esc chiude la scena grande e basta: in cattura, prima di GameScreen, che toglierebbe anche la scelta
+  // dell'attacco e le armate non confermate (le scene piccole degli altri e l'uscita non lo prendono)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') useBattle.getState().close();
+      if (e.key !== 'Escape') return;
+      const el = e.target as HTMLElement;
+      if (el.closest?.('textarea, select, input:not([type=range]):not([type=checkbox]):not([type=radio])')) return;
+      // un pannello aperto sopra la scena (guida, carte, Aspetto, Suoni) si prende lui l'Esc
+      if (document.querySelector('.modal-backdrop, .hand-table-veil, .menu-pop, .sound-pop')) return;
+      const p = useBattle.getState().playing;
+      if (!p || p.small || p.stage === 'outro') return;
+      useBattle.getState().close();
+      // "fino in fondo": si ferma (altrimenti il tiro dopo riaprirebbe la scena); la scelta resta, Invio riattacca
+      const session = useSession.getState();
+      if (p.eng.role === 'attacker' && session.draft.blitz) session.stopBlitz();
+      e.stopPropagation();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
+
+  // lasciando la partita a metà di una scena la camera non torna: la vista di prima non vale più
+  useEffect(
+    () => () => {
+      home = null;
+      homing = null;
+    },
+    [],
+  );
 
   if (!m) return null;
   const small = m.p.small;
   const style = { '--ms': `${m.p.ms}ms` } as Vars;
   return (
     <div
-      className={`bt-layer bt-${small ? 'small' : 'carri'} st-${m.p.stage}${m.p.quick ? ' quick' : ''} role-${m.eng.role}`}
+      className={`bt-layer bt-${small ? 'small' : 'carri'} st-${m.p.stage}${m.p.pace === 'quick' ? ' quick' : ''} role-${m.eng.role}`}
       style={style}
       onClick={small ? undefined : () => useBattle.getState().skip()}
       aria-live="polite"
     >
-      {small ? <Small m={m} /> : <TankStage m={m} painter={painter} />}
+      {/* ogni scontro ha la sua scena: la camera vola, i carri e le barre entrano da capo */}
+      {small ? <Small m={m} /> : <TankStage key={m.eng.id} m={m} painter={painter} />}
     </div>
   );
 }

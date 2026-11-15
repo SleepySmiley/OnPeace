@@ -30,6 +30,9 @@ export type TieRule = z.infer<typeof TieRule>;
 export const CombatRule = z.enum(['pairs', 'hits']);
 export type CombatRule = z.infer<typeof CombatRule>;
 
+/** Dadi massimi per parte che le regole possono chiedere (a colpi, `hits.max`): oltre, un attacco non si valida nemmeno. */
+export const MAX_DICE = 20;
+
 export const ConquestRules = z.strictObject({
   $schema: z.string().optional(),
   players: z.strictObject({
@@ -69,7 +72,7 @@ export const ConquestRules = z.strictObject({
     tiesTo: TieRule,
     hits: z.strictObject({
       /** A colpi: dadi massimi per parte (chi attacca ne tira al massimo uno in meno delle armate). */
-      max: Int.min(1).max(20),
+      max: Int.min(1).max(MAX_DICE),
       /** Un dado di chi attacca colpisce da questo numero in su (4: con 4, 5 o 6). */
       attackOn: Int.min(1).max(6),
       /** Lo stesso per chi difende. */

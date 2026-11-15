@@ -30,14 +30,17 @@ export function SoundButton() {
     const outside = (e: PointerEvent) => {
       if (!box.current?.contains(e.target as Node)) setOpen(false);
     };
+    // in cattura, prima di GameScreen: l'Esc che chiude il menu non deve togliere anche le armate non confermate
     const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
     };
     window.addEventListener('pointerdown', outside);
-    window.addEventListener('keydown', esc);
+    window.addEventListener('keydown', esc, true);
     return () => {
       window.removeEventListener('pointerdown', outside);
-      window.removeEventListener('keydown', esc);
+      window.removeEventListener('keydown', esc, true);
     };
   }, [open]);
 

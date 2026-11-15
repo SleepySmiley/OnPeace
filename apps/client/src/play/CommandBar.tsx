@@ -16,7 +16,16 @@ export function Stepper({ value, min, max, onChange, label }: { value: number; m
         −
       </button>
       {max - min > 2 && (
-        <input type="range" min={min} max={max} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(Number(e.target.value))}
+          // dopo averlo trascinato il fuoco torna al gioco (Invio sposta); con Tab resta e le frecce lo muovono
+          onPointerUp={(e) => e.currentTarget.blur()}
+        />
       )}
       <span className="num stepper-value">{value}</span>
       <button type="button" className="ghost" aria-label="Più" disabled={value >= max} onClick={() => onChange(value + 1)}>

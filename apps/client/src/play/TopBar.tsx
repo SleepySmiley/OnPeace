@@ -9,16 +9,17 @@ import { Countdown } from '../ui/Countdown';
 import { SoundButton } from '../ui/SoundButton';
 import { Chip } from './bits';
 import { PHASES } from './describe';
-import { actingPlayer, isMyMove, roundOf } from './logic';
+import { actingPlayer, canUsePause, isMyMove, preparationPhases, roundOf } from './logic';
 import { useGame } from './useGame';
 
 const PRE = ['briefing', 'draft', 'setup'];
 const TURN = ['reinforce', 'attack', 'fortify'];
 
-/** Le tre fasi del momento (preparazione o turno), numerate: ✓ quelle fatte, piena nel colore di chi gioca quella in corso. */
+/** Le fasi del momento (preparazione o turno), numerate: ✓ quelle fatte, piena nel colore di chi gioca quella in corso. */
 function PhasePath({ color }: { color: string }) {
-  const { view } = useGame();
-  const ids = PRE.includes(view.phase) ? PRE : TURN;
+  const { view, lobby } = useGame();
+  // nella preparazione solo le fasi che ci sono davvero (con i territori distribuiti a caso non si sceglie)
+  const ids = PRE.includes(view.phase) ? preparationPhases(lobby.rules) : TURN;
   const at = ids.indexOf(view.phase);
   const steps = PHASES.filter((p) => ids.includes(p.id));
   return (
@@ -56,7 +57,8 @@ export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; o
   const send = useSession((s) => s.send);
   const leave = useSession((s) => s.leave);
   const acting = actingPlayer(view);
-  const isHost = lobby.hostId === me;
+  // ferma il tempo l'host; se l'host non c'è, chi è ancora in partita lo fa ripartire
+  const pauseButton = canUsePause(lobby, me, Boolean(online.paused));
   const { round } = roundOf(view);
   const over = view.phase === 'over' || lobby.phase === 'ended';
   const mine = isMyMove(move);
@@ -70,7 +72,7 @@ export function TopBar({ onGuide, onReport, children }: { onGuide: () => void; o
             Giro <b>{round}</b>
           </span>
         )}
-        {isHost && !over && (
+        {pauseButton && !over && (
           <button
             type="button"
             className="ghost tiny"

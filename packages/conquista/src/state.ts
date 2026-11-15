@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { BoardDef } from '@onpeace/engine';
 import type { Seed } from './random';
 import type { Reroll } from './dice';
-import type { CardSymbol, ConquestRules, GameMode, ObjectiveDef } from './schema';
+import { MAX_DICE, type CardSymbol, type ConquestRules, type GameMode, type ObjectiveDef } from './schema';
 
 export interface Card {
   id: string;
@@ -101,7 +101,8 @@ export const ActionS = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('setup-place'), placements: Placements }),
   z.object({ kind: z.literal('play-set'), cards: z.tuple([Id, Id, Id]) }),
   z.object({ kind: z.literal('reinforce'), placements: Placements }),
-  z.object({ kind: z.literal('attack'), from: Id, to: Id, dice: z.number().int().min(1).max(5) }),
+  // il limite vero (regole e armate) lo controlla il motore: qui solo il massimo che le regole possono chiedere
+  z.object({ kind: z.literal('attack'), from: Id, to: Id, dice: z.number().int().min(1).max(MAX_DICE) }),
   z.object({ kind: z.literal('occupy'), armies: z.number().int().min(1).max(10_000) }),
   z.object({ kind: z.literal('end-attack') }),
   z.object({ kind: z.literal('fortify'), from: Id, to: Id, armies: z.number().int().min(1).max(10_000) }),
@@ -140,7 +141,20 @@ export type GameEvent =
   | { type: 'occupy'; player: string; from: string; to: string; armies: number }
   | { type: 'fortify'; player: string; from: string; to: string; armies: number }
   | { type: 'card'; player: string; card: Card | null }
-  | { type: 'eliminated'; player: string; by: string; cardsTaken: number }
+  | {
+      type: 'eliminated';
+      player: string;
+      by: string;
+      cardsTaken: number;
+      /**
+       * Chi doveva eliminarlo ed è passato all'obiettivo di riserva. Resta nel registro del server:
+       * eventsFor lo toglie a tutti e lo dice solo all'interessato con `objectiveChanged`.
+       */
+      fallback?: string[];
+      /** Solo per chi lo legge (da eventsFor): era il tuo bersaglio, ora hai l'obiettivo di riserva. */
+      objectiveChanged?: true;
+    }
+  /** Solo nelle partite salvate prima: ora il cambio di obiettivo sta in 'eliminated'. */
   | { type: 'objective-changed'; player: string }
   | { type: 'victory'; player: string; reason: 'objective' | 'conquest' | 'last-standing' };
 

@@ -18,6 +18,10 @@ import { LocalGame, localBoard, type Start } from './locale';
 import '../styles.css';
 import './prova.css';
 import './battaglia.css';
+import { sfx } from '../audio/sfx';
+
+// come in main.tsx: il browser fa suonare solo dopo un gesto
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sfx.unlock(), { capture: true });
 
 // la sessione della prova non deve prendere il posto di quella di una partita vera (stesso indirizzo)
 const SESSION_KEY = 'onpeace.session';

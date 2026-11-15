@@ -1,13 +1,30 @@
 /** Fine partita: chi vince e perché, gli obiettivi segreti di tutti, i territori di ciascuno. */
+import { useEffect } from 'react';
+import { sfx } from '../audio/sfx';
 import { useSession } from '../store';
 import { Chip } from './bits';
 import { totals } from './logic';
 import { useGame } from './useGame';
 
+/** Gli eventi di cui si è già suonata la fine: la finestra si monta due volte in sviluppo, la musica una volta sola. */
+let sounded: object | null = null;
+
 export function GameOver({ onClose }: { onClose: () => void }) {
   const { view, me, colorOf } = useGame();
   const log = useSession((s) => s.log);
+  const fresh = useSession((s) => s.fresh);
   const leave = useSession((s) => s.leave);
+
+  // vittoria o sconfitta si sentono con la finestra (che aspetta la scena della battaglia decisiva), o
+  // quando arriva la vittoria se la finestra c'è già (la sala "finita" arriva prima della partita);
+  // solo se è appena arrivata, non al rientro in una partita già finita
+  useEffect(() => {
+    const end = fresh?.events.find((e) => e.event.type === 'victory')?.event;
+    if (!fresh || end?.type !== 'victory' || sounded === fresh) return;
+    sounded = fresh;
+    sfx.play(end.player === me ? 'victory' : 'defeat');
+  }, [fresh, me]);
+
   const winner = view.players.find((p) => p.id === view.winner);
   const victory = [...log].reverse().find((e) => e.event.type === 'victory')?.event;
   const mine = winner?.id === me;

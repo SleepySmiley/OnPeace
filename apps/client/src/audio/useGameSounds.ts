@@ -31,11 +31,8 @@ export function useGameSounds({ me, fresh, deadline, paused, myMove, chat }: Arg
   useEffect(() => {
     if (!fresh) return;
     const events = fresh.events.map((e) => e.event);
-    const victory = events.find((e) => e.type === 'victory');
-    if (victory) {
-      sfx.play(victory.player === me ? 'victory' : 'defeat');
-      return;
-    }
+    // vittoria e sconfitta finale le suona la finestra di fine partita, quando compare (dopo la scena della battaglia decisiva)
+    if (events.some((e) => e.type === 'victory')) return;
     if (events.some((e) => e.type === 'eliminated' && e.player === me)) return sfx.play('defeat');
     if (events.some((e) => e.type === 'turn' && e.player === me)) sfx.play('yourPick');
     else if (events.some((e) => e.type === 'turn' || e.type === 'setup-reveal')) sfx.play('turn', 0, 0.6);

@@ -73,12 +73,18 @@ export function viewFor(ctx: GameContext, state: GameState, viewer: string | nul
 /**
  * Eventi visibili a un giocatore: la carta pescata si vede solo da chi la pesca; il cambio di
  * obiettivo solo dall'interessato (agli altri rivelerebbe chi doveva eliminare chi); nel
- * piazzamento tutti insieme, dove ha messo le armate un altro resta coperto.
+ * piazzamento tutti insieme, dove ha messo le armate un altro resta coperto. Ogni evento resta
+ * (al massimo coperto): un buco nei numeri del registro direbbe agli altri che è successo qualcosa.
  */
 export function eventsFor(events: readonly GameEvent[], viewer: string | null): GameEvent[] {
-  return events.flatMap((e) => {
+  return events.flatMap((e): GameEvent[] => {
     if (e.type === 'card' && e.player !== viewer) return [{ ...e, card: null }];
     if (e.type === 'setup-place' && e.hidden && e.player !== viewer) return [{ ...e, placements: {} }];
+    if (e.type === 'eliminated') {
+      const { fallback, objectiveChanged: _, ...seen } = e;
+      return [viewer !== null && fallback?.includes(viewer) ? { ...seen, objectiveChanged: true } : seen];
+    }
+    // partite salvate prima che il cambio di obiettivo stesse in 'eliminated'
     if (e.type === 'objective-changed' && e.player !== viewer) return [];
     return [e];
   });

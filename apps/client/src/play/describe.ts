@@ -74,9 +74,13 @@ export function describeEvent(e: GameEvent, n: Names, me: string | null): string
       return e.card
         ? `Peschi una carta: ${e.card.territory ? n.territory(e.card.territory) : 'jolly'} (${SYMBOL_NAME[e.card.symbol].toLowerCase()})`
         : `${who(e.player)} pesca una carta`;
-    case 'eliminated':
-      if (e.by === me) return `Elimini ${n.player(e.player)}${e.cardsTaken > 0 ? ` e prendi le sue ${e.cardsTaken} carte` : ''}`;
-      return `${n.player(e.by)} elimina ${e.player === me ? 'te' : n.player(e.player)}${e.cardsTaken > 0 ? ` e prende ${e.cardsTaken} carte` : ''}`;
+    case 'eliminated': {
+      // objectiveChanged arriva solo a chi doveva eliminarlo lui (vedi eventsFor)
+      const changed = e.objectiveChanged ? '. Era il tuo bersaglio: hai un nuovo obiettivo' : '';
+      if (e.by === me) return `Elimini ${n.player(e.player)}${e.cardsTaken > 0 ? ` e prendi le sue ${e.cardsTaken} carte` : ''}${changed}`;
+      return `${n.player(e.by)} elimina ${e.player === me ? 'te' : n.player(e.player)}${e.cardsTaken > 0 ? ` e prende ${e.cardsTaken} carte` : ''}${changed}`;
+    }
+    // partite salvate prima: ora il cambio di obiettivo sta in 'eliminated'
     case 'objective-changed':
       return 'Il tuo bersaglio l’ha eliminato qualcun altro: hai un nuovo obiettivo';
     case 'victory': {

@@ -1,7 +1,8 @@
 /**
  * Serata di gioco con un solo comando: compila il client se serve, avvia il server e Cloudflare Tunnel,
  * mostra l'indirizzo per gli amici e apre il browser. Se il server cade lo riavvia (le partite riprendono
- * dai salvataggi); se cade il tunnel lo riapre (con un indirizzo nuovo, che il server passa ai browser).
+ * dai salvataggi); se cade il tunnel lo riapre con un indirizzo nuovo: il server lo passa a chi gioca da
+ * questo PC e scrive qui il link di ogni partita aperta, gli amici rientrano da lì con lo stesso nome.
  *
  *   npm run serata                 tutto
  *   npm run serata -- --locale     senza tunnel (solo questo PC o la rete di casa)
@@ -169,7 +170,10 @@ function startTunnel(bin: string): void {
   tunnel.on('exit', (code) => {
     tunnel = null;
     if (stopping) return;
-    say(`il tunnel si è chiuso (codice ${code}): lo riapro. L'indirizzo per gli amici cambierà.`);
+    say(
+      `il tunnel si è chiuso (codice ${code}): lo riapro. L'indirizzo per gli amici cambierà: ` +
+        'manda loro il link nuovo della partita (lo scrive il server qui sotto), rientrano con lo stesso nome.',
+    );
     for (const l of recent.slice(-5)) console.log(`    ${l}`);
     publicUrl = null;
     tellServer();
