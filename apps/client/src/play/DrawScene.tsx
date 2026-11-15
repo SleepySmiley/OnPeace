@@ -298,12 +298,16 @@ export function DrawLayer() {
   useEffect(() => {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, textarea, select')) return;
+      // solo dove si scrive: con lo slider o una casella in mano Invio resta alla scena
+      if ((e.target as HTMLElement).closest('textarea, select, input:not([type=range]):not([type=checkbox]):not([type=radio])')) return;
       if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Escape') return;
       const s = useDraw.getState();
-      if (s.current?.stage === 'offer' && e.key !== 'Escape') s.take();
-      else if (s.current?.stage === 'reveal') s.skip();
-      else return;
+      if (s.current?.stage === 'offer' && e.key !== 'Escape') {
+        // un tasto tenuto premuto non pesca e non manda via la carta: si ferma qui e basta
+        if (!e.repeat) s.take();
+      } else if (s.current?.stage === 'reveal') {
+        if (!e.repeat) s.skip();
+      } else return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };

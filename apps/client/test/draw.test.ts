@@ -54,16 +54,59 @@ describe('scena della pesca', () => {
     expect(draw().spot).toBeNull();
   });
 
-  it('il clic sul mazzo gira subito la carta, il secondo la manda tra le carte', () => {
+  it('il clic sul mazzo gira subito la carta, il secondo la manda tra le carte finito il giro', () => {
     draw().push(brasile);
     draw().take();
     expect(stage()).toBe('reveal');
     draw().skip();
+    // il giro non si taglia: la carta parte appena girata, senza la pausa per leggerla
+    expect(stage()).toBe('reveal');
+    vi.advanceTimersByTime(FLIP_MS - 1);
+    expect(stage()).toBe('reveal');
+    vi.advanceTimersByTime(1);
     expect(stage()).toBe('fly');
     // un clic in più durante il volo non cambia niente
     draw().take();
     draw().skip();
     expect(stage()).toBe('fly');
+  });
+
+  it('il clic a carta già girata la manda subito', () => {
+    draw().push(brasile);
+    draw().take();
+    vi.advanceTimersByTime(FLIP_MS + 200);
+    expect(stage()).toBe('reveal');
+    draw().skip();
+    expect(stage()).toBe('fly');
+  });
+
+  it('un clic a metà giro accorcia la pausa, non il giro (e il territorio lampeggia prima del volo)', () => {
+    draw().push(brasile);
+    draw().take();
+    vi.advanceTimersByTime(FLIP_MS / 2 - 100);
+    draw().skip();
+    draw().skip();
+    vi.advanceTimersByTime(100);
+    expect(draw().spot?.territory).toBe('brasile');
+    expect(stage()).toBe('reveal');
+    vi.advanceTimersByTime(FLIP_MS / 2 - 1);
+    expect(stage()).toBe('reveal');
+    vi.advanceTimersByTime(1);
+    expect(stage()).toBe('fly');
+  });
+
+  it('solo la carta appena arrivata fa il sobbalzo nel ventaglio', () => {
+    expect(draw().landedId).toBeNull();
+    draw().push(brasile);
+    draw().take();
+    vi.advanceTimersByTime(FLIP_MS + HOLD_MS + FLY_MS);
+    expect(draw().landedId).toBe('c_brasile');
+    draw().push(perù);
+    draw().take();
+    vi.advanceTimersByTime(FLIP_MS + HOLD_MS + FLY_MS);
+    expect(draw().landedId).toBe('c_peru');
+    draw().clear();
+    expect(draw().landedId).toBeNull();
   });
 
   it('due carte di fila: la seconda aspetta che la prima arrivi', () => {
@@ -73,7 +116,7 @@ describe('scena della pesca', () => {
     expect(cardsInScene(draw())).toEqual(new Set(['c_brasile', 'c_peru']));
     draw().take();
     draw().skip();
-    vi.advanceTimersByTime(FLY_MS);
+    vi.advanceTimersByTime(FLIP_MS + FLY_MS);
     expect(draw().current?.card.id).toBe('c_peru');
     expect(stage()).toBe('offer');
     expect(cardsInScene(draw())).toEqual(new Set(['c_peru']));
@@ -109,10 +152,12 @@ describe('scena della pesca', () => {
     expect(stage()).toBe('offer');
   });
 
-  it('se ti attaccano a carta già girata, la carta vola subito tra le carte', () => {
+  it('se ti attaccano a carta già girata, la carta vola tra le carte appena finito il giro', () => {
     draw().push(brasile);
     draw().take();
     draw().yieldToBattle();
+    expect(stage()).toBe('reveal');
+    vi.advanceTimersByTime(FLIP_MS);
     expect(stage()).toBe('fly');
     vi.advanceTimersByTime(FLY_MS);
     expect(draw().current).toBeNull();

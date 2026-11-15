@@ -37,17 +37,19 @@ interface DrawStore {
   spot: { territory: string; at: number } | null;
   /** Ultima carta arrivata tra le carte (ms): il bottone delle carte fa un sobbalzo. */
   landed: number;
+  /** Quale carta è arrivata per ultima: solo lei fa il sobbalzo nel ventaglio. */
+  landedId: string | null;
   /** Una carta pescata da far vedere (si mette in coda se ce n'è già una). */
   push(card: Card): void;
   /** Clic sul mazzo: la carta sale e si gira. */
   take(): void;
-  /** Clic sulla carta girata: vola subito tra le carte. */
+  /** Clic sulla carta girata: vola tra le carte appena finito il giro (accorcia solo la pausa). */
   skip(): void;
   /** Fa partire la carta in coda, se la scena è libera. */
   kick(): void;
   /**
    * Comincia una battaglia propria (ti attaccano): il mazzo che aspetta il clic si toglie di
-   * mezzo e torna dopo; la carta già girata vola subito tra le carte.
+   * mezzo e torna dopo; la carta già girata vola tra le carte appena finito il giro.
    */
   yieldToBattle(): void;
   /** Via tutto (uscita dalla partita). */
@@ -62,6 +64,8 @@ export function setDrawGate(busy: () => boolean): void {
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let seq = 0;
+/** Quando la carta ha cominciato a girarsi (ms). */
+let revealAt = 0;
 
 function later(ms: number, fn: () => void) {
   if (timer) clearTimeout(timer);
@@ -91,10 +95,17 @@ export const useDraw = create<DrawStore>((set, get) => {
     set({ current: { ...cur, stage: 'fly' } });
     sfx.play('whoosh', 0, 0.35);
     later(FLY_MS, () => {
-      set({ landed: performance.now() });
+      set({ landed: performance.now(), landedId: cur.card.id });
       sfx.play('build', 0, 0.5);
       next();
     });
+  };
+
+  /** Il volo prima del tempo: la pausa si accorcia, il giro no (sennò la carta scatta grande e girata). */
+  const flyAfterFlip = () => {
+    const wait = FLIP_MS - (performance.now() - revealAt);
+    if (wait > 0) later(wait, fly);
+    else fly();
   };
 
   return {
@@ -102,6 +113,7 @@ export const useDraw = create<DrawStore>((set, get) => {
     current: null,
     spot: null,
     landed: 0,
+    landedId: null,
     push(card) {
       set((s) => ({ queue: [...s.queue, card] }));
       get().kick();
@@ -110,6 +122,7 @@ export const useDraw = create<DrawStore>((set, get) => {
       const cur = get().current;
       if (!cur || cur.stage !== 'offer') return;
       set({ current: { ...cur, stage: 'reveal' } });
+      revealAt = performance.now();
       const turnAt = FLIP_MS / 2;
       sfx.play('flip', turnAt / 1000);
       setTimeout(() => {
@@ -118,7 +131,7 @@ export const useDraw = create<DrawStore>((set, get) => {
       later(FLIP_MS + HOLD_MS, fly);
     },
     skip() {
-      if (get().current?.stage === 'reveal') fly();
+      if (get().current?.stage === 'reveal') flyAfterFlip();
     },
     kick() {
       if (!get().current && get().queue.length > 0 && !gate()) next();
@@ -129,12 +142,12 @@ export const useDraw = create<DrawStore>((set, get) => {
         if (timer) clearTimeout(timer);
         timer = null;
         set((s) => ({ current: null, queue: [cur.card, ...s.queue] }));
-      } else if (cur?.stage === 'reveal') fly();
+      } else if (cur?.stage === 'reveal') flyAfterFlip();
     },
     clear() {
       if (timer) clearTimeout(timer);
       timer = null;
-      set({ queue: [], current: null, spot: null });
+      set({ queue: [], current: null, spot: null, landedId: null });
     },
   };
 });

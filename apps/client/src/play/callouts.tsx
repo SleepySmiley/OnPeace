@@ -1,7 +1,8 @@
 /**
  * Avvisi di quello che fanno gli altri, sulla mappa: perdite, rinforzi, spostamenti e conquiste
  * escono dal territorio dove succedono e svaniscono, seguendo la mappa se la si sposta. Le mie
- * battaglie le racconta già la scena. Quello che non ha un posto sulla mappa (eliminazioni, tris,
+ * battaglie (anche quando mi attaccano) le racconta già la scena: qui sopra i carri anticiperebbero
+ * il risultato prima dei dadi. Quello che non ha un posto sulla mappa (eliminazioni, tris,
  * vittoria, armate scoperte) resta per qualche secondo in basso a destra.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -28,7 +29,8 @@ const CALLOUT_MS = 2600;
 export function MapCallouts({ painter, news }: { painter: BoardPainter | null; news: boolean }) {
   const { me, colorOf, playerName } = useGame();
   const fresh = useSession((s) => s.fresh);
-  const seen = useRef<typeof fresh>(null);
+  // quello che c'era già prima di entrare (o di una partita vecchia) non si racconta di nuovo
+  const seen = useRef<typeof fresh>(useSession.getState().fresh);
   const [items, setItems] = useState<Callout[]>([]);
   const refs = useRef(new Map<string, HTMLDivElement>());
 
@@ -38,12 +40,10 @@ export function MapCallouts({ painter, news }: { painter: BoardPainter | null; n
     const add: Callout[] = [];
     for (const { seq, event: e } of fresh.events) {
       const k = (s: string) => `${seq}-${s}`;
-      if (e.type === 'battle' && e.player !== me) {
+      if (e.type === 'battle' && e.player !== me && e.defender !== me) {
         if (e.attackerLosses > 0) add.push({ key: k('a'), territory: e.from, text: `−${e.attackerLosses}`, kind: 'loss', color: colorOf(e.player), delay: 0 });
-        if (e.conquered) {
-          const text = e.defender === me ? `${playerName(e.player)} ti prende` : `${playerName(e.player)} conquista`;
-          add.push({ key: k('c'), territory: e.to, text, kind: 'conquest', color: colorOf(e.player), delay: 120 });
-        } else if (e.defenderLosses > 0) add.push({ key: k('d'), territory: e.to, text: `−${e.defenderLosses}`, kind: 'loss', color: colorOf(e.defender), delay: 120 });
+        if (e.conquered) add.push({ key: k('c'), territory: e.to, text: `${playerName(e.player)} conquista`, kind: 'conquest', color: colorOf(e.player), delay: 120 });
+        else if (e.defenderLosses > 0) add.push({ key: k('d'), territory: e.to, text: `−${e.defenderLosses}`, kind: 'loss', color: colorOf(e.defender), delay: 120 });
       } else if ((e.type === 'reinforce' || (e.type === 'setup-place' && !e.hidden)) && e.player !== me) {
         let i = 0;
         for (const [t, n] of Object.entries(e.placements)) add.push({ key: k(t), territory: t, text: `+${n}`, kind: 'gain', color: colorOf(e.player), delay: i++ * 90 });
@@ -165,7 +165,14 @@ function toItem(e: GameEvent, seq: number, n: Names, until: number): Item | null
             {chip(e.by)} <b>{who(e.by)}</b> {e.by === n.me ? 'elimini' : 'elimina'} <b>{e.player === n.me ? 'te' : n.playerName(e.player)}</b>
           </>
         ),
-        sub: e.cardsTaken > 0 ? `${e.by === n.me ? 'prendi' : 'prende'} ${e.cardsTaken} carte` : undefined,
+        sub:
+          [
+            e.cardsTaken > 0 ? `${e.by === n.me ? 'prendi' : 'prende'} ${e.cardsTaken} carte` : '',
+            // arriva solo a chi doveva eliminarlo lui (vedi eventsFor)
+            e.objectiveChanged ? 'era il tuo bersaglio: hai un nuovo obiettivo' : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined,
       };
     case 'set':
       return {
@@ -203,7 +210,8 @@ function toItem(e: GameEvent, seq: number, n: Names, until: number): Item | null
 function News() {
   const { me, colorOf, playerName, territory } = useGame();
   const fresh = useSession((s) => s.fresh);
-  const seen = useRef<typeof fresh>(null);
+  // si smonta quando si apre il registro: richiudendolo l'ultimo gruppo di notizie non torna
+  const seen = useRef<typeof fresh>(useSession.getState().fresh);
   const [items, setItems] = useState<Item[]>([]);
   useEffect(() => {
     if (!fresh || fresh === seen.current) return;

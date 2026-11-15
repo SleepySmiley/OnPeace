@@ -20,7 +20,8 @@ function useHandCards() {
 export function HandFan({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const { territory } = useGame();
   const cards = useHandCards();
-  const landed = useDraw((s) => s.landed);
+  // il sobbalzo solo per la carta appena arrivata, non per l'ultima del ventaglio (cambia se la mano cala)
+  const landedId = useDraw((s) => s.landedId);
   const n = cards.length + 1;
   // ventaglio: più carte, angoli e passi più stretti (resta dentro l'angolo)
   const place = (i: number) =>
@@ -38,7 +39,7 @@ export function HandFan({ open, onOpen }: { open: boolean; onOpen: () => void })
           <small>segreto</small>
         </span>
         {cards.map((c, i) => (
-          <span key={c.id} className={`hf-card${c.symbol === 'joker' ? ' joker' : ''}${landed && i === cards.length - 1 ? ' fresh' : ''}`} style={place(i + 1)}>
+          <span key={c.id} className={`hf-card${c.symbol === 'joker' ? ' joker' : ''}${c.id === landedId ? ' fresh' : ''}`} style={place(i + 1)}>
             <SymbolIcon symbol={c.symbol} size={20} />
             <small>{c.symbol === 'joker' ? 'Jolly' : c.territory ? territory(c.territory) : ''}</small>
           </span>
