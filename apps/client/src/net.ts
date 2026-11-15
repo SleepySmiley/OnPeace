@@ -55,12 +55,18 @@ export function inviteLink(game: string, publicUrl: string | null): string {
 /** Il link d'invito funzionerebbe solo su questo PC. */
 export const inviteIsLocalOnly = (publicUrl: string | null) => !publicUrl && LOCAL_HOSTS.has(location.hostname);
 
+/** Dopo l'ultimo messaggio, quanto si aspetta prima di chiudere: il tempo che parta davvero. */
+const FLUSH_MS = 300;
+
 export class Net {
   private ws: WebSocket | null = null;
   private queue: string[] = [];
   private retry = 0;
   private closed = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Da chiudere appena la coda è partita (closeAfterFlush a linea caduta). */
+  private closing = false;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly onMessage: (msg: ServerMsg) => void,
@@ -81,6 +87,7 @@ export class Net {
       const hello = this.greeting();
       if (hello) ws.send(JSON.stringify(hello));
       for (const m of this.queue.splice(0)) ws.send(m);
+      if (this.closing) this.closeSoon(FLUSH_MS);
     };
     ws.onmessage = (e) => {
       try {
@@ -103,9 +110,28 @@ export class Net {
     else this.queue.push(text);
   }
 
+  /**
+   * Chiude dopo aver consegnato i messaggi in coda: tra un attimo se la linea è aperta, altrimenti
+   * appena si riconnette (prima partono il saluto col token e la coda), e comunque entro `maxMs`.
+   */
+  closeAfterFlush(maxMs: number): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.closeSoon(FLUSH_MS);
+      return;
+    }
+    this.closing = true;
+    this.closeSoon(maxMs);
+  }
+
   close(): void {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
+    if (this.closeTimer) clearTimeout(this.closeTimer);
     this.ws?.close();
+  }
+
+  private closeSoon(ms: number): void {
+    if (this.closeTimer) clearTimeout(this.closeTimer);
+    this.closeTimer = setTimeout(() => this.close(), ms);
   }
 }

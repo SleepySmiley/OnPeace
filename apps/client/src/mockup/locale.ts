@@ -62,6 +62,8 @@ export type Start = 'inizio' | 'turno';
 /** Pause tra le mosse degli avversari (ms): abbastanza per vederle, non tanto da annoiare. */
 const BOT_MS = { pick: 260, place: 260, turn: 650, attack: 520 };
 const BOT_ATTACKS = 2;
+/** Come il server (room.ts): alla ripresa restano almeno 15 secondi. */
+const RESUME_MIN_MS = 15_000;
 
 export class LocalGame {
   private readonly ctx: GameContext;
@@ -124,6 +126,8 @@ export class LocalGame {
     const link: Link = {
       send: (msg) => setTimeout(() => !this.closed && this.handle(msg), 25),
       close: () => this.stop(),
+      // qui la linea non cade mai: basta chiudere poco dopo, come col server vero a linea aperta
+      closeAfterFlush: () => setTimeout(() => this.stop(), 300),
     };
     return link;
   };
@@ -155,6 +159,8 @@ export class LocalGame {
         this.deliver({ t: 'lobby', lobby: this.lobby() });
         this.deliver({ t: 'game', view: viewFor(this.ctx, this.state, ME), log: [], sync: true });
         this.syncClock(true);
+        // come il server a ogni entrata: lo storico della chat
+        this.deliver({ t: 'chat', lines: this.chat.slice(-50) });
         this.schedule();
         return;
       case 'act':
@@ -174,7 +180,7 @@ export class LocalGame {
       case 'pause':
         if (msg.paused && this.paused === null) this.paused = Math.max(0, (this.deadline ?? Date.now()) - Date.now());
         else if (!msg.paused && this.paused !== null) {
-          this.deadline = Date.now() + this.paused;
+          this.deadline = Date.now() + Math.max(this.paused, RESUME_MIN_MS);
           this.paused = null;
         }
         this.status();
@@ -229,7 +235,9 @@ export class LocalGame {
     const seconds =
       s.phase === 'briefing' ? t.briefingSeconds : s.phase === 'draft' ? t.pickSeconds : s.phase === 'setup' ? t.setupSeconds : t.turnSeconds;
     this.total = seconds * 1000;
-    this.deadline = Date.now() + this.total;
+    // come il server: a tempo fermo il turno nuovo mette da parte il suo tempo intero per la ripresa
+    if (this.paused !== null) this.paused = this.total;
+    else this.deadline = Date.now() + this.total;
     this.status();
   }
 
