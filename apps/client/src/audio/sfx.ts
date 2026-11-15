@@ -430,25 +430,66 @@ class Sfx {
     }
   }
 
-  /** Suona `name` tra `delay` secondi (se l'audio è attivo), a volume `gain` (1 = il suo livello). */
-  play(name: SoundName, delay = 0, gain = 1): void {
+  /**
+   * Suona `name` tra `delay` secondi (se l'audio è attivo), a volume `gain` (1 = il suo livello),
+   * nell'uscita generale o in `to` (un'uscita di `bus`).
+   */
+  play(name: SoundName, delay = 0, gain = 1, to?: AudioNode): void {
     const ac = this.ac;
     if (!ac || !this.out || !this.noiseBuffer || ac.state !== 'running' || gainFor(this.settings) === 0) return;
     const t = ac.currentTime + 0.005 + delay;
     const prev = this.last.get(name) ?? -1;
-    if (t - prev < MIN_GAP) return;
+    // vicino a uno già in programma, prima o dopo che sia
+    if (Math.abs(t - prev) < MIN_GAP) return;
     this.last.set(name, t);
+    const out = to ?? this.out.input;
     try {
-      if (gain === 1) render(name, ac, this.out.input, t, this.noiseBuffer);
+      if (gain === 1) render(name, ac, out, t, this.noiseBuffer);
       else {
         const g = ac.createGain();
         g.gain.value = gain;
-        g.connect(this.out.input);
+        g.connect(out);
         render(name, ac, g, t, this.noiseBuffer);
       }
     } catch {
       // un suono che non parte non deve mai fermare il gioco
     }
+  }
+
+  /**
+   * Un'uscita a parte per un gruppo di suoni (una scena): con `mute` si zittisce tutta, anche i suoni
+   * già in programma. Null finché l'audio non è attivo.
+   */
+  bus(): GainNode | null {
+    if (!this.ac || !this.out) return null;
+    try {
+      const g = this.ac.createGain();
+      g.connect(this.out.input);
+      return g;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Zittisce un'uscita di `bus` (con una sfumatura breve, senza schiocchi) e la stacca. */
+  mute(bus: GainNode): void {
+    const ac = this.ac;
+    if (!ac) return;
+    const off = () => {
+      try {
+        bus.disconnect();
+      } catch {
+        // già staccata
+      }
+    };
+    try {
+      bus.gain.setTargetAtTime(0, ac.currentTime, 0.02);
+      setTimeout(off, 200);
+    } catch {
+      off();
+    }
+    // i suoni ancora in programma non si sentiranno: non devono far saltare quelli nuovi vicini
+    for (const [name, t] of this.last) if (t > ac.currentTime) this.last.delete(name);
   }
 
   set(patch: Partial<SoundSettings>): void {

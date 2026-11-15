@@ -8,6 +8,7 @@
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PLAYER_COLORS } from '@onpeace/protocol';
+import { sfx } from '../audio/sfx';
 import { useBattle, type BlitzMode, type Watch } from '../play/battle';
 import { GameScreen } from '../play/GameScreen';
 import { setLinkFactory, useSession } from '../store';
@@ -27,6 +28,9 @@ Storage.prototype.setItem = function (key: string, value: string) {
 Storage.prototype.removeItem = function (key: string) {
   if (key !== SESSION_KEY) removeItem.call(this, key);
 };
+
+// i suoni della scena, come nel gioco: l'audio parte al primo clic o tasto (lo fa main.tsx, che qui non c'è)
+for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, () => sfx.unlock(), { capture: true });
 
 const params = new URLSearchParams(location.search);
 const pick = <T extends string>(v: string | null, all: readonly T[], d: T): T => (all.includes(v as T) ? (v as T) : d);

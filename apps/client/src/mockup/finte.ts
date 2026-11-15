@@ -3,7 +3,7 @@
  * che arrivano uno alla volta come dal server. Le usano battaglia.html e pesca.html.
  */
 import { defenseDice, hitLosses, maxAttackDice, rollBattle, rollHits, type ConquestRules } from '@onpeace/conquista';
-import { feedRoll, fighter, useBattle, type Role, type Roll } from '../play/battle';
+import { BLITZ_STEP, feedRoll, fighter, useBattle, type Role, type Roll } from '../play/battle';
 import { useSession } from '../store';
 
 export type DemoKind = 'attacco' | 'pari' | 'fino' | 'difesa' | 'altri' | 'perso';
@@ -91,7 +91,8 @@ export function startDemo(kind: DemoKind): boolean {
     d: fighter(view, view.territories[to]!.owner, to, start[1]),
     demo,
   };
-  const step = useBattle.getState().blitzMode === 'conto' ? 380 : 1000;
+  // lo stesso passo dell'attacco continuo vero
+  const step = BLITZ_STEP[useBattle.getState().blitzMode];
   let left = start[0];
   rolls.forEach((r, i) => {
     setTimeout(
