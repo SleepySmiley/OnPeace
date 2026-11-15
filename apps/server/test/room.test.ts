@@ -435,6 +435,39 @@ describe('tempo, rientri e imprevisti', () => {
     expect(t.saved.has(room.id)).toBe(true); // il file resta
   });
 
+  it('ripresa dopo un riavvio anche mentre si legge l’obiettivo o si scelgono i territori', async () => {
+    const t = lobby(2);
+    const { room, host } = t;
+    expect(room.handle(host.id, { t: 'start' })).toBeNull();
+    await new Promise((r) => setTimeout(r, 5));
+    const reload = () => {
+      const again = new RoomManager(boards, t.store, t.transport, t.now, 0, t.logger.log);
+      expect(again.loadSaved()).toBe(1);
+      return again.byToken(host.token)!.room;
+    };
+    expect(reload().state!.phase).toBe('briefing'); // nessun territorio preso
+
+    skipBriefing(t, room);
+    const first = room.state!.setupPlayer!;
+    const free = boards.context(room.settings).board.territories.map((x) => x.id);
+    expect(room.handle(first, { t: 'act', action: { kind: 'pick', territory: free[0]! } })).toBeNull();
+    await new Promise((r) => setTimeout(r, 5));
+    const resumed = reload();
+    expect(resumed.state!.phase).toBe('draft');
+    expect(Object.keys(resumed.state!.territories)).toEqual([free[0]]);
+    // si continua a scegliere dove si era rimasti
+    const next = resumed.state!.setupPlayer!;
+    expect(next).not.toBe(first);
+    expect(resumed.handle(next, { t: 'act', action: { kind: 'pick', territory: free[1]! } })).toBeNull();
+
+    // un territorio preso che non c'è più sul tabellone: non si riprende
+    const snap = t.saved.get(room.id)!;
+    snap.state!.territories.atlantide = snap.state!.territories[free[0]!]!;
+    delete snap.state!.territories[free[0]!];
+    const broken = new RoomManager(boards, t.store, t.transport, t.now, 0, t.logger.log);
+    expect(broken.loadSaved()).toBe(0);
+  });
+
   it('pausa: solo l’host ferma il tempo, si può giocare lo stesso, alla ripresa restano almeno 15 s', () => {
     const t = playing(2);
     const { room, host, guest } = t;

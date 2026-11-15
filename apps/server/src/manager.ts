@@ -88,7 +88,10 @@ export class RoomManager {
     if (!snap.state || !snap.board || !this.boards.has(snap.board)) return false;
     const ids = new Set(this.boards.territoryIds(snap.board));
     const saved = Object.keys(snap.state.territories);
-    return saved.length === ids.size && saved.every((t) => ids.has(t));
+    if (!saved.every((t) => ids.has(t))) return false;
+    // mentre si legge l'obiettivo e si scelgono i territori la partita ha solo quelli già presi
+    const claiming = snap.state.phase === 'briefing' || snap.state.phase === 'draft';
+    return claiming || saved.length === ids.size;
   }
 
   /**
