@@ -3,6 +3,7 @@
  * territori, confini) si ridisegna solo quando cambiano la vista o i padroni; sopra, a ogni
  * fotogramma, selezione, frecce, pedine e nomi. Si trascina per spostarsi, la rotella ingrandisce.
  */
+import type { BoardDef } from '@onpeace/engine';
 import type { BoardAssets, BoardState, BoardStyle, BoardView, PaintEnv } from './common';
 import { actionable, flashLevel } from './common';
 import { geometryAt, type BoardGeometry } from './geometry';
@@ -24,8 +25,21 @@ export interface Insets {
   left: number;
 }
 
-/** Terreno della Terra per tabellone: si scarica e si riproietta una volta sola. */
-const reliefs = new Map<string, Promise<HTMLCanvasElement | null>>();
+/**
+ * Terreno della Terra per tabellone: si scarica e si riproietta una volta sola. Per versione: un
+ * tabellone aggiornato sul server ha lo stesso id ma è un oggetto nuovo.
+ */
+const reliefs = new WeakMap<BoardDef, Promise<HTMLCanvasElement | null>>();
+
+/** La vista `v` è (quasi) la vista d'insieme `fit`. */
+const atFit = (v: BoardView, fit: BoardView) =>
+  Math.abs(v.scale - fit.scale) < fit.scale * 0.005 && Math.abs(v.x - fit.x) < 2 && Math.abs(v.y - fit.y) < 2;
+
+/** Volo della camera in corso: dove arriva e come fermarlo (risolvendo la sua promessa). */
+interface Flight {
+  to: BoardView;
+  stop(): void;
+}
 
 export class BoardPainter {
   private readonly ctx: CanvasRenderingContext2D;
@@ -40,12 +54,17 @@ export class BoardPainter {
   private idleTimer = 0;
   private ownersKey = '';
   private readonly assets: BoardAssets = { relief: null };
-  private drag: { x: number; y: number; vx: number; vy: number; moved: number; button: number } | null = null;
+  private drag: { x: number; y: number; vx: number; vy: number; moved: number; button: number; pointerId: number } | null = null;
   private insets: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
   private readonly resizeObserver: ResizeObserver;
+  /** Misura del canvas (pixel CSS) all'ultimo ridimensionamento; 0: non ancora misurato. */
+  private sized = { w: 0, h: 0 };
+  /** Toglie l'ascolto del cambio di densità dei pixel. */
+  private dprOff: (() => void) | null = null;
   private destroyed = false;
   private readonly off: (() => void)[] = [];
   private flight = 0;
+  private flying: Flight | null = null;
   private pulseTimer = 0;
 
   constructor(
@@ -59,13 +78,21 @@ export class BoardPainter {
     this.ownersKey = this.keyOf(state);
     this.listen();
     this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(canvas);
+    // in pixel del dispositivo, così si accorge anche di un cambio di densità senza cambio di misura
+    // (finestra spostata su uno schermo con un'altra scala); dove non si può, in pixel CSS
+    try {
+      this.resizeObserver.observe(canvas, { box: 'device-pixel-content-box' });
+    } catch {
+      this.resizeObserver.observe(canvas);
+    }
     this.resize();
-    const id = geo.board.id;
-    if (!reliefs.has(id)) reliefs.set(id, loadRelief(geo.board).catch(() => null));
-    void reliefs.get(id)!.then((relief) => {
-      if (this.destroyed || !relief) return;
-      this.assets.relief = relief;
+    this.watchDpr();
+    const board = geo.board;
+    let relief = reliefs.get(board);
+    if (!relief) reliefs.set(board, (relief = loadRelief(board).catch(() => null)));
+    void relief.then((img) => {
+      if (this.destroyed || !img) return;
+      this.assets.relief = img;
       this.renderStatic();
     });
   }
@@ -73,10 +100,13 @@ export class BoardPainter {
   destroy(): void {
     this.destroyed = true;
     this.resizeObserver.disconnect();
+    this.dprOff?.();
+    this.dprOff = null;
     for (const f of this.off) f();
     window.clearTimeout(this.idleTimer);
     window.clearTimeout(this.pulseTimer);
     cancelAnimationFrame(this.flight);
+    this.flying?.stop();
   }
 
   // ---------------------------------------------------------------- dall'esterno
@@ -101,11 +131,10 @@ export class BoardPainter {
     const same = (Object.keys(insets) as (keyof Insets)[]).every((k) => insets[k] === this.insets[k]);
     if (same) return;
     // a vista d'insieme la mappa si rifà nello spazio nuovo; ingrandita resta dov'era, spostata di mezza differenza
-    const fit = this.fitView();
-    const atFit = Math.abs(this.view.scale - fit.scale) < fit.scale * 0.005 && Math.abs(this.view.x - fit.x) < 2 && Math.abs(this.view.y - fit.y) < 2;
+    const fitted = atFit(this.view, this.fitView());
     const old = this.insets;
     this.insets = insets;
-    if (atFit || this.canvas.width === 0) {
+    if (fitted || this.canvas.width === 0) {
       this.resetView();
       return;
     }
@@ -153,6 +182,24 @@ export class BoardPainter {
     return { ...this.view };
   }
 
+  /** Dove si ferma la vista: l'arrivo del volo della camera in corso, se c'è, altrimenti la vista attuale. */
+  restingView(): BoardView {
+    return { ...(this.flying?.to ?? this.view) };
+  }
+
+  /** Chiude un trascinamento in corso, senza clic (la camera del gioco prende il comando, o il puntatore si è perso). */
+  cancelDrag(): void {
+    const d = this.drag;
+    this.drag = null;
+    this.canvas.classList.remove('dragging');
+    if (!d) return;
+    try {
+      if (this.canvas.hasPointerCapture(d.pointerId)) this.canvas.releasePointerCapture(d.pointerId);
+    } catch {
+      // il puntatore non c'è più: niente da rilasciare
+    }
+  }
+
   /**
    * La vista che inquadra questi territori nel riquadro libero `box` (pixel CSS: sinistra, alto,
    * destra, basso), senza ingrandire troppo i territori piccoli né rimpicciolire sotto la vista d'insieme.
@@ -191,9 +238,16 @@ export class BoardPainter {
     return { scale, x: (box.left + box.right) / 2 - cx * scale, y: (box.top + box.bottom) / 2 - cy * scale };
   }
 
-  /** Porta la vista a `to` con un movimento di macchina da presa (ms); si ferma se si trascina la mappa. */
+  /**
+   * Porta la vista a `to` con un movimento di macchina da presa (ms). Un trascinamento in corso finisce qui;
+   * il volo si ferma (e la promessa si risolve) se si comincia a trascinare la mappa, non per un semplice clic.
+   * Un volo nuovo prende il posto di quello in corso, la cui promessa resta in sospeso.
+   */
   flyTo(to: BoardView, ms = 600): Promise<void> {
     cancelAnimationFrame(this.flight);
+    this.flying = null;
+    // la camera del gioco prende il comando
+    this.cancelDrag();
     const from = { ...this.view };
     if (ms <= 0) {
       this.view = { ...to };
@@ -213,9 +267,21 @@ export class BoardPainter {
     const [ax, ay] = mid(from);
     const [bx, by] = mid(to);
     const t0 = performance.now();
-    return new Promise((done) => {
+    return new Promise((resolve) => {
+      const done = () => {
+        if (this.flying === flight) this.flying = null;
+        resolve();
+      };
+      const flight: Flight = {
+        to: { ...to },
+        stop: () => {
+          cancelAnimationFrame(this.flight);
+          done();
+        },
+      };
+      this.flying = flight;
       const step = (now: number) => {
-        if (this.destroyed || this.drag) return done();
+        if (this.destroyed) return done();
         const k = Math.min(1, (now - t0) / ms);
         const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
         const scale = Math.exp(Math.log(from.scale) + (Math.log(to.scale) - Math.log(from.scale)) * e);
@@ -249,8 +315,8 @@ export class BoardPainter {
     return { ctx: target, geo: geometryAt(this.geo, this.view.scale), view: this.view, state: this.state, dpr: this.dpr, fit: this.fitScale, assets: this.assets };
   }
 
-  private fitView(): BoardView {
-    const { w, h } = this.size();
+  /** Vista d'insieme per un canvas di questa misura (pixel CSS; di solito quella attuale). */
+  private fitView({ w, h } = this.size()): BoardView {
     const i = this.insets;
     const fw = Math.max(200, w - i.left - i.right);
     const fh = Math.max(150, h - i.top - i.bottom);
@@ -262,12 +328,57 @@ export class BoardPainter {
   private resize(): void {
     const { w, h } = this.size();
     if (w === 0 || h === 0) return;
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const old = this.sized;
+    // niente di cambiato (il primo avviso dell'osservatore arriva con la misura che c'è già)
+    if (w === old.w && h === old.h && dpr === this.dpr) return;
+    this.dpr = dpr;
+    this.sized = { w, h };
     for (const c of [this.canvas, this.cache]) {
-      c.width = Math.round(w * this.dpr);
-      c.height = Math.round(h * this.dpr);
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(h * dpr);
     }
-    this.resetView();
+    // cambiata solo la densità dei pixel: la vista resta quella, si ridisegna nitida
+    if (w === old.w && h === old.h) {
+      this.renderStatic();
+      return;
+    }
+    // a vista d'insieme la mappa si rifà nella misura nuova; ingrandita resta allo stesso zoom (rispetto alla
+    // vista d'insieme), con al centro dello spazio libero lo stesso punto della mappa
+    const oldFit = this.fitView(old);
+    if (old.w === 0 || atFit(this.view, oldFit)) {
+      this.resetView();
+      return;
+    }
+    const i = this.insets;
+    const centre = (cw: number, ch: number) => [i.left + (cw - i.left - i.right) / 2, i.top + (ch - i.top - i.bottom) / 2] as const;
+    const [ox, oy] = centre(old.w, old.h);
+    const mx = (ox - this.view.x) / this.view.scale;
+    const my = (oy - this.view.y) / this.view.scale;
+    const fit = this.fitView();
+    const scale = this.view.scale * (fit.scale / oldFit.scale);
+    const [nx, ny] = centre(w, h);
+    this.fitScale = fit.scale;
+    this.view = { scale, x: nx - mx * scale, y: ny - my * scale };
+    this.renderStatic();
+    this.events.onView?.();
+  }
+
+  /**
+   * Si accorge di un cambio di densità dei pixel anche dove l'osservatore misura solo in pixel CSS (Safari):
+   * l'ascolto vale per la densità attuale e si riarma a ogni cambio.
+   */
+  private watchDpr(): void {
+    this.dprOff?.();
+    this.dprOff = null;
+    if (this.destroyed || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    const on = () => {
+      this.resize();
+      this.watchDpr();
+    };
+    mq.addEventListener('change', on);
+    this.dprOff = () => mq.removeEventListener('change', on);
   }
 
   private renderStatic(): void {
@@ -339,19 +450,37 @@ export class BoardPainter {
     };
     on('contextmenu', (e) => e.preventDefault());
     on('pointerdown', (e) => {
+      // contano solo il tasto sinistro (clic e trascinamento) e il destro (clic destro): rotella e tasti laterali no
+      if (e.button !== 0 && e.button !== 2) return;
       c.setPointerCapture(e.pointerId);
-      this.drag = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y, moved: 0, button: e.button };
+      this.drag = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y, moved: 0, button: e.button, pointerId: e.pointerId };
     });
+    // il puntatore si è perso (annullato, o la cattura è sparita senza pointerup): il trascinamento finisce, senza clic
+    const lost = (e: PointerEvent) => {
+      if (this.drag?.pointerId === e.pointerId) this.cancelDrag();
+    };
+    on('pointercancel', lost);
+    on('lostpointercapture', lost);
     let hover: string | null = null;
     on('pointermove', (e) => {
-      const d = this.drag;
-      if (d && d.button === 0) {
-        const dx = e.clientX - d.x;
-        const dy = e.clientY - d.y;
-        d.moved = Math.max(d.moved, Math.hypot(dx, dy));
-        if (d.moved > 4) {
+      let d = this.drag;
+      // il tasto è stato lasciato senza che arrivasse il pointerup (per esempio fuori dalla finestra)
+      if (d && (e.buttons & (d.button === 2 ? 2 : 1)) === 0) {
+        this.cancelDrag();
+        d = null;
+      }
+      if (d) {
+        // lo spostamento si conta per tutti e due i tasti: trascinato non è più un clic; la mappa la sposta solo il sinistro
+        d.moved = Math.max(d.moved, Math.hypot(e.clientX - d.x, e.clientY - d.y));
+        if (d.button === 0 && d.moved > 4) {
+          if (this.flying) {
+            // si comincia a trascinare durante un volo della camera: il volo si ferma e si parte da dove è arrivato
+            this.flying.stop();
+            Object.assign(d, { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y });
+          }
           c.classList.add('dragging');
-          this.view = { ...this.view, x: d.vx + dx, y: d.vy + dy };
+          c.classList.remove('pointing');
+          this.view = { ...this.view, x: d.vx + e.clientX - d.x, y: d.vy + e.clientY - d.y };
           this.viewChanged();
           return;
         }
