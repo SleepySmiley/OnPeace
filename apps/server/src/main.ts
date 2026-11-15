@@ -60,6 +60,20 @@ const raw = (conn: Conn, msg: ServerMsg) => {
   if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(JSON.stringify(msg));
 };
 
+/**
+ * Il numero (`n`) di una mossa, anche da un messaggio che non passa la validazione: va rimandato
+ * con l'errore (`ack`), altrimenti il browser resta in attesa della risposta finché non scade.
+ */
+function actNumber(text: string): number | undefined {
+  try {
+    const data = JSON.parse(text) as { t?: unknown; n?: unknown } | null;
+    return data?.t === 'act' && Number.isInteger(data.n) ? (data.n as number) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+const ackOf = (n: number | undefined) => (n === undefined ? {} : { ack: n });
+
 const manager = new RoomManager(
   boards,
   new Storage(DATA_DIR),
@@ -90,7 +104,15 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
   }
   if (msg.t === 'hello') {
     const found = msg.token ? manager.byToken(msg.token) : null;
-    if (!found) return msg.token ? raw(conn, { t: 'error', message: 'Sessione scaduta: rientra dal link' }) : undefined;
+    if (!found) {
+      if (!msg.token) return;
+      // partita salvata con un tabellone che è cambiato: il token resta buono per quando torna com'era
+      // (il browser butta la sessione solo con "Sessione scaduta" o "Partita non trovata")
+      const message = manager.isUnavailable(msg.token)
+        ? 'Partita non disponibile finché il tabellone non torna com’era'
+        : 'Sessione scaduta: rientra dal link';
+      return raw(conn, { t: 'error', message });
+    }
     attach(conn, found.room.id, found.seat.id);
     raw(conn, { t: 'welcome', token: found.seat.token, game: found.room.id, you: found.seat.id });
     found.room.syncPlayer(found.seat.id);
@@ -114,9 +136,10 @@ function handleMessage(conn: Conn, msg: ClientMsg): void {
     res.room.broadcastLobby(); // ora risulta collegato anche per gli altri
     return;
   }
-  if (!conn.room || !conn.player) return raw(conn, { t: 'error', message: 'Prima entra in una partita' });
+  const ack = ackOf(msg.t === 'act' ? msg.n : undefined);
+  if (!conn.room || !conn.player) return raw(conn, { t: 'error', message: 'Prima entra in una partita', ...ack });
   const error = manager.handle(conn.room, conn.player, msg);
-  if (error) raw(conn, { t: 'error', message: error, ...(msg.t === 'act' && msg.n !== undefined ? { ack: msg.n } : {}) });
+  if (error) raw(conn, { t: 'error', message: error, ...ack });
 }
 
 // ---------------------------------------------------------------- HTTP + WebSocket
@@ -147,8 +170,9 @@ wss.on('connection', (ws) => {
   raw(conn, { t: 'server', publicUrl });
 
   ws.on('message', (data) => {
-    const msg = parseClientMsg(String(data));
-    if ('error' in msg) return raw(conn, { t: 'error', message: msg.error });
+    const text = String(data);
+    const msg = parseClientMsg(text);
+    if ('error' in msg) return raw(conn, { t: 'error', message: msg.error, ...ackOf(actNumber(text)) });
     try {
       handleMessage(conn, msg);
     } catch (err) {
@@ -156,7 +180,7 @@ wss.on('connection', (ws) => {
       log.error(`Partita ${conn.room ?? '-'}, ${conn.player ?? '-'}: errore gestendo "${msg.t}"`, err);
       const room = conn.room ? manager.rooms.get(conn.room) : undefined;
       log.dump(`messaggio-${conn.room ?? 'nessuna'}`, { error: describeError(err), msg, room: room?.snapshot() });
-      const ack = msg.t === 'act' && msg.n !== undefined ? { ack: msg.n } : {};
+      const ack = ackOf(msg.t === 'act' ? msg.n : undefined);
       raw(conn, { t: 'error', message: 'Errore del server: azione non eseguita. Il problema è stato registrato.', ...ack });
     }
   });
@@ -165,7 +189,7 @@ wss.on('connection', (ws) => {
     conns.delete(conn);
     const room = conn.room ? manager.rooms.get(conn.room) : undefined;
     detach(conn);
-    room?.broadcastLobby();
+    if (room && conn.player) room.connectionClosed(conn.player);
   });
 });
 
@@ -200,6 +224,13 @@ process.on('message', (m: { t?: string; publicUrl?: string | null }) => {
     publicUrl = m.publicUrl ?? null;
     log.info(`Indirizzo pubblico: ${publicUrl ?? 'nessuno'}`);
     for (const c of conns) raw(c, { t: 'server', publicUrl });
+    // il link di ogni partita aperta con qualcuno collegato (di solito l'host, da questo PC): con un
+    // indirizzo nuovo gli amici non hanno più un link valido, rientrano da questo con lo stesso nome
+    const base = publicUrl?.replace(/\/+$/, '');
+    for (const room of base ? manager.rooms.values() : []) {
+      if (room.phase === 'ended' || !room.seats.some((x) => byPlayer.has(key(room.id, x.id)))) continue;
+      log.info(`Partita ${room.id}: link per gli amici ${base}/?g=${room.id}`);
+    }
   } else if (m?.t === 'shutdown') {
     shutdown();
   }

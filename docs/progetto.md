@@ -69,8 +69,8 @@ A fine turno, chi ha conquistato almeno un territorio pesca una carta.
 ### 2.5 Tempo, assenze e pause
 - Il tempo scorre solo per chi deve muoversi. Ogni tiro di dadi ridà 3 secondi a chi attacca (al massimo 60 per turno): guardare la battaglia non mangia il turno.
 - A tempo scaduto il server fa quello che manca (piazza i rinforzi, decide l'occupazione) e passa al prossimo.
-- Chi esce o perde la connessione resta sul tabellone e il server gioca al posto suo; riaprendo il link rientra. L'host può togliere chi ha saltato 2 turni di fila.
-- L'host può fermare il tempo con **Pausa**; alla ripresa restano almeno 15 secondi.
+- Chi esce o perde la connessione resta sul tabellone e il server gioca al posto suo; riaprendo il link rientra. Chi ha perso il link (es. tunnel riaperto con un indirizzo nuovo) rientra con lo stesso nome se il suo posto è scollegato da almeno 20 secondi. Con nessuno collegato la partita resta ferma. L'host può togliere chi ha saltato 2 turni di fila (pulsante **Togli** nell'elenco dei giocatori).
+- L'host può fermare il tempo con **Pausa**; alla ripresa restano almeno 15 secondi. Se l'host è scollegato, a farlo ripartire (anche **Riprova** dopo un errore) può essere chiunque sia ancora in partita.
 
 ---
 
@@ -108,7 +108,7 @@ A fine turno, chi ha conquistato almeno un territorio pesca una carta.
 - **Persistenza**: un file JSON per partita in `games/`, scritto in modo atomico a ogni mossa; se il PC si riavvia la partita riprende. Un salvataggio bloccato (OneDrive, antivirus) viene ritentato.
 - **Rete**: un solo processo e una sola porta (3210) servono il client compilato, i tabelloni (compressi) e il WebSocket su `/ws`.
 - **Accesso**: link `/p/<codice>` e token salvato nel browser per rientrare.
-- **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; tetti al numero di partite e di segnalazioni; al riavvio si cancellano le partite finite e le sale mai partite ferme da più di una settimana.
+- **Robustezza**: un errore su un messaggio o nel timer viene registrato e non ferma il server; tetti al numero di partite e di segnalazioni; al riavvio si cancellano le partite finite e le sale mai partite ferme da più di una settimana, e le partite in corso ferme da più di 30 giorni; al tetto di partite si toglie la sala d'attesa, o la partita finita, più vecchia senza nessuno collegato. Le opzioni di una partita si fissano quando comincia.
 - **Registro** in `logs/`: un file al giorno, `errori/` con lo stato da cui riprodurre ogni errore, `segnalazioni.jsonl` con le segnalazioni dei giocatori.
 
 ### 3.5 Client (`apps/client`)

@@ -47,8 +47,9 @@ Opzioni: `npm run serata -- --locale` (senza tunnel, solo questo PC), `--build` 
 Durante la serata:
 - Se il server cade, `npm run serata` lo riavvia: la partita riprende dai salvataggi in `games/` e i browser si ricollegano da soli.
 - Chi chiude il browser rientra riaprendo il link: il browser ricorda il suo posto. Finché è fuori, il server gioca al posto suo.
-- Se il motore va in errore la partita si ferma invece di cadere: l'errore finisce nel registro e l'host può riprovare con **Riprova**.
-- L'host può fermare il tempo con **Pausa**. Ognuno ha la **Guida** («Come si gioca») e il pulsante **Segnala** in alto.
+- Se il tunnel si riapre con un indirizzo nuovo, il server scrive nella finestra di `npm run serata` il link nuovo di ogni partita aperta: gli amici rientrano da lì con lo stesso nome (il posto si libera 20 secondi dopo che si sono scollegati). Se non resta nessuno collegato, la partita si ferma finché qualcuno non torna.
+- Se il motore va in errore la partita si ferma invece di cadere: l'errore finisce nel registro e l'host (o chiunque sia in partita, se l'host è scollegato) può riprovare con **Riprova**.
+- L'host può fermare il tempo con **Pausa**; se si scollega a tempo fermo, chiunque sia ancora in partita può farlo ripartire. In partita l'host può togliere chi ha saltato 2 turni di fila. Ognuno ha la **Guida** («Come si gioca») e il pulsante **Segnala** in alto.
 - L'indirizzo `trycloudflare.com` cambia a ogni avvio del tunnel. Per un indirizzo fisso serve un tunnel con nome e un dominio su Cloudflare.
 
 Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova: piazzano, giocano i tris, attaccano, spostano, chattano, mandano mosse sbagliate apposta, cadono e rientrano, e uno esce a metà. Il comando esce con errore se qualcosa va storto. Opzioni: `--giocatori 4 --giri 40 --seme 1 --modo objectives|conquest --territori draft|random --piazzamento rounds|simultaneous --combattimento pairs|hits --pari defender|attacker|reroll-pair|reroll-all --difesa 2|3`. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6`.

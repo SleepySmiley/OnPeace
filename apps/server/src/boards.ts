@@ -39,9 +39,13 @@ export function rulesWith(base: ConquestRules, settings: RuleSettings): Conquest
   };
 }
 
+/** Contesti tenuti in memoria (uno per combinazione di opzioni): oltre, si butta il più vecchio. */
+const MAX_CONTEXTS = 256;
+
 interface Entry {
   def: BoardDef;
-  objectives: unknown;
+  /** Contesto con le regole di base: tabellone, obiettivi e indici si costruiscono una volta sola. */
+  base: GameContext;
   json: Buffer;
   gzip: Buffer;
   etag: string;
@@ -68,9 +72,9 @@ export class BoardLibrary implements BoardProvider {
       // il client riceve il tabellone già validato, senza spazi inutili
       const json = Buffer.from(JSON.stringify(def));
       const hash = createHash('sha1').update(json).digest('base64url').slice(0, 16);
-      this.entries.set(def.id, { def, objectives, json, gzip: gzipSync(json), etag: `"${hash}"`, hash });
       // un tabellone con dati sbagliati si scopre all'avvio, non a metà serata
-      createContext(def, this.rules, objectives);
+      const base = createContext(def, this.rules, objectives);
+      this.entries.set(def.id, { def, base, json, gzip: gzipSync(json), etag: `"${hash}"`, hash });
     }
     if (this.entries.size === 0) throw new Error(`Nessun tabellone giocabile in ${dir}`);
     this.defaultId = this.entries.has(preferred) ? preferred : this.summaries()[0]!.id;
@@ -98,7 +102,10 @@ export class BoardLibrary implements BoardProvider {
     const key = [entry.def.id, distribution, placement, turnSeconds, combat, ties, defenseDice].join('|');
     let ctx = this.contexts.get(key);
     if (!ctx) {
-      ctx = createContext(entry.def, rulesWith(this.rules, settings), entry.objectives);
+      // le opzioni cambiano solo le regole: tabellone, obiettivi e indici sono quelli già controllati all'avvio
+      ctx = { ...entry.base, rules: ConquestRules.parse(rulesWith(this.rules, settings)) };
+      // chiunque abbia il link può provare opzioni a raffica: i contesti non crescono all'infinito
+      if (this.contexts.size >= MAX_CONTEXTS) this.contexts.delete(this.contexts.keys().next().value!);
       this.contexts.set(key, ctx);
     }
     return ctx;

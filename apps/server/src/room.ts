@@ -96,6 +96,14 @@ const LOG_SYNC = 120;
 const RESUME_MIN_MS = 15_000;
 /** L'host può togliere dalla partita chi ha saltato tanti turni di fila. */
 export const KICK_AFTER_IDLE = 2;
+/**
+ * Chi entra con il nome di un posto scollegato da almeno tanto lo riprende (es. il tunnel è stato
+ * riaperto con un indirizzo nuovo e il vecchio token è rimasto nel browser del vecchio indirizzo).
+ * Prima no: un browser che si sta solo ricollegando (fino a 10 s tra un tentativo e l'altro) non perde il posto.
+ */
+export const REJOIN_AFTER_MS = 20_000;
+/** Con nessuno collegato la partita resta ferma: al tempo in corso restano sempre almeno questi millisecondi. */
+const EMPTY_HOLD_MS = 60_000;
 
 export const newToken = () => randomBytes(18).toString('base64url');
 
@@ -116,12 +124,17 @@ function clockKey(ctx: GameContext, state: GameState): string {
 
 export class Room {
   private s: RoomSnapshot;
+  /** Quando ciascun giocatore ha chiuso l'ultima connessione (solo in memoria). */
+  private readonly offlineSince = new Map<string, number>();
+  /** Creata o ricaricata dopo un riavvio: chi non si è ancora visto risulta scollegato da allora. */
+  private readonly loadedAt: number;
 
   constructor(
     readonly id: string,
     private readonly deps: RoomDeps,
     snapshot?: RoomSnapshot,
   ) {
+    this.loadedAt = deps.now();
     this.s = snapshot ?? {
       version: 2,
       id,
@@ -161,7 +174,10 @@ export class Room {
     return this.s;
   }
 
-  /** Opzioni in vigore: quelle dell'host, il resto dalle regole; in partita il tabellone è quello con cui è cominciata. */
+  /**
+   * Opzioni in vigore: quelle dell'host, il resto dalle regole; in partita sono tutte quelle con cui
+   * è cominciata (start() le scrive tutte), tabellone compreso.
+   */
   get settings(): RoomSettings {
     const { boards } = this.deps;
     const s = this.s.settings;
@@ -188,8 +204,19 @@ export class Room {
 
   // ---------------------------------------------------------------- posti
 
-  /** Nuovo giocatore nella sala d'attesa. Restituisce il posto o un messaggio d'errore. */
+  /**
+   * Nuovo giocatore nella sala d'attesa, o chi rientra con il nome di un posto scollegato da almeno
+   * REJOIN_AFTER_MS (riprende il suo posto, token compreso). Restituisce il posto o un messaggio d'errore.
+   */
   addSeat(name: string, color?: string): Seat | string {
+    const same = this.s.seats.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    // chi è uscito o è stato tolto non rientra
+    if (same && !same.left && !this.deps.isConnected(same.id)) {
+      const wait = REJOIN_AFTER_MS - (this.deps.now() - (this.offlineSince.get(same.id) ?? this.loadedAt));
+      if (wait > 0) return `${same.name} si è appena scollegato: se sei tu, riprova tra ${Math.ceil(wait / 1000)} secondi`;
+      this.touch();
+      return same;
+    }
     if (this.s.phase !== 'lobby') return 'La partita è già cominciata';
     if (this.s.seats.length >= this.deps.boards.rules.players.max) return 'La partita è piena';
     if (this.s.seats.some((x) => x.name.toLowerCase() === name.toLowerCase())) return 'Nome già usato in questa partita';
@@ -205,6 +232,12 @@ export class Room {
 
   seatByToken(token: string): Seat | undefined {
     return this.s.seats.find((x) => x.token === token);
+  }
+
+  /** Un giocatore ha chiuso una connessione: se era l'ultima, da adesso risulta scollegato (e gli altri lo vedono). */
+  connectionClosed(player: string): void {
+    if (!this.deps.isConnected(player)) this.offlineSince.set(player, this.deps.now());
+    this.broadcastLobby();
   }
 
   // ---------------------------------------------------------------- messaggi
@@ -291,6 +324,8 @@ export class Room {
     this.s.clock = null;
     this.s.acted = [];
     for (const x of this.s.seats) x.idleTurns = 0;
+    // le opzioni restano quelle con cui è cominciata, anche se poi cambiano le regole predefinite
+    this.s.settings = { ...settings };
     this.deps.log.info(`Partita ${this.id}: comincia con ${this.s.seats.map((x) => x.name).join(', ')}`);
     const from = this.s.nextSeq;
     this.advance({ state, events: [] });
@@ -468,8 +503,15 @@ export class Room {
     }
   }
 
+  /**
+   * Solo l'host ferma il tempo. Farlo ripartire (anche il "Riprova" dopo un errore) può anche chiunque
+   * sia ancora in partita mentre l'host è scollegato: altrimenti senza di lui resterebbe tutto fermo.
+   */
   private setPaused(player: string, paused: boolean): string | null {
-    if (player !== this.s.hostId) return 'Solo chi ha creato la partita può fermare il tempo';
+    const notHost = player !== this.s.hostId;
+    if (notHost && (paused || this.seat(player)?.left || this.deps.isConnected(this.s.hostId))) {
+      return 'Solo chi ha creato la partita può fermare il tempo';
+    }
     if (this.s.phase !== 'playing') return 'Non c’è un tempo da fermare';
     const { now } = this.deps;
     if (paused === Boolean(this.s.paused)) return null;
@@ -480,17 +522,34 @@ export class Room {
       this.s.deadline = now() + Math.max(this.s.paused!.remainingMs, RESUME_MIN_MS);
       this.s.paused = null;
     }
-    this.deps.log.info(`Partita ${this.id}: tempo ${paused ? 'fermato' : 'ripartito'}`);
+    const by = notHost ? ` da ${this.seat(player)?.name ?? player} (l'host è scollegato)` : '';
+    this.deps.log.info(`Partita ${this.id}: tempo ${paused ? 'fermato' : 'ripartito'}${by}`);
     this.touch();
     this.broadcastStatus();
     return null;
+  }
+
+  /**
+   * Al tempo in corso restano almeno `ms` millisecondi (dopo un riavvio, o mentre non c'è nessuno);
+   * la durata intera cresce con lui, così la barra del tempo si accorcia dall'inizio.
+   */
+  extendClock(ms: number): void {
+    if (this.s.deadline === null) return;
+    const now = this.deps.now();
+    this.s.deadline = Math.max(this.s.deadline, now + ms);
+    this.s.clockTotal = Math.max(this.s.clockTotal ?? 0, this.s.deadline - now);
   }
 
   /** Da chiamare ogni secondo: tempo scaduto per chi doveva muoversi. */
   tick(): void {
     const { now } = this.deps;
     const state = this.s.state;
-    if (this.s.phase !== 'playing' || !state || this.s.paused || this.s.deadline === null || now() < this.s.deadline) return;
+    if (this.s.phase !== 'playing' || !state || this.s.paused || this.s.deadline === null) return;
+    // nessuno collegato (es. schede chiuse a fine serata senza uscire): la partita resta ferma com'è
+    // invece di giocarsi da sola turno dopo turno; chi torna trova almeno EMPTY_HOLD_MS di tempo.
+    // Niente touch(): una partita vuota non risulta più recente di quando l'hanno lasciata.
+    if (!this.s.seats.some((x) => !x.left && this.deps.isConnected(x.id))) return this.extendClock(EMPTY_HOLD_MS);
+    if (now() < this.s.deadline) return;
     const ctx = this.ctx;
     let result: ActionResult;
     try {

@@ -1,11 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as conquista from '@onpeace/conquista';
-import { parseClientMsg, type ServerMsg } from '@onpeace/protocol';
-import { BoardLibrary } from '../src/boards';
+import { parseClientMsg, type RoomSettings, type ServerMsg } from '@onpeace/protocol';
+import { BoardLibrary, type BoardProvider } from '../src/boards';
 import { memoryLogger } from '../src/log';
 import { RoomManager, type Persistence } from '../src/manager';
-import { KICK_AFTER_IDLE, type Room, type RoomSnapshot } from '../src/room';
+import { KICK_AFTER_IDLE, REJOIN_AFTER_MS, type Room, type RoomSnapshot } from '../src/room';
 
 // il tempo scaduto resta quello vero; i test sugli errori del motore lo fanno fallire apposta
 vi.mock('@onpeace/conquista', async (importOriginal) => {
@@ -18,8 +18,11 @@ afterEach(() => {
   timeoutSpy.mockImplementation(actual.timeout);
 });
 
-const boards = new BoardLibrary(fileURLToPath(new URL('../../../data', import.meta.url)));
+const DATA_DIR = fileURLToPath(new URL('../../../data', import.meta.url));
+const boards = new BoardLibrary(DATA_DIR);
 const { timers } = boards.rules;
+const DAY_MS = 24 * 3600 * 1000;
+const saving = () => new Promise((r) => setTimeout(r, 5));
 const SETUP_MS = timers.setupSeconds * 1000;
 const BRIEFING_MS = timers.briefingSeconds * 1000;
 const PICK_MS = timers.pickSeconds * 1000;
@@ -36,12 +39,14 @@ function setup() {
   };
   const disconnected: string[] = [];
   let connected = true;
+  /** Giocatori scollegati uno per uno (per id: i test con più partite usano `setConnected`). */
+  const offline = new Set<string>();
   const transport = {
     send(room: string, player: string, msg: ServerMsg) {
       const k = `${room}:${player}`;
       inbox.set(k, [...(inbox.get(k) ?? []), msg]);
     },
-    isConnected: () => connected,
+    isConnected: (_room: string, player: string) => connected && !offline.has(player),
     disconnect: (room: string, player: string) => void disconnected.push(`${room}:${player}`),
   };
   const now = () => clock;
@@ -61,6 +66,12 @@ function setup() {
     now,
     disconnected,
     setConnected: (v: boolean) => (connected = v),
+    /** Il giocatore chiude l'ultima connessione (come la chiusura del socket in main.ts). */
+    goOffline: (room: Room, player: string) => {
+      offline.add(player);
+      room.connectionClosed(player);
+    },
+    goOnline: (player: string) => offline.delete(player),
   };
 }
 
@@ -177,6 +188,28 @@ describe('sala d’attesa', () => {
     expect(t.manager.canCreate()).toBe(true);
     expect(t.manager.rooms.has(first.id)).toBe(false);
     expect(t.manager.rooms.size).toBe(199);
+  });
+
+  it('al tetto, se non ci sono sale d’attesa da togliere, va via la partita finita più vecchia senza nessuno collegato', () => {
+    const t = setup();
+    const rooms = Array.from({ length: 200 }, (_, i) => {
+      t.advance(1000);
+      return t.manager.create(`G${i}`, '#4a8ff0', {}).room;
+    });
+    for (const r of rooms) r.snapshot().phase = 'playing';
+    rooms[9]!.snapshot().phase = 'ended';
+    rooms[5]!.snapshot().phase = 'ended';
+    expect(t.manager.canCreate()).toBe(false); // tutti collegati
+    t.setConnected(false);
+    expect(t.manager.canCreate()).toBe(true);
+    expect(t.manager.rooms.has(rooms[5]!.id)).toBe(false);
+    expect(t.manager.rooms.has(rooms[9]!.id)).toBe(true);
+    t.manager.create('Anna', '#4a8ff0', {}).room.snapshot().phase = 'playing';
+    expect(t.manager.canCreate()).toBe(true);
+    expect(t.manager.rooms.has(rooms[9]!.id)).toBe(false);
+    t.manager.create('Anna', '#4a8ff0', {}).room.snapshot().phase = 'playing';
+    // le partite in corso non si toccano mai
+    expect(t.manager.canCreate()).toBe(false);
   });
 
   it('sala d’attesa rimasta vuota: la partita e il suo file spariscono', async () => {
@@ -454,6 +487,9 @@ describe('tempo, rientri e imprevisti', () => {
     expect(third.loadSaved()).toBe(0);
     expect(t.logger.lines.some((l) => l.includes('il tabellone "mondo" è cambiato'))).toBe(true);
     expect(t.saved.has(room.id)).toBe(true); // il file resta
+    // chi prova a rientrare non perde il token: la partita ripartirà quando il tabellone torna com'era
+    expect(third.isUnavailable(host.token)).toBe(true);
+    expect(third.isUnavailable('un-altro-token')).toBe(false);
   });
 
   it('ripresa dopo un riavvio anche mentre si legge l’obiettivo o si scelgono i territori', async () => {
@@ -476,6 +512,9 @@ describe('tempo, rientri e imprevisti', () => {
     const resumed = reload();
     expect(resumed.state!.phase).toBe('draft');
     expect(Object.keys(resumed.state!.territories)).toEqual([free[0]]);
+    // il tempo riparte con almeno un minuto, e la durata intera con lui (la barra non resta piena)
+    expect(resumed.snapshot().deadline).toBe(t.now() + 60_000);
+    expect(resumed.snapshot().clockTotal).toBe(Math.max(PICK_MS, 60_000));
     // si continua a scegliere dove si era rimasti
     const next = resumed.state!.setupPlayer!;
     expect(next).not.toBe(first);
@@ -527,6 +566,37 @@ describe('tempo, rientri e imprevisti', () => {
     expect(room.state!.turn!.number).toBe(2);
   });
 
+  it('a tempo fermo con l’host scollegato chi è ancora in partita lo fa ripartire (anche dopo un errore)', () => {
+    const t = playing(3);
+    const { room, host, guests } = t;
+    const [bruno, carla] = guests as [(typeof guests)[0], (typeof guests)[0]];
+    expect(room.handle(host.id, { t: 'pause', paused: true })).toBeNull();
+    // l'host è collegato: decide lui
+    expect(room.handle(bruno.id, { t: 'pause', paused: false })).toMatch(/Solo chi ha creato/);
+    t.goOffline(room, host.id);
+    expect(room.handle(carla.id, { t: 'leave' })).toBeNull();
+    expect(room.handle(carla.id, { t: 'pause', paused: false })).toMatch(/Solo chi ha creato/); // è uscita
+    expect(room.handle(bruno.id, { t: 'pause', paused: false })).toBeNull();
+    expect(t.last(room.id, bruno.id, 'status')!.paused).toBeNull();
+    expect(t.logger.lines.some((l) => l.includes('tempo ripartito da Bruno'))).toBe(true);
+    // fermarlo resta solo dell'host
+    expect(room.handle(bruno.id, { t: 'pause', paused: true })).toMatch(/Solo chi ha creato/);
+    // pausa per errore: "Riprova" anche senza l'host
+    timeoutSpy.mockImplementation(() => {
+      throw new Error('guasto nel motore');
+    });
+    t.advance(room.settings.turnSeconds * 1000 + 1);
+    t.manager.tick();
+    expect(t.last(room.id, bruno.id, 'status')!.paused?.reason).toBe('error');
+    timeoutSpy.mockImplementation(actual.timeout);
+    expect(room.handle(bruno.id, { t: 'pause', paused: false })).toBeNull();
+    expect(t.last(room.id, bruno.id, 'status')!.paused).toBeNull();
+    // l'host torna: di nuovo solo lui
+    t.goOnline(host.id);
+    expect(room.handle(host.id, { t: 'pause', paused: true })).toBeNull();
+    expect(room.handle(bruno.id, { t: 'pause', paused: false })).toMatch(/Solo chi ha creato/);
+  });
+
   it('segnalazioni: nel registro con partita, nome e turno; per i feedback anche lo stato della partita', () => {
     const t = playing(2);
     const { room, guest } = t;
@@ -539,6 +609,92 @@ describe('tempo, rientri e imprevisti', () => {
       { kind: 'error', game: null, name: null },
     ]);
     expect(t.logger.dumps.map((d) => d.name)).toEqual([`segnalazione-${room.id}-turno1`]);
+  });
+
+  it(`chi ha perso il link rientra con lo stesso nome nel suo posto, scollegato da almeno ${REJOIN_AFTER_MS / 1000} s`, async () => {
+    const t = playing(3);
+    const { room, guests } = t;
+    const [bruno, carla] = guests as [(typeof guests)[0], (typeof guests)[0]];
+    // collegato: il posto è suo, non lo prende nessuno
+    expect(t.manager.join(room.id, 'Bruno')).toBe('La partita è già cominciata');
+    t.goOffline(room, bruno.id);
+    t.advance(5_000);
+    expect(t.manager.join(room.id, 'bruno')).toMatch(/riprova tra 15 secondi/);
+    t.advance(REJOIN_AFTER_MS);
+    const back = t.manager.join(room.id.toUpperCase(), 'bruno');
+    if (typeof back === 'string') throw new Error(back);
+    expect(back.seat).toBe(bruno); // stesso posto, stesso token
+    expect(back.seat.token).toBe(bruno.token);
+    expect(room.seats).toHaveLength(3);
+    expect(t.logger.lines).toContain(`Partita ${room.id}: rientra Bruno`);
+    // chi è uscito non rientra, nemmeno dopo
+    expect(room.handle(carla.id, { t: 'leave' })).toBeNull();
+    t.goOffline(room, carla.id);
+    t.advance(REJOIN_AFTER_MS + 1);
+    expect(t.manager.join(room.id, 'Carla')).toBe('La partita è già cominciata');
+    // dopo un riavvio chi non si è ancora visto risulta scollegato da quando la partita è ricaricata
+    await saving();
+    const again = new RoomManager(boards, t.store, t.transport, t.now, 0, t.logger.log);
+    expect(again.loadSaved()).toBe(1);
+    expect(again.join(room.id, 'Bruno')).toMatch(/riprova tra 20 secondi/);
+    t.advance(REJOIN_AFTER_MS);
+    const resumed = again.join(room.id, 'Bruno');
+    expect(typeof resumed === 'string' ? resumed : resumed.seat.token).toBe(bruno.token);
+  });
+
+  it('nessuno collegato: la partita resta ferma invece di giocarsi da sola', () => {
+    const t = playing(2);
+    const { room } = t;
+    const turn = room.state!.turn!.number;
+    const updatedAt = room.snapshot().updatedAt;
+    t.setConnected(false);
+    for (let i = 0; i < 20; i++) {
+      t.advance(room.settings.turnSeconds * 1000);
+      t.manager.tick();
+    }
+    expect(room.state!.turn!.number).toBe(turn);
+    expect(room.snapshot().updatedAt).toBe(updatedAt);
+    // chi torna trova almeno un minuto, poi il tempo scade come sempre
+    expect(room.snapshot().deadline).toBe(t.now() + 60_000);
+    t.setConnected(true);
+    t.advance(59_000);
+    t.manager.tick();
+    expect(room.state!.turn!.number).toBe(turn);
+    t.advance(1_001);
+    t.manager.tick();
+    expect(room.state!.turn!.number).toBe(turn + 1);
+  });
+
+  it('dopo un riavvio una partita in corso si cancella solo se è ferma da più di 30 giorni', async () => {
+    const t = playing(2);
+    await saving();
+    const snap = t.saved.get(t.room.id)!;
+    snap.updatedAt = t.now() - 8 * DAY_MS; // le partite finite si cancellano già dopo 7 giorni, queste no
+    expect(new RoomManager(boards, t.store, t.transport, t.now, 0, t.logger.log).loadSaved()).toBe(1);
+    snap.updatedAt = t.now() - 31 * DAY_MS;
+    expect(new RoomManager(boards, t.store, t.transport, t.now, 0, t.logger.log).loadSaved()).toBe(0);
+    expect(t.saved.has(t.room.id)).toBe(false);
+  });
+
+  it('le opzioni restano quelle con cui è cominciata anche se cambiano le regole predefinite', async () => {
+    const t = lobby(2);
+    expect(t.room.handle(t.host.id, { t: 'start' })).toBeNull();
+    expect(t.room.snapshot().settings).toEqual(t.room.settings);
+    expect(t.room.settings).toMatchObject({ placement: 'rounds', combat: 'pairs' });
+    await saving();
+    // regole.json cambiato tra una sera e l'altra: piazzamento tutti insieme e combattimento a colpi
+    const rules = {
+      ...boards.rules,
+      setup: { ...boards.rules.setup, placement: 'simultaneous' },
+      dice: { ...boards.rules.dice, combat: 'hits' },
+    };
+    const changed = Object.create(boards, { rules: { value: rules } }) as BoardProvider;
+    const again = new RoomManager(changed, t.store, t.transport, t.now, 0, t.logger.log);
+    expect(again.loadSaved()).toBe(1);
+    const room = again.byToken(t.host.token)!.room;
+    expect(room.settings).toMatchObject({ placement: 'rounds', combat: 'pairs' });
+    expect(room.lobbyInfo().rules.setup.placement).toBe('rounds');
+    expect(room.lobbyInfo().rules.dice.combat).toBe('pairs');
   });
 
   it('un salvataggio fallito (file bloccato) viene ritentato', async () => {
@@ -565,5 +721,37 @@ describe('tempo, rientri e imprevisti', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('tabelloni', () => {
+  const settings: RoomSettings = {
+    board: 'mondo',
+    mode: 'objectives',
+    distribution: 'draft',
+    placement: 'rounds',
+    turnSeconds: 180,
+    combat: 'pairs',
+    ties: 'defender',
+    defenseDice: 3,
+  };
+
+  it('i contesti delle opzioni condividono il tabellone e non crescono all’infinito', () => {
+    const lib = new BoardLibrary(DATA_DIR);
+    const base = lib.context(settings);
+    const other = lib.context({ ...settings, turnSeconds: 31, combat: 'hits' });
+    expect(other.board).toBe(base.board);
+    expect(other.neighbours).toBe(base.neighbours);
+    expect(other.rules.timers.turnSeconds).toBe(31);
+    expect(other.rules.dice.combat).toBe('hits');
+    expect(base.rules.timers.turnSeconds).toBe(180);
+    expect(base.rules.dice.combat).toBe('pairs');
+    expect(lib.context({ ...settings, turnSeconds: 31, combat: 'hits' })).toBe(other); // in memoria
+    // opzioni provate a raffica: le più vecchie escono dalla memoria (e si ricostruiscono se servono)
+    for (let s = 32; s <= 900; s++) lib.context({ ...settings, turnSeconds: s });
+    expect(lib.context({ ...settings, turnSeconds: 900 })).toBe(lib.context({ ...settings, turnSeconds: 900 }));
+    const rebuilt = lib.context({ ...settings, turnSeconds: 31, combat: 'hits' });
+    expect(rebuilt).not.toBe(other);
+    expect(rebuilt).toEqual(other);
   });
 });

@@ -15,6 +15,13 @@ const MAX_ROOMS = 200;
 const MAX_REPORT_DUMPS = 100;
 /** Partite finite, o sale d'attesa mai partite, ferme da più di così: si cancellano al riavvio. */
 const STALE_MS = 7 * 24 * 3600 * 1000;
+/**
+ * Partite in corso ferme da più di così: si cancellano al riavvio. Più a lungo delle altre, perché una
+ * partita si può riprendere un'altra sera (e mentre non c'è nessuno collegato resta ferma, vedi Room.tick).
+ */
+const STALE_PLAYING_MS = 30 * 24 * 3600 * 1000;
+/** Dopo un riavvio al tempo in corso resta almeno questo: chi era a metà turno non lo perde. */
+const RESTART_HOLD_MS = 60_000;
 
 export interface Persistence {
   save(snapshot: RoomSnapshot): void;
@@ -39,6 +46,8 @@ function gameCode(): string {
 export class RoomManager {
   readonly rooms = new Map<string, Room>();
   private readonly pendingSave = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Token dei posti nelle partite salvate che non si possono riprendere finché il tabellone non torna com'era. */
+  private readonly unavailable = new Set<string>();
   private reportDumps = 0;
 
   constructor(
@@ -65,8 +74,8 @@ export class RoomManager {
   /** Ricarica le partite salvate (dopo un riavvio del PC). */
   loadSaved(): number {
     for (const snap of this.store.loadAll()) {
-      // partite finite o sale d'attesa ferme da tempo, sale rimaste vuote: via anche il file
-      const stale = (snap.phase === 'ended' || snap.phase === 'lobby') && this.now() - snap.updatedAt > STALE_MS;
+      // partite ferme da tempo, sale rimaste vuote: via anche il file
+      const stale = this.now() - snap.updatedAt > (snap.phase === 'playing' ? STALE_PLAYING_MS : STALE_MS);
       if (stale || snap.seats.length === 0) {
         this.removeFile(snap.id);
         continue;
@@ -75,11 +84,14 @@ export class RoomManager {
       // (il file resta dov'è: se il tabellone torna com'era, la partita riparte)
       if (snap.state && !this.sameTerritories(snap)) {
         this.log.error(`Partita ${snap.id}: il tabellone "${snap.board}" è cambiato o non c'è più, la partita non si può riprendere`);
+        // chi prova a rientrare non deve sentirsi dire "sessione scaduta" (il browser butterebbe il token)
+        for (const seat of snap.seats) this.unavailable.add(seat.token);
         continue;
       }
+      const room = new Room(snap.id, this.deps(snap.id), snap);
       // il tempo del turno riparte: chi era a metà turno non lo perde per il riavvio
-      if (snap.deadline !== null) snap.deadline = Math.max(snap.deadline, this.now() + 60_000);
-      this.rooms.set(snap.id, new Room(snap.id, this.deps(snap.id), snap));
+      room.extendClock(RESTART_HOLD_MS);
+      this.rooms.set(snap.id, room);
     }
     return this.rooms.size;
   }
@@ -94,15 +106,23 @@ export class RoomManager {
     return claiming || saved.length === ids.size;
   }
 
+  /** Il token è di una partita salvata che non si può riprendere finché il suo tabellone non torna com'era. */
+  isUnavailable(token: string): boolean {
+    return this.unavailable.has(token);
+  }
+
   /**
    * Si può creare una partita? Al tetto si fa posto togliendo la sala d'attesa più vecchia senza
-   * nessuno collegato: così le sale abbandonate (o create a raffica) non bloccano il server per sempre.
+   * nessuno collegato, o se non ce ne sono la partita finita più vecchia senza nessuno collegato:
+   * così le partite abbandonate (o create a raffica) non bloccano il server per sempre.
    */
   canCreate(): boolean {
     if (this.rooms.size < MAX_ROOMS) return true;
-    const idle = [...this.rooms.values()]
-      .filter((r) => r.phase === 'lobby' && r.seats.every((s) => !this.transport.isConnected(r.id, s.id)))
-      .sort((a, b) => a.snapshot().updatedAt - b.snapshot().updatedAt)[0];
+    const oldestIdle = (phase: Room['phase']) =>
+      [...this.rooms.values()]
+        .filter((r) => r.phase === phase && r.seats.every((s) => !this.transport.isConnected(r.id, s.id)))
+        .sort((a, b) => a.snapshot().updatedAt - b.snapshot().updatedAt)[0];
+    const idle = oldestIdle('lobby') ?? oldestIdle('ended');
     if (idle) this.remove(idle);
     return this.rooms.size < MAX_ROOMS;
   }
@@ -122,9 +142,11 @@ export class RoomManager {
   join(gameId: string, name: string, color?: string): { room: Room; seat: Seat } | string {
     const room = this.rooms.get(gameId.toLowerCase());
     if (!room) return 'Partita non trovata: controlla il link';
+    const before = room.seats.length;
     const seat = room.addSeat(name, color);
     if (typeof seat === 'string') return seat;
-    this.log.info(`Partita ${room.id}: entra ${name}`);
+    // nessun posto nuovo: ha ripreso il suo (vedi Room.addSeat)
+    this.log.info(`Partita ${room.id}: ${room.seats.length > before ? 'entra' : 'rientra'} ${seat.name}`);
     return { room, seat };
   }
 
