@@ -11,11 +11,14 @@ export function ChatPanel() {
   const markRead = useSession((s) => s.markChatRead);
   const [text, setText] = useState('');
   const endRef = useRef<HTMLLIElement>(null);
+  // l'ultima riga, non quante sono: la chat piena resta sempre della stessa lunghezza
+  const last = chat.at(-1);
+  const lastKey = last ? `${last.at}:${last.from}` : null;
 
   useEffect(() => {
     markRead();
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [chat.length, markRead]);
+  }, [lastKey, markRead]);
 
   return (
     <div className="chat">

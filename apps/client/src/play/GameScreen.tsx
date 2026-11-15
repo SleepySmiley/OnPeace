@@ -16,7 +16,7 @@ import { GuideModal } from '../ui/GuideModal';
 import { ReportModal } from '../ui/ReportModal';
 import { CommandBar } from './CommandBar';
 import { GameOver } from './GameOver';
-import { attackTargets, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
+import { attackTargets, canUsePause, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
 import { ObjectiveCard } from './ObjectiveCard';
 import { connectBattleFeed, useBattle } from './battle';
 import { BattleLayer } from './BattleScene';
@@ -59,7 +59,8 @@ function useBoardState(): BoardState {
         if (e.event.attackerLosses > 0) flashes.set(e.event.from, fresh!.at);
       }
     }
-    if (spot) flashes.set(spot.territory, spot.at);
+    // la carta pescata resta in `spot` fino alla prossima: non deve coprire i lampi delle battaglie venute dopo
+    if (spot && (flashes.get(spot.territory) ?? -Infinity) < spot.at) flashes.set(spot.territory, spot.at);
     const rules = lobby.rules;
     const n = board.geo.neighbours;
     const mine = me ? owned(view, me) : [];
@@ -117,6 +118,8 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
   const [overClosed, setOverClosed] = useState(false);
   const [handOpen, setHandOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // la fine partita aspetta che finisca la scena della battaglia decisiva (e quelle mie ancora in coda)
+  const battling = useBattle((s) => (s.playing !== null && !s.playing.small) || s.queue.some((e) => e.role !== 'spectator'));
 
   const mine = isMyMove(move);
   useGameSounds({ me, fresh, deadline: online.deadline, paused: Boolean(online.paused), myMove: mine, chat: online.chat });
@@ -154,11 +157,12 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
     if (import.meta.env.DEV) Object.assign(window, { __tabellone: painter, __sessione: useSession });
   }, [painter]);
 
-  // tasti
+  // tasti (scena della battaglia, menu in alto, carte e pesca si prendono i loro prima di qui, in cattura)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (el.closest('input, textarea, select') || overlay) return;
+      // si lascia stare solo dove si scrive: dopo aver mosso un cursore Invio e Esc restano al gioco
+      if (el.closest('textarea, select, input:not([type=range]):not([type=checkbox]):not([type=radio])') || overlay) return;
       const s = useSession.getState();
       if (e.key === 'Escape') {
         // nei rinforzi il territorio scelto è solo l'ultimo cliccato: Esc toglie le armate non ancora confermate
@@ -227,13 +231,14 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
             </>
           ) : (
             <>
-              <b>Il server non riesce ad andare avanti.</b> L'errore è registrato: l'host può riprovare.
+              <b>Il server non riesce ad andare avanti.</b> L'errore è registrato:{' '}
+              {canUsePause(lobby, me, true) ? 'puoi riprovare con Riprova.' : "l'host può riprovare."}
             </>
           )}
         </div>
       )}
       {move.kind === 'briefing' && <ObjectiveCard />}
-      {over && !overClosed && <GameOver onClose={() => setOverClosed(true)} />}
+      {over && !overClosed && !battling && <GameOver onClose={() => setOverClosed(true)} />}
       {overlay === 'guide' && <GuideModal rules={lobby.rules} onClose={() => setOverlay(null)} />}
       {overlay === 'report' && <ReportModal onClose={() => setOverlay(null)} />}
     </div>

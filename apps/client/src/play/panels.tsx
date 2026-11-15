@@ -7,15 +7,19 @@ import { ChatPanel } from '../ui/ChatPanel';
 import { CardView, Chip, Die } from './bits';
 import { describeEvent, isHighlight, namesFor } from './describe';
 import { cardsInScene, useDraw } from './draw';
-import { actingPlayer, owned, totals } from './logic';
+import { actingPlayer, canKick, holdsContinent, owned, totals } from './logic';
 import { ObjectiveSheet, objectiveInfo, skinOf } from './objective';
 import { useGame } from './useGame';
 
 // ---------------------------------------------------------------- giocatori
 
-/** Giocatori in ordine di turno: chi muove, territori e carte; lo stato (uscito, non collegato) nel suggerimento. */
+/**
+ * Giocatori in ordine di turno: chi muove, territori e carte; lo stato (uscito, non collegato, turni
+ * saltati) nel suggerimento. L'host può togliere chi ha saltato troppi turni di fila.
+ */
 export function PlayersPanel() {
   const { view, lobby, me, colorOf } = useGame();
+  const send = useSession((s) => s.send);
   const acting = actingPlayer(view);
   const seats = new Map(lobby.players.map((p) => [p.id, p]));
   const players = view.order.map((id) => view.players.find((p) => p.id === id)!);
@@ -27,11 +31,12 @@ export function PlayersPanel() {
           const t = totals(view, p);
           const waiting = view.phase === 'setup' && !view.setupPlayer && !p.setupDone && !p.pending;
           const status = !p.alive ? 'eliminato' : seat?.left ? 'uscito' : !seat?.connected ? 'non collegato' : null;
+          const idle = p.alive && seat && !seat.left && seat.idleTurns > 0 ? `ha saltato ${seat.idleTurns} ${seat.idleTurns === 1 ? 'turno' : 'turni'}` : null;
           return (
             <li
               key={p.id}
               className={`${p.id === acting ? 'acting' : ''}${!p.alive ? ' dead' : ''}${seat?.left ? ' gone' : ''}`}
-              title={status ?? undefined}
+              title={[status, idle].filter(Boolean).join(' · ') || undefined}
             >
               <span className="turn-mark" aria-hidden>
                 {p.id === acting || waiting ? '▸' : ''}
@@ -49,6 +54,18 @@ export function PlayersPanel() {
                 {p.cardCount}
                 <small>carte</small>
               </span>
+              {canKick(lobby, me, p.id, p.alive) && (
+                // sotto il nome, sulla riga dopo: le colonne della riga sono già piene
+                <button
+                  type="button"
+                  className="ghost tiny"
+                  style={{ gridColumn: '2 / -1', justifySelf: 'start' }}
+                  title="Toglilo dalla partita: il server giocherà al posto suo"
+                  onClick={() => send({ t: 'kick', player: p.id })}
+                >
+                  Togli
+                </button>
+              )}
             </li>
           );
         })}
@@ -196,10 +213,12 @@ export function LogPanel() {
   const log = useSession((s) => s.log);
   const end = useRef<HTMLLIElement>(null);
   const names = useMemo(() => namesFor(view, territory), [view, territory]);
+  // l'ultimo evento, non quanti sono: il registro pieno resta sempre della stessa lunghezza
+  const lastSeq = log.at(-1)?.seq;
   // scrollIntoView nei browser recenti restituisce una promessa: l'effetto non deve restituirla
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'end' });
-  }, [log.length]);
+  }, [lastSeq]);
   return (
     <ol className="log">
       {log.length === 0 && <li className="dim">Ancora niente.</li>}
@@ -243,7 +262,7 @@ export function TerritoryInfo() {
   const t = view.territories[id];
   if (!def || !t) return null;
   const continent = board.def.continents.find((c) => c.id === def.continent);
-  const holder = continent && Object.entries(view.territories).every(([tid, x]) => board.geo.continentOf.get(tid) !== continent.id || x.owner === t.owner);
+  const holder = continent && holdsContinent(view, board.def.territories, continent.id, t.owner);
   return (
     <aside className="territory-info" aria-live="polite">
       <p className="ti-name">{def.name}</p>

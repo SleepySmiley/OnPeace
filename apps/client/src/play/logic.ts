@@ -4,6 +4,7 @@
  * server comunque ricontrolla tutto.
  */
 import { maxAttackDice, type ConquestRules, type GameView, type PlayerView } from '@onpeace/conquista';
+import type { LobbyInfo } from '@onpeace/protocol';
 
 export type MyMove =
   /** Inizio partita: leggere il proprio obiettivo e dire che si è pronti. */
@@ -141,4 +142,28 @@ export function reinforcementsFor(view: GameView, rules: ConquestRules, continen
 export function totals(view: GameView, p: PlayerView) {
   const mine = owned(view, p.id);
   return { territories: mine.length, armies: mine.reduce((s, t) => s + view.territories[t]!.armies, 0) };
+}
+
+/** Se `owner` ha tutto il continente: contano i territori del tabellone, anche quelli ancora liberi nella scelta a turno. */
+export function holdsContinent(view: GameView, territories: readonly { id: string; continent: string }[], continent: string, owner: string): boolean {
+  return territories.every((t) => t.continent !== continent || view.territories[t.id]?.owner === owner);
+}
+
+/** Le fasi di preparazione che ci sono davvero: senza obiettivo da leggere, o con i territori distribuiti a caso, se ne salta una. */
+export function preparationPhases(rules: ConquestRules): string[] {
+  return ['briefing', 'draft', 'setup'].filter((p) => (p !== 'briefing' || rules.setup.briefing) && (p !== 'draft' || rules.setup.distribution === 'draft'));
+}
+
+/** L'host può togliere dalla partita chi ha saltato troppi turni di fila (il server ricontrolla). */
+export function canKick(lobby: LobbyInfo, me: string | null, player: string, alive: boolean): boolean {
+  const seat = lobby.players.find((p) => p.id === player);
+  return lobby.phase === 'playing' && lobby.hostId === me && player !== me && alive && seat !== undefined && !seat.left && seat.idleTurns >= lobby.kickAfterIdle;
+}
+
+/** Il tempo lo ferma solo l'host; se l'host non è collegato lo fa ripartire chiunque sia ancora in partita. */
+export function canUsePause(lobby: LobbyInfo, me: string | null, paused: boolean): boolean {
+  if (lobby.hostId === me) return true;
+  const host = lobby.players.find((p) => p.id === lobby.hostId);
+  const seat = lobby.players.find((p) => p.id === me);
+  return paused && !host?.connected && seat !== undefined && !seat.left;
 }
