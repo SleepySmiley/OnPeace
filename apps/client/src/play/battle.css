@@ -23,12 +23,6 @@
   pointer-events: none;
 }
 
-}
-
-}
-
-}
-
 @keyframes bt-fade {
   from {
     opacity: 0;
@@ -485,26 +479,6 @@ body[data-stile='vetro'] .mp-bar b {
 .mp-bar .bt-tally {
   --bt-neg: #ff8a7a;
   opacity: 0.85;
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
-}
-
 }
 
 @keyframes mp-tag-in {
