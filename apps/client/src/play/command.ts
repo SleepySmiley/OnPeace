@@ -3,6 +3,7 @@
  * da tenere d'occhio, chi contro chi, dadi, armate, bottoni), senza decidere come si disegna:
  * la barra dei comandi in basso lo mostra su una riga.
  */
+import { defenseDice, maxAttackDice } from '@onpeace/conquista';
 import { useSession } from '../store';
 import { PHASES } from './describe';
 import { attackTargets, freeTerritories, maxDice, moveTargets, reinforcementsFor, type MyMove } from './logic';
@@ -164,7 +165,7 @@ export function useCommand(): Command {
         hint: 'Clic di nuovo sul bersaglio: tira ancora · Esc annulla',
         from: side(draft.selected),
         to: side(draft.target),
-        dice: { value: dice, max, all: rules.dice.attackMax, defense: Math.min(rules.dice.defenseMax, toT.armies), set: (n) => s.patchDraft({ dice: n }) },
+        dice: { value: dice, max, all: maxAttackDice(rules.dice), defense: defenseDice(rules.dice, toT.armies), set: (n) => s.patchDraft({ dice: n }) },
         primary: draft.blitz
           ? { label: "Ferma l'attacco", run: () => s.stopBlitz(), danger: true }
           : { label: `Tira ${dice} ${dice === 1 ? 'dado' : 'dadi'}`, run: () => s.attack(), disabled: busy || max < 1, kbd: 'Invio' },

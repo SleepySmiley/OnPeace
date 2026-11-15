@@ -10,7 +10,7 @@ import type { BoardSummary, ChatLine, ClientMsg, LobbyInfo, LobbySettings, Logge
 import { sfx } from './audio/sfx';
 import { buildGeometry, type BoardGeometry } from './board/geometry';
 import { Net, gameFromUrl, loadSession, saveSession, setGameInUrl } from './net';
-import { attackTargets, maxDice, moveTargets, myMove, type MyMove } from './play/logic';
+import { attackTargets, maxDice, moveKey, moveTargets, myMove, type MyMove } from './play/logic';
 
 export type PauseInfo = NonNullable<Extract<ServerMsg, { t: 'status' }>['paused']>;
 
@@ -212,11 +212,6 @@ export function reportClientError(err: unknown, extra = ''): void {
 
 const sum = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
 
-/** Cosa sto facendo adesso: quando cambia, le scelte in corso ripartono da capo. */
-function moveKey(view: GameView, move: MyMove): string {
-  const setupLeft = view.players.reduce((n, p) => n + p.setupLeft, 0);
-  return `${view.phase}:${view.turn?.number ?? 0}:${view.setupPlayer ?? ''}:${move.kind}:${setupLeft}`;
-}
 
 export const useSession = create<Session>((set, get) => {
   const patchOnline = (patch: Partial<OnlineState>) => set({ online: { ...get().online, ...patch } });
@@ -335,7 +330,7 @@ export const useSession = create<Session>((set, get) => {
       const left = s.online.lobby?.players.find((p) => p.id === s.online.me)?.left ?? false;
       const now = myMove(msg.view, s.online.me, r, left);
       const was = before ? myMove(before, s.online.me, r, left) : null;
-      if (!before || moveKey(before, was!) !== moveKey(msg.view, now)) {
+      if (!before || moveKey(before, was!, s.online.me) !== moveKey(msg.view, now, s.online.me)) {
         // dopo un'occupazione si resta pronti ad attaccare dal territorio appena preso (se si può)
         let selected: string | null = null;
         if (was?.kind === 'occupy' && now.kind === 'attack') {

@@ -187,12 +187,32 @@
   background: rgba(14, 10, 8, 0.32);
 }
 
+/* pari che sta per essere ritirato: anello che pulsa, il dado resta pieno */
+.d3.tie .d3-mark {
+  opacity: 1;
+  box-shadow:
+    0 0 0 3px var(--bt-tie),
+    0 0 22px var(--bt-tie);
+  animation: bt-tie-pulse 560ms ease-in-out infinite alternate;
+}
+
+@keyframes bt-tie-pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 body[data-stile='classico'] {
   --bt-win: #e3b94f;
+  --bt-tie: #f2efe4;
 }
 
 body[data-stile='vetro'] {
   --bt-win: #ffd60a;
+  --bt-tie: #ffffff;
 }
 
 /* ------------------------------------------------------------------ pezzi comuni */
@@ -395,7 +415,8 @@ body[data-stile='vetro'] .bt-stamp.neutral {
 
 .st-outro .mp-light,
 .st-outro .mp-die,
-.st-outro .mp-clash {
+.st-outro .mp-clash,
+.st-outro .mp-hits {
   opacity: 0;
   transition: opacity calc(var(--ms) * 0.6);
 }
@@ -546,6 +567,43 @@ body[data-stile='vetro'] .mp-sep {
   color: #fff;
 }
 
+.mp-clash.tie {
+  color: var(--bt-tie);
+}
+
+/* "Pari: si ritira" sopra il vassoio, e a colpi quanti colpi sotto ogni fila */
+.mp-tie-label,
+.mp-hits {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 3px 12px;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 14px;
+  border-radius: 999px;
+  animation: bt-fade 200ms ease-out both;
+}
+
+body[data-stile='classico'] .mp-tie-label,
+body[data-stile='classico'] .mp-hits {
+  color: #2b2219;
+  background: #f2efe4;
+  box-shadow: 0 0 0 2px rgba(214, 178, 94, 0.7), 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+body[data-stile='vetro'] .mp-tie-label,
+body[data-stile='vetro'] .mp-hits {
+  color: #fff;
+  background: rgba(16, 18, 23, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.mp-hits.a {
+  color: var(--die-attack);
+}
+
 .mp-stamp {
   z-index: 6;
 }
@@ -575,7 +633,9 @@ body[data-stile='vetro'] {
   z-index: 2500;
 }
 .tk-wrap .mp-die,
-.tk-wrap .mp-clash {
+.tk-wrap .mp-clash,
+.tk-wrap .mp-tie-label,
+.tk-wrap .mp-hits {
   z-index: 2600;
 }
 .tk-wrap .bt-stamp {

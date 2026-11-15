@@ -2,7 +2,8 @@
  * Pagina di prova della battaglia (/battaglia.html in sviluppo): la partita vera che gira nel
  * browser contro quattro avversari automatici, con la scena dei carri armati com'è nel gioco. Dal
  * pannello in alto a destra si provano le scelte ancora aperte ("fino in fondo" tiro per tiro o col
- * conto veloce, che cosa vede chi non combatte) e si fanno partire battaglie finte senza giocare.
+ * conto veloce, che cosa vede chi non combatte), le regole dei dadi (a coppie o a colpi, pari, dadi
+ * della difesa: cambiandole si rifà la partita) e si fanno partire battaglie finte senza giocare.
  */
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -44,6 +45,15 @@ function saveChoices() {
   history.replaceState(null, '', `?${url}`);
 }
 saveChoices();
+
+/** Regole dei dadi della prova: stanno nell'indirizzo (le legge LocalGame), cambiandole si rifà la partita. */
+function setRule(key: 'combattimento' | 'pari' | 'difesa', value: string) {
+  const url = new URLSearchParams(location.search);
+  url.set(key, value);
+  history.replaceState(null, '', `?${url}`);
+  boot('turno');
+}
+const rule = (key: string, d: string) => new URLSearchParams(location.search).get(key) ?? d;
 
 let game: LocalGame | null = null;
 function boot(start: Start) {
@@ -98,6 +108,44 @@ function Controls() {
         <option value="piccola">Gli altri: in piccolo</option>
         <option value="intera">Gli altri: scena intera</option>
         <option value="niente">Gli altri: niente</option>
+      </select>
+      <select
+        className="mock-restart"
+        aria-label="Combattimento"
+        value={rule('combattimento', 'coppie')}
+        onChange={(e) => {
+          e.target.blur();
+          setRule('combattimento', e.target.value);
+        }}
+      >
+        <option value="coppie">Dadi: a coppie</option>
+        <option value="colpi">Dadi: a colpi (fino a 9)</option>
+      </select>
+      <select
+        className="mock-restart"
+        aria-label="Dadi pari"
+        value={rule('pari', 'difesa')}
+        onChange={(e) => {
+          e.target.blur();
+          setRule('pari', e.target.value);
+        }}
+      >
+        <option value="difesa">Pari: vince chi difende</option>
+        <option value="attacco">Pari: vince chi attacca</option>
+        <option value="coppia">Pari: si ritira la coppia</option>
+        <option value="tutto">Pari: si ritira tutto</option>
+      </select>
+      <select
+        className="mock-restart"
+        aria-label="Dadi in difesa"
+        value={rule('difesa', '3')}
+        onChange={(e) => {
+          e.target.blur();
+          setRule('difesa', e.target.value);
+        }}
+      >
+        <option value="3">Difesa: fino a 3 dadi</option>
+        <option value="2">Difesa: fino a 2 dadi</option>
       </select>
       <select
         className="mock-restart"

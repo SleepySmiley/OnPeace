@@ -1,5 +1,5 @@
 /** Testi della partita: fasi, carte ed eventi raccontati in italiano. */
-import type { Card, GameEvent, GameView, Phase } from '@onpeace/conquista';
+import { diceAfter, type Card, type ConquestRules, type GameEvent, type GameView, type Phase } from '@onpeace/conquista';
 
 export const PHASES: { id: Exclude<Phase, 'over'>; label: string }[] = [
   { id: 'briefing', label: 'Obiettivo' },
@@ -59,7 +59,10 @@ export function describeEvent(e: GameEvent, n: Names, me: string | null): string
       ]
         .filter(Boolean)
         .join(', ');
-      const head = `${n.territory(e.from)} → ${n.territory(e.to)}: ${e.attack.join('·')} contro ${e.defense.join('·')} (${lost})`;
+      // a coppie si scrivono i dadi che hanno deciso (dopo i pari ritirati), a colpi anche quanti colpi
+      const final = diceAfter(e);
+      const how = e.hits ? `, ${e.hits.attack} ${e.hits.attack === 1 ? 'colpo' : 'colpi'} a ${e.hits.defense}` : e.rerolls ? ', pari ritirati' : '';
+      const head = `${n.territory(e.from)} → ${n.territory(e.to)}: ${final.attack.join('·')} contro ${final.defense.join('·')}${how} (${lost || 'nessuna perdita'})`;
       if (!e.conquered) return head;
       return `${head}. ${e.player === me ? 'Conquisti' : `${n.player(e.player)} conquista`} ${n.territory(e.to)}`;
     }
@@ -86,4 +89,33 @@ export function describeEvent(e: GameEvent, n: Names, me: string | null): string
 /** Gli eventi da mostrare in evidenza (gli altri restano solo nel registro). */
 export function isHighlight(e: GameEvent): boolean {
   return e.type === 'battle' || e.type === 'eliminated' || e.type === 'victory' || e.type === 'set' || e.type === 'setup-reveal';
+}
+
+/** "4, 5 o 6": le facce da `from` in su. */
+function facesFrom(from: number): string {
+  const f = Array.from({ length: 7 - from }, (_, i) => String(from + i));
+  return f.length === 1 ? f[0]! : `${f.slice(0, -1).join(', ')} o ${f.at(-1)}`;
+}
+
+/** Le regole dei dadi in parole, per la sala d'attesa e la guida. */
+export function diceRules(d: ConquestRules['dice']): string {
+  if (d.combat === 'hits') {
+    const h = d.hits;
+    const on = h.attackOn === h.defenseOn ? `con ${facesFrom(h.attackOn)}` : `con ${facesFrom(h.attackOn)} per chi attacca, ${facesFrom(h.defenseOn)} per chi difende`;
+    return (
+      `A colpi: chi attacca tira fino a ${h.max} dadi (uno in meno delle armate che ha), chi difende uno per armata, fino a ${h.max}. ` +
+      `Ogni dado ${on} è un colpo e toglie un'armata all'altro, da tutte e due le parti insieme. Chi attacca perde al massimo ` +
+      `le armate che ha mandato; se cadono tutti, il territorio resta a chi difende con un'armata.`
+    );
+  }
+  const ties = {
+    defender: 'a pari vince chi difende',
+    attacker: 'a pari vince chi attacca',
+    'reroll-pair': 'se due dadi sono pari si ritirano, finché non sono diversi',
+    'reroll-all': "se c'è un pari si ritira tutto il lancio",
+  }[d.tiesTo];
+  return (
+    `A coppie: chi attacca tira fino a ${d.attackMax} dadi (uno in meno delle armate che ha), chi difende fino a ${d.defenseMax}. ` +
+    `Si confrontano il più alto con il più alto, poi il secondo: chi perde il confronto perde un'armata; ${ties}.`
+  );
 }

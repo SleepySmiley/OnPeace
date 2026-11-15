@@ -13,6 +13,7 @@ import {
   createGame,
   eliminationAllowed,
   eventsFor,
+  maxAttackDice,
   ownedBy,
   passFor,
   playersToAct,
@@ -27,6 +28,22 @@ import { buildGeometry } from '../board/geometry';
 import type { Link, LinkFactory, LoadedBoard } from '../store';
 
 const def = BoardDef.parse(boardJson);
+
+/**
+ * Regole scelte dall'indirizzo della pagina di prova, come le opzioni della sala d'attesa:
+ * ?combattimento=coppie|colpi  ?pari=difesa|attacco|coppia|tutto  ?difesa=2|3  ?territori=turno|caso  ?piazzamento=giri|insieme
+ */
+function ruleParams() {
+  const q = new URLSearchParams(location.search);
+  const pick = <T,>(key: string, map: Record<string, T>): T | undefined => map[q.get(key) ?? ''];
+  return {
+    combat: pick('combattimento', { coppie: 'pairs', colpi: 'hits' } as const),
+    ties: pick('pari', { difesa: 'defender', attacco: 'attacker', coppia: 'reroll-pair', tutto: 'reroll-all' } as const),
+    defenseDice: pick('difesa', { '2': 2, '3': 3 }),
+    distribution: pick('territori', { turno: 'draft', caso: 'random' } as const),
+    placement: pick('piazzamento', { giri: 'rounds', insieme: 'simultaneous' } as const),
+  };
+}
 /** Il tabellone già pronto: la pagina lo mette nella sessione, così il client non lo scarica dal server. */
 export const localBoard: LoadedBoard = { id: def.id, hash: 'prova', def, geo: buildGeometry(def) };
 
@@ -74,13 +91,23 @@ export class LocalGame {
       rules.setup.distribution = 'random';
       rules.setup.placement = 'simultaneous';
     }
+    const q = ruleParams();
+    if (q.combat) rules.dice.combat = q.combat;
+    if (q.ties) rules.dice.tiesTo = q.ties;
+    if (q.defenseDice) rules.dice.defenseMax = q.defenseDice;
+    if (q.distribution) rules.setup.distribution = q.distribution;
+    if (q.placement) rules.setup.placement = q.placement;
     this.ctx = createContext(def, rules, objectivesJson);
+    const r = this.ctx.rules;
     this.settings = {
       board: def.id,
       mode: 'objectives',
-      distribution: this.ctx.rules.setup.distribution,
-      placement: this.ctx.rules.setup.placement,
-      turnSeconds: this.ctx.rules.timers.turnSeconds,
+      distribution: r.setup.distribution,
+      placement: r.setup.placement,
+      turnSeconds: r.timers.turnSeconds,
+      combat: r.dice.combat,
+      ties: r.dice.tiesTo,
+      defenseDice: r.dice.defenseMax,
     };
     let state = createGame(this.ctx, PLAYERS, 'objectives', seed);
     if (start === 'turno') {
@@ -272,7 +299,7 @@ export class LocalGame {
       }
       if (best) {
         this.botAttacks++;
-        const dice = Math.min(this.ctx.rules.dice.attackMax, s.territories[best.from]!.armies - 1);
+        const dice = Math.min(maxAttackDice(this.ctx.rules.dice), s.territories[best.from]!.armies - 1);
         return act({ kind: 'attack', from: best.from, to: best.to, dice });
       }
     }

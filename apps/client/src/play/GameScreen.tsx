@@ -173,7 +173,7 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
         else if (move.kind === 'occupy') s.occupy(Math.min(move.max, Math.max(move.min, s.draft.occupy ?? move.max)));
         else if (move.kind === 'fortify' && s.draft.target) s.fortify();
         else return;
-      } else if (/^[1-5]$/.test(e.key) && move.kind === 'attack') s.patchDraft({ dice: Number(e.key) });
+      } else if (/^[1-9]$/.test(e.key) && move.kind === 'attack') s.patchDraft({ dice: Number(e.key) });
       else return;
       e.preventDefault();
     };

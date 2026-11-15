@@ -4,7 +4,7 @@
   "initialArmies": { "2": 45, "3": 38, "4": 32, "5": 27, "6": 23, "7": 20, "8": 18 },
   "setup": { "briefing": true, "distribution": "draft", "placement": "rounds", "perRound": 3 },
   "reinforcements": { "divisor": 3, "minimum": 3 },
-  "dice": { "attackMax": 3, "defenseMax": 3, "tiesTo": "defender" },
+  "dice": { "combat": "pairs", "attackMax": 3, "defenseMax": 3, "tiesTo": "defender", "hits": { "max": 9, "attackOn": 4, "defenseOn": 4 } },
   "fortify": { "moves": 1, "reach": "adjacent" },
   "cards": {
     "jokers": 2,

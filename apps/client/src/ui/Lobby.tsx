@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { PLAYER_COLORS, type LobbySettings } from '@onpeace/protocol';
 import { styleColor, useLook } from '../look';
 import { inviteIsLocalOnly, inviteLink } from '../net';
+import { diceRules } from '../play/describe';
 import { useSession } from '../store';
 import { ChatPanel } from './ChatPanel';
 
@@ -166,6 +167,33 @@ export function Lobby() {
                     ))}
                 </select>
               </label>
+              <label className="field">
+                <span>Combattimento</span>
+                <select disabled={!isHost} value={settings.combat} onChange={(e) => set({ combat: e.target.value as LobbySettings['combat'] })}>
+                  <option value="pairs">A coppie, fino a {rules.dice.attackMax} dadi</option>
+                  <option value="hits">A colpi, fino a {rules.dice.hits.max} dadi</option>
+                </select>
+              </label>
+              {settings.combat === 'pairs' && (
+                <>
+                  <label className="field">
+                    <span>Dadi pari</span>
+                    <select disabled={!isHost} value={settings.ties} onChange={(e) => set({ ties: e.target.value as LobbySettings['ties'] })}>
+                      <option value="defender">Vince chi difende</option>
+                      <option value="attacker">Vince chi attacca</option>
+                      <option value="reroll-pair">Si ritirano quei due dadi</option>
+                      <option value="reroll-all">Si ritira tutto il lancio</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Dadi in difesa</span>
+                    <select disabled={!isHost} value={settings.defenseDice} onChange={(e) => set({ defenseDice: Number(e.target.value) })}>
+                      <option value={3}>Fino a 3</option>
+                      <option value={2}>Fino a 2</option>
+                    </select>
+                  </label>
+                </>
+              )}
               {lobby.boards.length > 1 && (
                 <label className="field">
                   <span>Tabellone</span>
@@ -201,10 +229,7 @@ export function Lobby() {
               , più il bonus dei continenti interi), poi <b>attacchi</b> quanto vuoi, poi <b>{rules.fortify.moves} spostamento</b> verso un
               territorio confinante.
             </li>
-            <li>
-              Dadi: fino a {rules.dice.attackMax} in attacco (serve un'armata in più dei dadi), fino a {rules.dice.defenseMax} in difesa. Si
-              confrontano dal più alto; a pari vince {rules.dice.tiesTo === 'defender' ? 'chi difende' : 'chi attacca'}.
-            </li>
+            <li>{diceRules(rules.dice)}</li>
             <li>
               Conquisti almeno un territorio nel turno: peschi una carta. Tris: tre uguali {sets.threeOfAKind.artillery}–
               {sets.threeOfAKind.cavalry} armate, uno per tipo {sets.oneOfEach}, jolly e coppia {sets.jokerPlusPair}; +

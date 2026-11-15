@@ -8,7 +8,8 @@
  *   npm run prova                                   avvia un server di prova (cartelle temporanee)
  *   npm run prova -- --url https://xxx.trycloudflare.com    contro un server già acceso (anche dal tunnel)
  *   opzioni: --giocatori 4   --giri 40   --seme 1   --modo conquest|objectives   --territori draft|random
- *            --piazzamento rounds|simultaneous
+ *            --piazzamento rounds|simultaneous   --combattimento pairs|hits
+ *            --pari defender|attacker|reroll-pair|reroll-all   --difesa 2|3
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
@@ -16,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateRawSync } from 'node:zlib';
 import { BoardDef, boardNeighbours, createRng } from '@onpeace/engine';
-import { possibleSets, type Action, type ConquestRules, type GameView } from '@onpeace/conquista';
+import { maxAttackDice, possibleSets, type Action, type ConquestRules, type GameView } from '@onpeace/conquista';
 import { PLAYER_COLORS, type ClientMsg, type LobbyInfo, type ServerMsg } from '@onpeace/protocol';
 import { dataDir, readJson, repoRoot } from './data-io';
 
@@ -30,6 +31,9 @@ const SEED = Number(arg('seme', '1'));
 const MODE = arg('modo', PLAYERS >= 3 ? 'objectives' : 'conquest') as 'objectives' | 'conquest';
 const PLACEMENT = arg('piazzamento', 'simultaneous') as 'rounds' | 'simultaneous';
 const DISTRIBUTION = arg('territori', 'draft') as 'draft' | 'random';
+const COMBAT = arg('combattimento', 'pairs') as 'pairs' | 'hits';
+const TIES = arg('pari', 'defender') as 'defender' | 'attacker' | 'reroll-pair' | 'reroll-all';
+const DEFENSE_DICE = Number(arg('difesa', '3'));
 const TIMEOUT_MS = 10 * 60_000;
 
 const board = BoardDef.parse(readJson(join(dataDir, 'territori', 'mondo.json')));
@@ -141,7 +145,7 @@ function nextAction(v: GameView, me: string, rules: ConquestRules, rng: Rng, att
     const good = options.filter((o) => o.edge >= 2).sort((x, y) => y.edge - x.edge);
     if (good.length > 0 && rng.next() < 0.93) {
       const o = rng.next() < 0.7 ? good[0]! : rng.pick(good);
-      return { kind: 'attack', from: o.from, to: o.to, dice: Math.min(rules.dice.attackMax, v.territories[o.from]!.armies - 1) };
+      return { kind: 'attack', from: o.from, to: o.to, dice: Math.min(maxAttackDice(rules.dice), v.territories[o.from]!.armies - 1) };
     }
   }
   if (v.phase === 'attack' && turn.fortifyLeft > 0) return { kind: 'end-attack' };
@@ -342,7 +346,7 @@ async function main() {
   const server = given ? null : await startServer();
   const base = given ?? server!.url;
   const wsUrl = `${base.replace(/^http/, 'ws').replace(/\/$/, '')}/ws`;
-  log(`${PLAYERS} giocatori, al massimo ${ROUNDS} giri, modo ${MODE}, piazzamento ${PLACEMENT}, seme ${SEED}, server ${base}`);
+  log(`${PLAYERS} giocatori, al massimo ${ROUNDS} giri, modo ${MODE}, piazzamento ${PLACEMENT}, dadi ${COMBAT === 'hits' ? 'a colpi' : `a coppie (pari: ${TIES}, difesa ${DEFENSE_DICE})`}, seme ${SEED}, server ${base}`);
 
   const rng = createRng(SEED);
   const bots = Array.from(
@@ -354,7 +358,7 @@ async function main() {
   if (PLAYERS >= 3) guests.at(-1)!.quitAt = PLAYERS * 6;
   const started = Date.now();
 
-  await host.connect({ t: 'create', name: host.name, color: host.color, settings: { mode: MODE, distribution: DISTRIBUTION, placement: PLACEMENT, turnSeconds: 60 } });
+  await host.connect({ t: 'create', name: host.name, color: host.color, settings: { mode: MODE, distribution: DISTRIBUTION, placement: PLACEMENT, turnSeconds: 60, combat: COMBAT, ties: TIES, defenseDice: DEFENSE_DICE } });
   await until(() => !!host.lobby, 'la partita non è stata creata');
   const game = host.lobby!.id; // c'è: lo garantisce until() qui sopra
   for (const b of guests) await b.connect({ t: 'join', game, name: b.name, color: b.color });

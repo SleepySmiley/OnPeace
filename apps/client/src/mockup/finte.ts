@@ -2,33 +2,49 @@
  * Battaglie finte per le pagine di prova: tra territori veri della partita in corso, con i tiri
  * che arrivano uno alla volta come dal server. Le usano battaglia.html e pesca.html.
  */
+import { defenseDice, hitLosses, maxAttackDice, rollBattle, rollHits, type ConquestRules } from '@onpeace/conquista';
 import { feedRoll, fighter, useBattle, type Role, type Roll } from '../play/battle';
 import { useSession } from '../store';
 
-export type DemoKind = 'attacco' | 'fino' | 'difesa' | 'altri' | 'perso';
+export type DemoKind = 'attacco' | 'pari' | 'fino' | 'difesa' | 'altri' | 'perso';
 
 export const DEMOS: { id: DemoKind; name: string }[] = [
   { id: 'attacco', name: 'Attacchi tu, un tiro' },
+  { id: 'pari', name: 'Attacchi tu, un tiro con un pari' },
   { id: 'fino', name: 'Attacchi tu, fino in fondo' },
   { id: 'perso', name: 'Attacchi tu e ti respingono' },
   { id: 'difesa', name: 'Ti attaccano' },
   { id: 'altri', name: 'Due avversari tra loro' },
 ];
 
-function rollDice(n: number) {
-  return Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 6)).sort((x, y) => y - x);
-}
+const random = { int: (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1)) };
 
-function fight(a: number, d: number): Roll {
-  const attack = rollDice(Math.min(3, a - 1));
-  const defense = rollDice(Math.min(3, d));
-  let aLoss = 0;
-  let dLoss = 0;
-  for (let i = 0; i < Math.min(attack.length, defense.length); i++) {
-    if (attack[i]! > defense[i]!) dLoss++;
-    else aLoss++;
+/**
+ * Un tiro con le regole della partita di prova (pari, dadi della difesa, a coppie o a colpi).
+ * `tie`: il primo lancio ha di sicuro un pari, per vedere che cosa succede.
+ */
+function fight(dice: ConquestRules['dice'], a: number, d: number, tie = false): Roll {
+  const nA = Math.min(maxAttackDice(dice), a - 1);
+  const nD = defenseDice(dice, d);
+  if (dice.combat === 'hits') {
+    const h = rollHits(random, nA, nD, dice.hits);
+    const lost = hitLosses(h.hits, nA, d);
+    return { attack: h.attack, defense: h.defense, won: [], hits: h.hits, aLoss: lost.attacker, dLoss: lost.defender, conquered: d - lost.defender === 0 };
   }
-  return { attack, defense, aLoss, dLoss, conquered: d - dLoss === 0 };
+  let b = rollBattle(random, nA, nD, dice.tiesTo);
+  for (let i = 0; tie && i < 200 && b.attack.every((v, k) => k >= b.defense.length || v !== b.defense[k]); i++) {
+    b = rollBattle(random, nA, nD, dice.tiesTo);
+  }
+  const dLoss = b.won.filter(Boolean).length;
+  return {
+    attack: b.attack,
+    defense: b.defense,
+    ...(b.rerolls.length > 0 ? { rerolls: b.rerolls } : {}),
+    won: b.won,
+    aLoss: b.won.length - dLoss,
+    dLoss,
+    conquered: d - dLoss === 0,
+  };
 }
 
 /** Una battaglia finta tra territori veri della partita: i tiri arrivano uno alla volta, come dal server. */
@@ -54,17 +70,19 @@ export function startDemo(kind: DemoKind): boolean {
   }
   if (!pair) return false;
   const [from, to] = pair;
-  const start = { attacco: [7, 3], fino: [11, 6], difesa: [6, 4], altri: [5, 3], perso: [4, 7] }[kind] as [number, number];
+  const dice = s.online.lobby?.rules.dice;
+  if (!dice) return false;
+  const start = { attacco: [7, 3], pari: [9, 6], fino: [11, 6], difesa: [6, 4], altri: [5, 3], perso: [4, 7] }[kind] as [number, number];
   let [a, d] = start;
   const rolls: Roll[] = [];
   const many = kind === 'fino' || kind === 'perso';
   do {
-    const r = fight(a, d);
+    const r = fight(dice, a, d, kind === 'pari');
     rolls.push(r);
     a -= r.aLoss;
     d -= r.dLoss;
   } while (many && d > 0 && a > 1);
-  if (kind === 'difesa' && d > 0 && a > 1) rolls.push(fight(a, d));
+  if (kind === 'difesa' && d > 0 && a > 1) rolls.push(fight(dice, a, d));
   const role: Role = kind === 'difesa' ? 'defender' : kind === 'altri' ? 'spectator' : 'attacker';
   const demo = { blitz: many };
   const base = {

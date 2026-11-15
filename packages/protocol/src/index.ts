@@ -3,7 +3,7 @@
  * I messaggi del client sono validati con zod dal server: non ci si fida mai del client.
  */
 import { z } from 'zod';
-import { ActionS, type ConquestRules, type GameEvent, type GameView } from '@onpeace/conquista';
+import { ActionS, CombatRule, TieRule, type ConquestRules, type GameEvent, type GameView } from '@onpeace/conquista';
 
 /**
  * Colori dei giocatori (client e server usano la stessa tavolozza): blu, rosso, verde, giallo,
@@ -30,6 +30,12 @@ export const SettingsS = z
     placement: z.enum(['rounds', 'simultaneous']),
     /** Durata di un turno. */
     turnSeconds: z.number().int().min(30).max(900),
+    /** Combattimento: a coppie (fino a 3 dadi) o a colpi (un dado per armata, fino a 9). */
+    combat: CombatRule,
+    /** A coppie: che cosa succede ai dadi pari. */
+    ties: TieRule,
+    /** A coppie: dadi massimi di chi difende. */
+    defenseDice: z.number().int().min(1).max(3),
   })
   .partial();
 export type LobbySettings = z.infer<typeof SettingsS>;

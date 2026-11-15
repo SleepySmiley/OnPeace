@@ -5,6 +5,7 @@
  */
 import { RuleError, assertRule } from '@onpeace/engine';
 import { buildDeck, setValue, shuffle } from './cards';
+import { defenseDice, hitLosses, maxAttackDice, rollBattle, rollHits } from './dice';
 import { continentsHeld, dealObjectives, objectiveDef, objectiveMet } from './objectives';
 import { createGameRng, expandSeed, type GameRng } from './random';
 import type { GameMode } from './schema';
@@ -363,26 +364,29 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
       assertRule(from.owner === id, 'Puoi attaccare solo dai tuoi territori.');
       assertRule(to.owner !== id, 'Non puoi attaccare un tuo territorio.');
       assertRule(areLinked(ctx, action.from, action.to), `${territoryName(ctx, action.from)} non confina con ${territoryName(ctx, action.to)}.`);
-      assertRule(action.dice <= ctx.rules.dice.attackMax, `Puoi tirare al massimo ${ctx.rules.dice.attackMax} dadi.`);
+      assertRule(action.dice <= maxAttackDice(ctx.rules.dice), `Puoi tirare al massimo ${maxAttackDice(ctx.rules.dice)} dadi.`);
       assertRule(action.dice <= from.armies - 1, 'Serve almeno un\'armata in più dei dadi che tiri.');
       const defender = to.owner;
       assertRule(
         eliminationAllowed(ctx, state) || ownedBy(state, defender).length > 1,
         `${player(state, defender).name} ha un solo territorio: nessuno può essere eliminato prima della fine del ${ctx.rules.elimination.protectedRounds}° giro.`,
       );
-      const defDice = Math.min(ctx.rules.dice.defenseMax, to.armies);
-      const roll = (n: number) =>
-        withRng(state, (rng) => Array.from({ length: n }, () => rng.int(1, 6)).sort((a, b) => b - a));
-      const attack = roll(action.dice);
-      const defense = roll(defDice);
-      let attackerLosses = 0;
-      let defenderLosses = 0;
-      for (let i = 0; i < Math.min(attack.length, defense.length); i++) {
-        const a = attack[i]!;
-        const d = defense[i]!;
-        const attackerWins = a > d || (a === d && ctx.rules.dice.tiesTo === 'attacker');
-        if (attackerWins) defenderLosses++;
-        else attackerLosses++;
+      const rules = ctx.rules.dice;
+      const defDice = defenseDice(rules, to.armies);
+      let battle: Pick<Extract<GameEvent, { type: 'battle' }>, 'attack' | 'defense' | 'rerolls' | 'won' | 'hits'>;
+      let attackerLosses: number;
+      let defenderLosses: number;
+      if (rules.combat === 'hits') {
+        const r = withRng(state, (rng) => rollHits(rng, action.dice, defDice, rules.hits));
+        const lost = hitLosses(r.hits, action.dice, to.armies);
+        attackerLosses = lost.attacker;
+        defenderLosses = lost.defender;
+        battle = { attack: r.attack, defense: r.defense, won: [], hits: r.hits };
+      } else {
+        const r = withRng(state, (rng) => rollBattle(rng, action.dice, defDice, rules.tiesTo));
+        defenderLosses = r.won.filter(Boolean).length;
+        attackerLosses = r.won.length - defenderLosses;
+        battle = { attack: r.attack, defense: r.defense, ...(r.rerolls.length > 0 ? { rerolls: r.rerolls } : {}), won: r.won };
       }
       from.armies -= attackerLosses;
       to.armies -= defenderLosses;
@@ -393,8 +397,7 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
         defender,
         from: action.from,
         to: action.to,
-        attack,
-        defense,
+        ...battle,
         attackerLosses,
         defenderLosses,
         conquered,
@@ -403,7 +406,9 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
         to.owner = id;
         turn.conquered = true;
         const max = from.armies - 1;
-        turn.occupation = { from: action.from, to: action.to, min: Math.min(action.dice, max), max };
+        // a coppie si entra con almeno tante armate quanti dadi; a colpi con quelle sopravvissute
+        const least = rules.combat === 'hits' ? action.dice - attackerLosses : action.dice;
+        turn.occupation = { from: action.from, to: action.to, min: Math.min(least, max), max };
         if (ownedBy(state, defender).length === 0) eliminate(ctx, state, defender, id, events);
       }
       break;

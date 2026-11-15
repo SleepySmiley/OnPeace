@@ -2,6 +2,7 @@ export * from './schema';
 export * from './state';
 export * from './context';
 export * from './cards';
+export * from './dice';
 export * from './objectives';
 export * from './random';
 export * from './game';

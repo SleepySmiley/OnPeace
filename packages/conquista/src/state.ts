@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { BoardDef } from '@onpeace/engine';
 import type { Seed } from './random';
+import type { Reroll } from './dice';
 import type { CardSymbol, ConquestRules, GameMode, ObjectiveDef } from './schema';
 
 export interface Card {
@@ -123,8 +124,15 @@ export type GameEvent =
       defender: string;
       from: string;
       to: string;
+      /** Primo lancio, dal più alto. */
       attack: number[];
       defense: number[];
+      /** Lanci rifatti per i pari, se le regole li fanno ritirare. */
+      rerolls?: Reroll[];
+      /** A coppie: per ogni coppia confrontata, se l'ha vinta chi attacca (manca nelle partite salvate prima: usa pairWins). */
+      won?: boolean[];
+      /** A colpi: quanti colpi ha fatto ognuno (sono i primi dadi, i più alti). Senza, si è combattuto a coppie. */
+      hits?: { attack: number; defense: number };
       attackerLosses: number;
       defenderLosses: number;
       conquered: boolean;

@@ -5,7 +5,7 @@
  * Chi guarda una battaglia degli altri la vede in piccolo (o intera, o niente: è un'opzione).
  */
 import { create } from 'zustand';
-import type { GameView } from '@onpeace/conquista';
+import { pairWins, type GameView, type Reroll } from '@onpeace/conquista';
 import type { LoggedEvent } from '@onpeace/protocol';
 import { sfx, type SoundName } from '../audio/sfx';
 import { styleColor, useLook } from '../look';
@@ -18,8 +18,15 @@ export type Watch = 'piccola' | 'intera' | 'niente';
 export type Role = 'attacker' | 'defender' | 'spectator';
 
 export interface Roll {
+  /** Primo lancio, dal più alto. */
   attack: number[];
   defense: number[];
+  /** A coppie: lanci rifatti per i pari, in ordine. */
+  rerolls?: Reroll[];
+  /** A coppie: per ogni coppia, se l'ha vinta chi attacca (dopo i pari ritirati). */
+  won: boolean[];
+  /** A colpi: quanti colpi ha fatto ognuno (i primi dadi, i più alti). */
+  hits?: { attack: number; defense: number };
   aLoss: number;
   dLoss: number;
   conquered: boolean;
@@ -49,12 +56,15 @@ export interface Engagement {
   demo: null | { blitz: boolean };
 }
 
-export type Stage = 'intro' | 'throw' | 'resolve' | 'hold' | 'end' | 'outro';
+/** `tie`: i dadi pari si illuminano; `reroll`: si ritirano (a coppie, se le regole lo dicono). */
+export type Stage = 'intro' | 'throw' | 'tie' | 'reroll' | 'resolve' | 'hold' | 'end' | 'outro';
 
 export interface Playing {
   eng: Engagement;
   /** Tiro mostrato (-1 prima del primo). */
   shown: number;
+  /** Lanci rifatti già mostrati nel tiro in corso. */
+  rr: number;
   stage: Stage;
   /** Durata della fase in corso (ms): le animazioni ci si adattano. */
   ms: number;
@@ -77,10 +87,18 @@ export function armiesAfter(eng: Engagement, k: number): { a: number; d: number 
   return { a, d };
 }
 
-/** Coppie di dadi confrontate: per ognuna chi vince (true: l'attaccante). */
-export function pairs(r: Roll): boolean[] {
-  const n = Math.min(r.attack.length, r.defense.length);
-  return Array.from({ length: n }, (_, i) => r.attack[i]! > r.defense[i]!);
+/**
+ * I colpi della sparatoria, in ordine (true: spara chi attacca). A coppie uno per coppia, lo spara
+ * chi la vince; a colpi uno per ogni armata persa, alternando le due parti.
+ */
+export function shotsOf(r: Roll): boolean[] {
+  if (!r.hits) return r.won;
+  const out: boolean[] = [];
+  for (let k = 0; k < Math.max(r.aLoss, r.dLoss); k++) {
+    if (k < r.dLoss) out.push(true);
+    if (k < r.aLoss) out.push(false);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- tempi
@@ -94,7 +112,8 @@ function throwMs(k: number, quick: boolean) {
 }
 function resolveMs(k: number, quick: boolean, tanks: boolean, shots: number) {
   // coi carri il confronto è la sparatoria: un colpo per coppia di dadi, uno dopo l'altro
-  if (tanks) return quick ? 520 : (k === 0 ? 700 : 560) + shots * (k === 0 ? 520 : 420);
+  // (a colpi possono essere tanti: oltre sei si spara più fitto, la scena non si allunga)
+  if (tanks) return quick ? 520 : (k === 0 ? 700 : 560) + Math.min(shots, 6) * (k === 0 ? 520 : 420);
   return quick ? 180 : k === 0 ? 760 : 520;
 }
 
@@ -112,6 +131,9 @@ function holdMs(role: Role) {
   return role === 'attacker' ? 2400 : role === 'defender' ? 1300 : 900;
 }
 const END_MS = 1700;
+/** Pari: i dadi pari si illuminano, poi si ritirano. */
+const TIE_MS = 650;
+const REROLL_MS = 640;
 
 /** Passo dell'attacco continuo: quanto dura un tiro nella scena (poco meno, per non farla aspettare). */
 const BLITZ_STEP: Record<BlitzMode, number> = { tiri: 1000, conto: 380 };
@@ -147,7 +169,7 @@ export const useBattle = create<BattleState>((set, get) => ({
     // al risultato dell'ultimo tiro arrivato, subito
     const last = p.eng.rolls.length - 1;
     if (last < 0) return outro();
-    put({ shown: last, stage: 'resolve', ms: 120 });
+    put({ shown: last, rr: p.eng.rolls[last]!.rerolls?.length ?? 0, stage: 'resolve', ms: 120 });
     schedule(140, afterResolve);
   },
   close() {
@@ -208,7 +230,7 @@ function start(eng: Engagement) {
   const small = eng.role === 'spectator' && s.watch === 'piccola';
   const quick = false;
   const intro = small ? 120 : Math.round(INTRO_MS * (eng.again ? 0.45 : 1));
-  useBattle.setState({ playing: { eng, shown: -1, stage: 'intro', ms: intro, small, quick, tick: 0 } });
+  useBattle.setState({ playing: { eng, shown: -1, rr: 0, stage: 'intro', ms: intro, small, quick, tick: 0 } });
   if (!small && !eng.again) play('whoosh');
   schedule(intro, nextRoll);
 }
@@ -223,9 +245,30 @@ function nextRoll() {
   const quick = (useBattle.getState().blitzMode === 'conto' && k > 0 && (blitzOn(p.eng) || behind > 0)) || behind > 2;
   const speed = p.small ? 0.55 : behind > 0 && !quick ? 0.7 : 1;
   const ms = Math.round(throwMs(k, quick) * speed);
-  put({ shown: k, stage: 'throw', ms, quick });
+  // in piccolo e col conto veloce i pari ritirati non si guardano: si vedono subito i dadi finali
+  const rr = p.small || quick ? (p.eng.rolls[k]!.rerolls?.length ?? 0) : 0;
+  put({ shown: k, rr, stage: 'throw', ms, quick });
   play('dice');
-  schedule(ms, resolve);
+  schedule(ms, afterThrow);
+}
+
+/** Dopo un lancio: se restano pari da ritirare si mostrano, altrimenti si confronta. */
+function afterThrow() {
+  const p = useBattle.getState().playing;
+  if (!p) return;
+  if (p.rr < (p.eng.rolls[p.shown]!.rerolls?.length ?? 0)) {
+    put({ stage: 'tie', ms: TIE_MS });
+    return schedule(TIE_MS, reroll);
+  }
+  resolve();
+}
+
+function reroll() {
+  const p = useBattle.getState().playing;
+  if (!p) return;
+  put({ stage: 'reroll', rr: p.rr + 1, ms: REROLL_MS });
+  play('dice');
+  schedule(REROLL_MS, afterThrow);
 }
 
 function resolve() {
@@ -233,7 +276,7 @@ function resolve() {
   if (!p) return;
   const roll = p.eng.rolls[p.shown]!;
   const speed = p.small ? 0.55 : 1;
-  const shots = pairs(roll).length;
+  const shots = shotsOf(roll).length;
   const tanks = !p.small;
   const ms = Math.round(resolveMs(p.shown, p.quick, tanks, shots) * speed);
   put({ stage: 'resolve', ms });
@@ -244,7 +287,7 @@ function resolve() {
       play('kill', t.hit / 1000);
     }
   } else if (p.quick) play('hit');
-  else pairs(roll).forEach((_, i) => play('hit', 0.12 + i * 0.13));
+  else shotsOf(roll).slice(0, 6).forEach((_, i) => play('hit', 0.12 + i * 0.13));
   schedule(ms, afterResolve);
 }
 
@@ -375,7 +418,16 @@ export function connectBattleFeed(): () => void {
     for (const { e, a, d } of withArmiesBefore(s.view, s.fresh.events)) {
       const role = roleOf(me, e);
       if (role === 'spectator' && useBattle.getState().watch === 'niente') continue;
-      const roll: Roll = { attack: e.attack, defense: e.defense, aLoss: e.attackerLosses, dLoss: e.defenderLosses, conquered: e.conquered };
+      const roll: Roll = {
+        attack: e.attack,
+        defense: e.defense,
+        ...(e.rerolls ? { rerolls: e.rerolls } : {}),
+        won: pairWins(e),
+        ...(e.hits ? { hits: e.hits } : {}),
+        aLoss: e.attackerLosses,
+        dLoss: e.defenderLosses,
+        conquered: e.conquered,
+      };
       feedRoll({ role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null }, roll, a - e.attackerLosses);
     }
   });

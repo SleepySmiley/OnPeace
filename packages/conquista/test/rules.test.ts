@@ -367,6 +367,8 @@ describe('attacchi', () => {
         else al++;
       }
       expect([e.attackerLosses, e.defenderLosses]).toEqual([al, dl]);
+      expect(e.won).toEqual([0, 1, 2].map((i) => e.attack[i]! > e.defense[i]!));
+      expect(e.rerolls).toBeUndefined();
       expect(r.state.territories.italia!.armies).toBe(10 - al);
       expect(r.state.territories.balcani!.armies).toBe(10 - dl);
     }

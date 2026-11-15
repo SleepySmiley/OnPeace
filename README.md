@@ -51,7 +51,7 @@ Durante la serata:
 - L'host può fermare il tempo con **Pausa**. Ognuno ha la **Guida** («Come si gioca») e il pulsante **Segnala** in alto.
 - L'indirizzo `trycloudflare.com` cambia a ogni avvio del tunnel. Per un indirizzo fisso serve un tunnel con nome e un dominio su Cloudflare.
 
-Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova: piazzano, giocano i tris, attaccano, spostano, chattano, mandano mosse sbagliate apposta, cadono e rientrano, e uno esce a metà. Il comando esce con errore se qualcosa va storto. Opzioni: `--giocatori 4 --giri 40 --seme 1 --modo objectives|conquest --territori draft|random --piazzamento rounds|simultaneous`. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6`.
+Prima della serata conviene lanciare `npm run prova`. Da 2 a 8 giocatori simulati giocano una partita intera su un server di prova: piazzano, giocano i tris, attaccano, spostano, chattano, mandano mosse sbagliate apposta, cadono e rientrano, e uno esce a metà. Il comando esce con errore se qualcosa va storto. Opzioni: `--giocatori 4 --giri 40 --seme 1 --modo objectives|conquest --territori draft|random --piazzamento rounds|simultaneous --combattimento pairs|hits --pari defender|attacker|reroll-pair|reroll-all --difesa 2|3`. Con `--url` gira contro un server già acceso, anche dal tunnel: `npm run prova -- --url https://…trycloudflare.com --giocatori 6`.
 
 Dopo la serata, per le correzioni:
 

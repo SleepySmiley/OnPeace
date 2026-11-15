@@ -2,15 +2,18 @@
  * La scena della battaglia, sopra il tabellone: la camera vola sui due territori, i carri armati
  * (visti dall'alto) sono schierati su ciascuno, i dadi rotolano in primo piano, poi i carri si sparano (un colpo per
  * coppia di dadi: chi vince la coppia spara, il carro colpito esplode) e alla conquista entrano nel
- * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita. Chi guarda una battaglia
- * degli altri la vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
+ * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita; se le regole fanno
+ * ritirare i pari, i dadi pari si illuminano e si ritirano prima della sparatoria. A colpi i dadi
+ * sono due file, una per parte, e ogni dado alto è un colpo. Chi guarda una battaglia degli altri la
+ * vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { diceAfter, tiedPairs } from '@onpeace/conquista';
 import type { BoardView } from '../board/common';
 import type { BoardPainter } from '../board/painter';
 import { Chip, Die } from './bits';
 import { useSession } from '../store';
-import { armiesAfter, pairs, shotTimes, useBattle, type Engagement, type Playing } from './battle';
+import { armiesAfter, shotsOf, shotTimes, useBattle, type Engagement, type Playing } from './battle';
 import './battle.css';
 
 type Vars = CSSProperties & Record<`--${string}`, string | number>;
@@ -22,7 +25,8 @@ const FACE: Record<number, [number, number]> = { 1: [0, 0], 2: [0, -90], 3: [-90
 /** Puntini di ogni faccia nella griglia 3×3 (0 in alto a sinistra). */
 const PIPS: Record<number, number[]> = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-type DieState = 'won' | 'lost' | 'spare' | null;
+/** A coppie: vinto, perso, senza coppia, pari (prima di ritirarlo). A colpi: colpo (won) o a vuoto (lost). */
+type DieState = 'won' | 'lost' | 'spare' | 'tie' | null;
 
 export function Die3D({
   value,
@@ -124,9 +128,14 @@ interface Moment {
   roll: Engagement['rolls'][number] | null;
   /** Il tiro è già stato confrontato: perdite, vincitori e numeri nuovi si vedono. */
   resolved: boolean;
+  /** Dadi mostrati adesso: il primo lancio, poi con i pari ritirati fin qui. */
+  dice: { attack: number[]; defense: number[] };
+  /** Coppie pari che stanno per essere ritirate (solo mentre si illuminano). */
+  ties: number[];
   armies: { a: number; d: number };
   /** Perdite dall'inizio dello scontro. */
   total: { a: number; d: number };
+  /** Colpi della sparatoria (true: spara chi attacca). */
   wins: boolean[];
   /** Esito finale, quando c'è. */
   result: { text: string; tone: 'good' | 'bad' | 'neutral'; conquered: boolean } | null;
@@ -137,7 +146,8 @@ interface Moment {
 function moment(p: Playing, me: string | null): Moment {
   const { eng, shown, stage } = p;
   const roll = shown >= 0 ? (eng.rolls[shown] ?? null) : null;
-  const resolved = stage !== 'intro' && stage !== 'throw';
+  const resolved = stage !== 'intro' && stage !== 'throw' && stage !== 'tie' && stage !== 'reroll';
+  const dice = roll ? diceAfter(roll, p.rr) : { attack: [], defense: [] };
   const armies = armiesAfter(eng, resolved ? shown : shown - 1);
   const last = eng.rolls.at(-1);
   let result: Moment['result'] = null;
@@ -152,9 +162,11 @@ function moment(p: Playing, me: string | null): Moment {
     p,
     roll,
     resolved,
+    dice,
+    ties: stage === 'tie' ? tiedPairs(dice.attack, dice.defense) : [],
     armies,
     total: { a: eng.a.armies - armies.a, d: eng.d.armies - armies.d },
-    wins: roll ? pairs(roll) : [],
+    wins: roll ? shotsOf(roll) : [],
     result,
     rollKey: `${eng.id}:${shown}`,
     me,
@@ -171,10 +183,22 @@ function headline(m: Moment): string {
 }
 
 function dieState(m: Moment, side: 'attack' | 'defense', i: number): DieState {
+  const roll = m.roll;
+  if (!roll) return null;
+  if (m.ties.includes(i)) return 'tie';
   if (!m.resolved) return null;
-  if (i >= m.wins.length) return 'spare';
-  const aWon = m.wins[i]!;
+  if (roll.hits) return i < roll.hits[side] ? 'won' : 'lost';
+  if (i >= roll.won.length) return 'spare';
+  const aWon = roll.won[i]!;
   return side === 'attack' ? (aWon ? 'won' : 'lost') : aWon ? 'lost' : 'won';
+}
+
+/** Ultimo lancio rifatto (1, 2…) che ha toccato questo dado fino al passo `rr`; 0 se è ancora quello del primo lancio. */
+function rerolledAt(m: Moment, i: number): number {
+  const list = m.roll?.rerolls ?? [];
+  let at = 0;
+  for (let k = 0; k < Math.min(m.p.rr, list.length); k++) if (!list[k]!.pairs || list[k]!.pairs!.includes(i)) at = k + 1;
+  return at;
 }
 
 /** Numero di armate che scatta quando cambia, con la perdita che sale accanto (a destra, o a sinistra con `side`). */
@@ -300,34 +324,103 @@ function spotlight(spots: Spots | null, extra = 0): Vars {
 function DiceTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
   const { roll, p } = m;
   if (!roll) return null;
+  if (roll.hits) return <HitTray m={m} spots={spots} size={size} />;
   const trayY = window.innerHeight - TRAY_BOTTOM - size / 2;
   const pairW = size * 2 + 44;
   const gap = 40;
-  const n = Math.max(roll.attack.length, roll.defense.length);
+  const n = Math.max(m.dice.attack.length, m.dice.defense.length);
   const x0 = window.innerWidth / 2 - (n * pairW + (n - 1) * gap) / 2;
   const die = (side: 'attack' | 'defense', v: number, i: number) => {
     const x = x0 + i * (pairW + gap) + (side === 'attack' ? size / 2 : pairW - size / 2);
     const [sx, sy] = side === 'attack' ? spots.a : spots.d;
+    // un dado ritirato si rilancia lì dov'è, gli altri restano fermi
+    const again = rerolledAt(m, i);
+    const from: [number, number] = again ? [0, -size * 2.2] : [sx - x, sy - trayY];
     return (
       <span key={`${side}${i}`} className="mp-die" style={{ left: x - size / 2, top: trayY - size / 2 }}>
-        <Die3D value={v} side={side} size={size} roll={m.rollKey} ms={p.ms} from={[sx - x, sy - trayY]} delay={(side === 'attack' ? 0 : 50) + i * 50} state={dieState(m, side, i)} />
+        <Die3D
+          value={v}
+          side={side}
+          size={size}
+          roll={again ? `${m.rollKey}:${again}` : m.rollKey}
+          ms={p.ms}
+          from={from}
+          delay={again ? (side === 'attack' ? 0 : 40) : (side === 'attack' ? 0 : 50) + i * 50}
+          state={dieState(m, side, i)}
+        />
       </span>
     );
   };
+  const next = roll.rerolls?.[p.rr];
   return (
     <>
       <span className="mp-tray" style={{ left: x0 - 18, width: n * pairW + (n - 1) * gap + 36, top: trayY - size / 2 - 14, height: size + 28 }} />
       {Array.from({ length: n - 1 }, (_, i) => (
         <span key={`sep${i}`} className="mp-sep" style={{ left: x0 + (i + 1) * (pairW + gap) - gap / 2, top: trayY - size / 2 - 2, height: size + 4 }} />
       ))}
-      {roll.attack.map((v, i) => die('attack', v, i))}
-      {roll.defense.map((v, i) => die('defense', v, i))}
+      {m.dice.attack.map((v, i) => die('attack', v, i))}
+      {m.dice.defense.map((v, i) => die('defense', v, i))}
+      {m.ties.map((i) => (
+        <span key={`${m.rollKey}-${p.rr}-t${i}`} className="mp-clash tie" style={{ left: x0 + i * (pairW + gap) + pairW / 2, top: trayY }}>
+          =
+        </span>
+      ))}
+      {m.ties.length > 0 && next && (
+        <span key={`${m.rollKey}-${p.rr}-tl`} className="mp-tie-label" style={{ left: window.innerWidth / 2, top: trayY - size / 2 - 30 }}>
+          {next.pairs ? (m.ties.length === 1 ? 'Pari: si ritira' : 'Pari: si ritirano') : 'Pari: si ritira tutto il lancio'}
+        </span>
+      )}
       {m.resolved &&
-        m.wins.map((aWon, i) => (
+        roll.won.map((aWon, i) => (
           <span key={`${m.rollKey}-${i}`} className={`mp-clash ${aWon ? 'a' : 'd'}`} style={{ left: x0 + i * (pairW + gap) + pairW / 2, top: trayY }}>
             {aWon ? '›' : '‹'}
           </span>
         ))}
+    </>
+  );
+}
+
+/** A colpi: due file, chi attacca a sinistra e chi difende a destra; i dadi alti sono i colpi, i primi verso il centro. */
+function HitTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
+  const { roll, p } = m;
+  if (!roll?.hits) return null;
+  const nA = m.dice.attack.length;
+  const nD = m.dice.defense.length;
+  const mid = 70;
+  // fino a 18 dadi: si rimpiccioliscono per stare nella larghezza
+  const s = Math.min(size, (window.innerWidth * 0.86 - mid) / Math.max(1, nA + nD) / 1.4);
+  const step = s * 1.4;
+  const trayY = window.innerHeight - TRAY_BOTTOM - s / 2;
+  const cx = window.innerWidth / 2;
+  const xOf = (side: 'attack' | 'defense', i: number) => (side === 'attack' ? cx - mid / 2 - (i + 0.5) * step : cx + mid / 2 + (i + 0.5) * step);
+  const die = (side: 'attack' | 'defense', v: number, i: number) => {
+    const x = xOf(side, i);
+    const [sx, sy] = side === 'attack' ? spots.a : spots.d;
+    return (
+      <span key={`${side}${i}`} className="mp-die" style={{ left: x - s / 2, top: trayY - s / 2 }}>
+        <Die3D value={v} side={side} size={s} roll={m.rollKey} ms={p.ms} from={[sx - x, sy - trayY]} delay={(side === 'attack' ? 0 : 50) + i * 30} state={dieState(m, side, i)} />
+      </span>
+    );
+  };
+  const left = cx - mid / 2 - nA * step;
+  const width = (nA + nD) * step + mid;
+  const count = (n: number) => (n === 0 ? 'nessun colpo' : n === 1 ? '1 colpo' : `${n} colpi`);
+  return (
+    <>
+      <span className="mp-tray" style={{ left: left - 18, width: width + 36, top: trayY - s / 2 - 14, height: s + 28 }} />
+      <span className="mp-sep" style={{ left: cx, top: trayY - s / 2 - 2, height: s + 4 }} />
+      {m.dice.attack.map((v, i) => die('attack', v, i))}
+      {m.dice.defense.map((v, i) => die('defense', v, i))}
+      {m.resolved && (
+        <>
+          <span key={`${m.rollKey}-ha`} className="mp-hits a" style={{ left: cx - mid / 2 - (nA * step) / 2, top: trayY + s / 2 + 22 }}>
+            {count(roll.hits.attack)}
+          </span>
+          <span key={`${m.rollKey}-hd`} className="mp-hits d" style={{ left: cx + mid / 2 + (nD * step) / 2, top: trayY + s / 2 + 22 }}>
+            {count(roll.hits.defense)}
+          </span>
+        </>
+      )}
     </>
   );
 }
@@ -464,13 +557,19 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
     const times = shotTimes(p.ms, m.wins.length);
     let hitA = 0;
     let hitD = 0;
+    let firedA = 0;
+    let firedD = 0;
     m.wins.forEach((aWon, i) => {
       const side = aWon ? 'a' : 'd';
-      const shooter = Math.min(i, (aWon ? fleetA : fleetD).length - 1);
-      const target = aWon ? hitD++ : hitA++;
-      const from = (aWon ? slotsA : slotsD)[shooter]!;
-      const to = (aWon ? slotsD : slotsA)[target]!;
-      shots.push({ from, to, ...times[i]!, shooter, target, side });
+      const own = aWon ? slotsA : slotsD;
+      const enemy = aWon ? slotsD : slotsA;
+      if (own.length === 0 || enemy.length === 0) return;
+      // a coppie spara il carro della coppia; a colpi uno dopo l'altro, per parte
+      const nth = roll.hits ? (aWon ? firedA++ : firedD++) : i;
+      const shooter = Math.min(nth, own.length - 1);
+      // a colpi possono cadere più armate dei carri in campo: gli ultimi colpi vanno sull'ultimo carro
+      const target = Math.min(aWon ? hitD++ : hitA++, enemy.length - 1);
+      shots.push({ from: own[shooter]!, to: enemy[target]!, ...times[i]!, shooter, target, side });
     });
   }
 
@@ -588,14 +687,14 @@ function Small({ m }: { m: Moment }) {
         {roll && (
           <>
             <span className="dice">
-              {roll.attack.map((v, i) => (
-                <Die key={i} value={v} side="attack" size={24} lost={m.resolved && i < m.wins.length && !m.wins[i]} />
+              {m.dice.attack.map((v, i) => (
+                <Die key={i} value={v} side="attack" size={roll.hits ? 18 : 24} lost={dieState(m, 'attack', i) === 'lost'} />
               ))}
             </span>
             <span className="dim">·</span>
             <span className="dice">
-              {roll.defense.map((v, i) => (
-                <Die key={i} value={v} side="defense" size={24} lost={m.resolved && Boolean(m.wins[i])} />
+              {m.dice.defense.map((v, i) => (
+                <Die key={i} value={v} side="defense" size={roll.hits ? 18 : 24} lost={dieState(m, 'defense', i) === 'lost'} />
               ))}
             </span>
           </>

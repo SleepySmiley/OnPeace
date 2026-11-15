@@ -171,6 +171,9 @@ export class Room {
       distribution: s.distribution ?? boards.rules.setup.distribution,
       placement: s.placement ?? boards.rules.setup.placement,
       turnSeconds: s.turnSeconds ?? boards.rules.timers.turnSeconds,
+      combat: s.combat ?? boards.rules.dice.combat,
+      ties: s.ties ?? boards.rules.dice.tiesTo,
+      defenseDice: s.defenseDice ?? boards.rules.dice.defenseMax,
     };
   }
 

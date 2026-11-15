@@ -14,6 +14,22 @@ export type CardSymbol = z.infer<typeof CardSymbol>;
 export const GameMode = z.enum(['objectives', 'conquest']);
 export type GameMode = z.infer<typeof GameMode>;
 
+/**
+ * Che cosa succede quando due dadi confrontati sono pari: vince chi difende (come al tavolo), vince
+ * chi attacca, si ritirano solo quei due dadi, o si ritira tutto il lancio. Ritirando si rifà finché
+ * il pari non c'è più.
+ */
+export const TieRule = z.enum(['defender', 'attacker', 'reroll-pair', 'reroll-all']);
+export type TieRule = z.infer<typeof TieRule>;
+
+/**
+ * Come si combatte. A coppie: fino a 3 dadi per parte, confrontati dal più alto, chi perde la
+ * coppia perde un'armata. A colpi: un dado per armata (fino a `hits.max`), ogni dado alto è un
+ * colpo e ogni colpo toglie un'armata all'altro, da tutte e due le parti insieme.
+ */
+export const CombatRule = z.enum(['pairs', 'hits']);
+export type CombatRule = z.infer<typeof CombatRule>;
+
 export const ConquestRules = z.strictObject({
   $schema: z.string().optional(),
   players: z.strictObject({
@@ -44,10 +60,21 @@ export const ConquestRules = z.strictObject({
     minimum: Int.min(0),
   }),
   dice: z.strictObject({
+    /** Come si combatte: a coppie (dadi confrontati dal più alto) o a colpi (vedi CombatRule). */
+    combat: CombatRule,
+    /** A coppie: dadi massimi di chi attacca e di chi difende. */
     attackMax: Int.min(1).max(5),
     defenseMax: Int.min(1).max(5),
-    /** Chi vince quando i dadi sono pari. */
-    tiesTo: z.enum(['defender', 'attacker']),
+    /** A coppie: dadi pari, chi vince o si ritirano (vedi TieRule). */
+    tiesTo: TieRule,
+    hits: z.strictObject({
+      /** A colpi: dadi massimi per parte (chi attacca ne tira al massimo uno in meno delle armate). */
+      max: Int.min(1).max(20),
+      /** Un dado di chi attacca colpisce da questo numero in su (4: con 4, 5 o 6). */
+      attackOn: Int.min(1).max(6),
+      /** Lo stesso per chi difende. */
+      defenseOn: Int.min(1).max(6),
+    }),
   }),
   fortify: z.strictObject({
     /** Spostamenti a fine turno (0 = nessuno). */

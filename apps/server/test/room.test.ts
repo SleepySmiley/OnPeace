@@ -113,7 +113,16 @@ describe('sala d’attesa', () => {
     expect(room.handle(host.id, { t: 'settings', settings: { board: 'atlantide' } })).toBe('Tabellone sconosciuto');
     const info = t.last(room.id, guest.id, 'lobby')!.lobby;
     expect(info.board.id).toBe('mondo');
-    expect(info.settings).toEqual({ board: 'mondo', mode: 'objectives', distribution: 'draft', placement: 'rounds', turnSeconds: 180 });
+    expect(info.settings).toEqual({
+      board: 'mondo',
+      mode: 'objectives',
+      distribution: 'draft',
+      placement: 'rounds',
+      turnSeconds: 180,
+      combat: 'pairs',
+      ties: 'defender',
+      defenseDice: 3,
+    });
     expect(info.rules.setup.placement).toBe('rounds');
   });
 
@@ -142,6 +151,18 @@ describe('sala d’attesa', () => {
     skipBriefing(t, t.room);
     // tutti insieme: non c'è un turno di piazzamento, piazzano tutti
     expect(t.room.state!.setupPlayer).toBeNull();
+  });
+
+  it('opzioni dei dadi: pari, dadi della difesa, combattimento a colpi', () => {
+    const t = lobby(3, { ties: 'reroll-pair', defenseDice: 2 });
+    let info = t.last(t.room.id, t.guest.id, 'lobby')!.lobby;
+    expect(info.rules.dice).toMatchObject({ combat: 'pairs', tiesTo: 'reroll-pair', defenseMax: 2, attackMax: 3 });
+    expect(t.room.handle(t.host.id, { t: 'settings', settings: { combat: 'hits' } })).toBeNull();
+    info = t.last(t.room.id, t.guest.id, 'lobby')!.lobby;
+    expect(info.rules.dice).toMatchObject({ combat: 'hits', hits: { max: 9 } });
+    // valori fuori dalle regole: il messaggio non passa la validazione
+    expect(parseClientMsg(JSON.stringify({ t: 'settings', settings: { defenseDice: 5 } }))).toHaveProperty('error');
+    expect(parseClientMsg(JSON.stringify({ t: 'settings', settings: { ties: 'moneta' } }))).toHaveProperty('error');
   });
 
   it('al tetto di partite si fa posto togliendo la sala d’attesa abbandonata più vecchia', () => {

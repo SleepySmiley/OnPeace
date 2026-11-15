@@ -1,6 +1,7 @@
 /** "Come si gioca": le regole della partita in corso (numeri presi dalle regole vere) e i comandi. */
 import { useEffect } from 'react';
 import type { ConquestRules } from '@onpeace/conquista';
+import { diceRules } from '../play/describe';
 
 export function GuideModal({ rules, onClose }: { rules: ConquestRules; onClose: () => void }) {
   useEffect(() => {
@@ -41,11 +42,7 @@ export function GuideModal({ rules, onClose }: { rules: ConquestRules; onClose: 
               </li>
             </ol>
             <h2>I dadi</h2>
-            <p>
-              Chi attacca tira fino a {rules.dice.attackMax} dadi (uno in meno delle armate che ha), chi difende fino a {rules.dice.defenseMax}.
-              Si confrontano il più alto con il più alto, poi il secondo: chi perde il confronto perde un'armata. A pari vince{' '}
-              {rules.dice.tiesTo === 'defender' ? 'chi difende' : 'chi attacca'}.
-            </p>
+            <p>{diceRules(rules.dice)}</p>
           </section>
           <section>
             <h2>Le carte</h2>

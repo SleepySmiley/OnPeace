@@ -3,7 +3,7 @@
  * spostare, quante armate deve piazzare. Le stesse regole del motore, viste dal giocatore: il
  * server comunque ricontrolla tutto.
  */
-import type { ConquestRules, GameView, PlayerView } from '@onpeace/conquista';
+import { maxAttackDice, type ConquestRules, type GameView, type PlayerView } from '@onpeace/conquista';
 
 export type MyMove =
   /** Inizio partita: leggere il proprio obiettivo e dire che si è pronti. */
@@ -46,6 +46,16 @@ export function myMove(view: GameView, me: string | null, rules: ConquestRules, 
   if (view.phase === 'reinforce') return { kind: 'place', setup: false, budget: turn.reinforcements };
   if (view.phase === 'attack') return { kind: 'attack' };
   return { kind: 'fortify' };
+}
+
+/**
+ * Che cosa sto facendo adesso: quando cambia, le scelte non confermate (armate messe, territorio
+ * scelto) ripartono da capo. Conta solo quante armate restano a me: nel piazzamento tutti insieme
+ * gli altri confermano mentre io sto ancora piazzando, e non devono farmi perdere le mie.
+ */
+export function moveKey(view: GameView, move: MyMove, me: string | null): string {
+  const setupLeft = view.players.find((p) => p.id === me)?.setupLeft ?? 0;
+  return `${view.phase}:${view.turn?.number ?? 0}:${view.setupPlayer ?? ''}:${move.kind}:${setupLeft}`;
 }
 
 /** Chi deve muoversi adesso (per "tocca a…"): chi sceglie, chi piazza a giri o chi ha il turno; null se tutti insieme. */
@@ -117,7 +127,7 @@ export function moveTargets(view: GameView, rules: ConquestRules, neighbours: Ma
 }
 
 /** Dadi d'attacco possibili da un territorio: almeno un'armata resta a casa. */
-export const maxDice = (rules: ConquestRules, armies: number) => Math.max(0, Math.min(rules.dice.attackMax, armies - 1));
+export const maxDice = (rules: ConquestRules, armies: number) => Math.max(0, Math.min(maxAttackDice(rules.dice), armies - 1));
 
 /** Armate di rinforzo che spettano a un giocatore: territori / divisore (con il minimo) + bonus dei continenti. */
 export function reinforcementsFor(view: GameView, rules: ConquestRules, continents: { id: string; bonus: number }[], continentOf: Map<string, string>, id: string) {

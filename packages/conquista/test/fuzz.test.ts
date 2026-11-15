@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@onpeace/engine';
-import { applyAction, eliminationAllowed, ownedBy, possibleSets, timeout, type Action, type GameMode, type GameState } from '../src';
+import { applyAction, eliminationAllowed, maxAttackDice, ownedBy, possibleSets, timeout, type Action, type GameMode, type GameState } from '../src';
 import { cardTotal, newGame, worldContext } from './helpers';
 
 const ctx = worldContext();
@@ -18,7 +18,7 @@ function checkInvariants(s: GameState, cards: number) {
 }
 
 /** Una mossa a caso tra quelle legali per chi deve giocare. */
-function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: string; action: Action } | null {
+function randomMove(s: GameState, rng: ReturnType<typeof createRng>, c = ctx): { player: string; action: Action } | null {
   // null = lascia scadere il tempo (sempre in preparazione, ogni tanto nelle altre fasi)
   if (s.phase === 'setup' || rng.next() < 0.03) return null;
   const me = s.turn!.player;
@@ -49,7 +49,7 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
     );
     if (options.length > 0 && rng.next() < 0.85) {
       const { from, to } = rng.pick(options);
-      const dice = Math.min(3, s.territories[from]!.armies - 1);
+      const dice = Math.min(maxAttackDice(c.rules.dice), s.territories[from]!.armies - 1);
       return { player: me, action: { kind: 'attack', from, to, dice: rng.int(1, dice) } };
     }
     return { player: me, action: { kind: rng.next() < 0.5 ? 'end-attack' : 'end-turn' } };
@@ -67,11 +67,11 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>): { player: 
 
 const armiesOnBoard = (s: GameState) => Object.values(s.territories).reduce((n, t) => n + t.armies, 0);
 
-function play(players: number, mode: GameMode, seed: number) {
+function play(players: number, mode: GameMode, seed: number, c = ctx) {
   // con le regole vere: obiettivo, territori scelti a turno (tutti a tempo scaduto), piazzamento
-  let s = newGame(players, mode, seed, ctx);
+  let s = newGame(players, mode, seed, c);
   expect(s.phase).toBe('briefing');
-  while (s.phase === 'briefing' || s.phase === 'draft' || s.phase === 'setup') s = timeout(ctx, s).state;
+  while (s.phase === 'briefing' || s.phase === 'draft' || s.phase === 'setup') s = timeout(c, s).state;
   const cards = cardTotal(s);
   const rng = createRng(seed * 7 + 1);
   const seen = { fortify: 0, timeouts: 0 };
@@ -80,8 +80,8 @@ function play(players: number, mode: GameMode, seed: number) {
   let steps = 0;
   while (s.phase !== 'over' && steps < 60_000) {
     steps++;
-    const move = randomMove(s, rng);
-    const r = move ? applyAction(ctx, s, move.player, move.action) : timeout(ctx, s);
+    const move = randomMove(s, rng, c);
+    const r = move ? applyAction(c, s, move.player, move.action) : timeout(c, s);
     if (!move) seen.timeouts++;
     s = r.state;
     for (const e of r.events) {
@@ -113,5 +113,26 @@ describe('partite casuali fino alla fine', () => {
         if (mode === 'conquest') expect(new Set(Object.values(s.territories).map((t) => t.owner)).size).toBe(1);
       });
     }
+  }
+});
+
+describe('partite casuali con le altre regole dei dadi', () => {
+  for (const [combat, ties, defenseMax, seed] of [
+    ['pairs', 'attacker', 3, 55],
+    ['pairs', 'reroll-pair', 3, 66],
+    ['pairs', 'reroll-all', 2, 78],
+    ['hits', 'defender', 3, 88],
+  ] as const) {
+    it(`${combat === 'hits' ? 'a colpi' : `pari: ${ties}, difesa fino a ${defenseMax} dadi`}`, () => {
+      const c = worldContext((r) => {
+        const dice = r.dice as { combat: string; tiesTo: string; defenseMax: number };
+        dice.combat = combat;
+        dice.tiesTo = ties;
+        dice.defenseMax = defenseMax;
+      });
+      const { s } = play(4, 'conquest', seed, c);
+      expect(s.phase).toBe('over');
+      expect(new Set(Object.values(s.territories).map((t) => t.owner)).size).toBe(1);
+    });
   }
 });

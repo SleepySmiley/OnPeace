@@ -1,6 +1,6 @@
 /** Pannelli della partita: giocatori, ultima battaglia, carte e obiettivo, registro, scheda del territorio. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { possibleSets, type Card, type GameEvent } from '@onpeace/conquista';
+import { diceAfter, pairWins, possibleSets, type Card, type GameEvent } from '@onpeace/conquista';
 import { useLook } from '../look';
 import { useSession } from '../store';
 import { ChatPanel } from '../ui/ChatPanel';
@@ -69,8 +69,11 @@ export function BattlePanel() {
   if (!last) return null;
   const b = last.event as Battle;
   const rolling = fresh?.events.some((e) => e.seq === last.seq) ?? false;
-  const pairs = Math.min(b.attack.length, b.defense.length);
-  const attackerWon = (i: number) => i < pairs && b.attack[i]! > b.defense[i]!;
+  // i dadi che hanno deciso (dopo i pari ritirati); a colpi un dado va a vuoto se non è tra i colpi
+  const dice = diceAfter(b);
+  const won = pairWins(b);
+  const lost = (side: 'attack' | 'defense', i: number) =>
+    b.hits ? i >= b.hits[side] : side === 'attack' ? i < won.length && !won[i] : i < won.length && Boolean(won[i]);
   return (
     <section className="battle-panel" aria-label="Ultima battaglia" key={last.seq}>
       <div className={`battle-row${rolling ? ' rolling' : ''}`}>
@@ -80,8 +83,8 @@ export function BattlePanel() {
           </span>
           <span className="battle-place">{territory(b.from)}</span>
           <span className="dice">
-            {b.attack.map((v, i) => (
-              <Die key={i} value={v} side="attack" lost={i < pairs && !attackerWon(i)} />
+            {dice.attack.map((v, i) => (
+              <Die key={i} value={v} side="attack" lost={lost('attack', i)} />
             ))}
           </span>
           <span className={`losses num${b.attackerLosses ? ' neg' : ''}`}>{b.attackerLosses ? `−${b.attackerLosses}` : '0'}</span>
@@ -95,8 +98,8 @@ export function BattlePanel() {
           </span>
           <span className="battle-place">{territory(b.to)}</span>
           <span className="dice">
-            {b.defense.map((v, i) => (
-              <Die key={i} value={v} side="defense" lost={attackerWon(i)} />
+            {dice.defense.map((v, i) => (
+              <Die key={i} value={v} side="defense" lost={lost('defense', i)} />
             ))}
           </span>
           <span className={`losses num${b.defenderLosses ? ' neg' : ''}`}>{b.defenderLosses ? `−${b.defenderLosses}` : '0'}</span>
