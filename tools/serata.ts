@@ -1,6 +1,6 @@
 /**
- * Serata di gioco con un solo comando: compila il client se serve, avvia il server e Cloudflare Tunnel,
- * mostra l'indirizzo per gli amici e apre il browser. Se il server cade lo riavvia (le partite riprendono
+ * Serata di gioco con un solo comando: compila il client se serve, avvia il server e Cloudflare Tunnel
+ * (cloudflared lo scarica da solo se manca, vedi cloudflared.ts), mostra l'indirizzo per gli amici e apre il browser. Se il server cade lo riavvia (le partite riprendono
  * dai salvataggi); se cade il tunnel lo riapre con un indirizzo nuovo: il server lo passa a chi gioca da
  * questo PC e scrive qui il link di ogni partita aperta, gli amici rientrano da lì con lo stesso nome.
  *
@@ -13,6 +13,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureCloudflared } from './cloudflared';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = new Set(process.argv.slice(2));
@@ -125,19 +126,6 @@ async function reachable(url: string, timeoutMs: number): Promise<boolean> {
 
 // ---------------------------------------------------------------- tunnel
 
-function findCloudflared(): string | null {
-  const candidates = [
-    'cloudflared',
-    'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe',
-    'C:\\Program Files\\cloudflared\\cloudflared.exe',
-  ];
-  for (const c of candidates) {
-    const r = spawnSync(c, ['--version'], { stdio: 'ignore' });
-    if (r.status === 0) return c;
-  }
-  return null;
-}
-
 let tunnel: ChildProcess | null = null;
 /** Riaperture del tunnel di fila senza indirizzo (es. senza Internet): si aspetta sempre di più, fino a un minuto. */
 let tunnelFailures = 0;
@@ -242,12 +230,12 @@ if (!(await reachable(LOCAL, 30_000))) {
   if (args.has('--locale')) {
     banner('');
   } else {
-    const bin = findCloudflared();
+    const bin = await ensureCloudflared(say);
     if (bin) {
       say('apro il tunnel Cloudflare…');
       startTunnel(bin);
     } else {
-      say('cloudflared non trovato: installalo con "winget install --id Cloudflare.cloudflared" e riavvia.');
+      say('niente tunnel: controlla la connessione e riavvia (oppure: winget install --id Cloudflare.cloudflared).');
       banner('');
     }
   }

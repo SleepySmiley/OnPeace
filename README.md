@@ -10,7 +10,7 @@ Regole, decisioni e architettura: [docs/progetto.md](docs/progetto.md). Cosa res
 ## Comandi
 
 ```bash
-npm install            # dipendenze
+npm install            # dipendenze, più cloudflared per il tunnel se sul PC non c'è già
 npm run dev            # server di gioco (porta 3210) + client in sviluppo su http://localhost:5173
 npm run build          # compila il client
 npm run serata         # serata tra amici: compila, avvia server e tunnel, apre il browser (vedi sotto)
@@ -34,7 +34,7 @@ Con `npm run dev` si apre anche `http://localhost:5173/prova.html`: una partita 
 Il server gira sul PC di chi ospita; gli amici entrano dal browser con il link d'invito.
 Cloudflare Tunnel rende il server raggiungibile da Internet senza aprire porte sul router.
 
-Una volta sola: installa `cloudflared` con `winget install --id Cloudflare.cloudflared` (Windows), oppure scaricalo da developers.cloudflare.com.
+Non serve installare altro: se sul PC non c'è già `cloudflared` (il programma del tunnel), `npm install` lo scarica in `.cache/cloudflared/`, prendendo l'ultima versione ufficiale da GitHub controllata con lo SHA256 pubblicato. Se in quel momento manca Internet, ci riprova `npm run serata`. Per aggiornarlo basta cancellare `.cache/cloudflared/`.
 
 Per ogni serata:
 
