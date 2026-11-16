@@ -1,0 +1,20 @@
+/* Pagina di prova della sala d'attesa: lo sfondo al posto del tabellone e il pannello delle scelte. */
+.sala-mock {
+  align-content: start;
+  padding-top: 70px;
+  background:
+    radial-gradient(ellipse at 30% 20%, color-mix(in srgb, var(--bg) 70%, #3b5a44), var(--bg) 70%),
+    var(--bg);
+}
+
+.sala-dock {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+}

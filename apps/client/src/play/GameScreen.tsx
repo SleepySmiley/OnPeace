@@ -18,7 +18,7 @@ import { CommandBar } from './CommandBar';
 import { GameOver } from './GameOver';
 import { attackTargets, canUsePause, freeTerritories, isMyMove, maxDice, moveTargets, owned } from './logic';
 import { ObjectiveCard } from './ObjectiveCard';
-import { connectBattleFeed, useBattle } from './battle';
+import { connectBattleFeed, fightingOn, useBattle } from './battle';
 import { BattleLayer } from './BattleScene';
 import { useDraw } from './draw';
 import { connectDrawFeed, DrawLayer } from './DrawScene';
@@ -174,7 +174,10 @@ export function GameScreen({ topbarExtra, extra }: Props = {}) {
         if (move.kind === 'briefing') s.ready();
         else if (move.kind === 'place') s.confirmPlacement();
         else if (move.kind === 'attack' && s.draft.target) s.attack();
-        else if (move.kind === 'occupy') s.occupy(Math.min(move.max, Math.max(move.min, s.draft.occupy ?? move.max)));
+        else if (move.kind === 'occupy') {
+          // finché la scena mostra la battaglia, Invio non occupa (la barra non dice ancora com'è finita)
+          if (!fightingOn(useBattle.getState())) s.occupy(Math.min(move.max, Math.max(move.min, s.draft.occupy ?? move.max)));
+        }
         else if (move.kind === 'fortify' && s.draft.target) s.fortify();
         else return;
       } else if (/^[1-9]$/.test(e.key) && move.kind === 'attack') s.patchDraft({ dice: Number(e.key) });

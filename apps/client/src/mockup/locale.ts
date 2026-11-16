@@ -9,6 +9,7 @@ import objectivesJson from '@data/conquista/obiettivi/mondo.json';
 import { BoardDef } from '@onpeace/engine';
 import {
   applyAction,
+  battleRolls,
   createContext,
   createGame,
   eliminationAllowed,
@@ -17,6 +18,7 @@ import {
   ownedBy,
   passFor,
   playersToAct,
+  sendsArmies,
   viewFor,
   type Action,
   type ActionResult,
@@ -31,13 +33,13 @@ const def = BoardDef.parse(boardJson);
 
 /**
  * Regole scelte dall'indirizzo della pagina di prova, come le opzioni della sala d'attesa:
- * ?combattimento=coppie|colpi  ?pari=difesa|attacco|coppia|tutto  ?difesa=2|3  ?territori=turno|caso  ?piazzamento=giri|insieme
+ * ?combattimento=coppie|colpi|turno  ?pari=difesa|attacco|coppia|tutto  ?difesa=2|3  ?territori=turno|caso  ?piazzamento=giri|insieme
  */
 function ruleParams() {
   const q = new URLSearchParams(location.search);
   const pick = <T,>(key: string, map: Record<string, T>): T | undefined => map[q.get(key) ?? ''];
   return {
-    combat: pick('combattimento', { coppie: 'pairs', colpi: 'hits' } as const),
+    combat: pick('combattimento', { coppie: 'pairs', colpi: 'hits', turno: 'alternate' } as const),
     ties: pick('pari', { difesa: 'defender', attacco: 'attacker', coppia: 'reroll-pair', tutto: 'reroll-all' } as const),
     defenseDice: pick('difesa', { '2': 2, '3': 3 }),
     distribution: pick('territori', { turno: 'draft', caso: 'random' } as const),
@@ -207,7 +209,7 @@ export class LocalGame {
     const clock = this.clock;
     this.syncClock();
     // come il server: ogni tiro ridà a chi attacca qualche secondo, fino al tetto del turno
-    const rolls = r.events.filter((e) => e.type === 'battle').length;
+    const rolls = battleRolls(r.events);
     if (this.clock === clock && rolls > 0 && this.deadline !== null && this.total !== null) {
       const t = this.ctx.rules.timers;
       const add = Math.min(rolls * t.battleSeconds * 1000, t.battleMaxSeconds * 1000 - this.bonus);
@@ -307,7 +309,8 @@ export class LocalGame {
       }
       if (best) {
         this.botAttacks++;
-        const dice = Math.min(maxAttackDice(this.ctx.rules.dice), s.territories[best.from]!.armies - 1);
+        // a turno si mandano tutte le armate (una resta)
+        const dice = Math.min(sendsArmies(this.ctx.rules.dice) ? Infinity : maxAttackDice(this.ctx.rules.dice), s.territories[best.from]!.armies - 1);
         return act({ kind: 'attack', from: best.from, to: best.to, dice });
       }
     }

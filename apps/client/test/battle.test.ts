@@ -28,6 +28,7 @@ vi.mock('../src/audio/sfx', () => ({
 import {
   BLITZ_STEP,
   feedRoll,
+  fightingOn,
   nextOf,
   paceOf,
   queueWith,
@@ -35,6 +36,8 @@ import {
   resolveMs,
   throwMs,
   useBattle,
+  volleyPace,
+  volleyRolls,
   type Engagement,
   type Role,
   type Roll,
@@ -285,3 +288,63 @@ describe('clic, Esc e suoni', () => {
     expect(playing()).toBeNull();
   });
 });
+
+describe('a colpi, a turno', () => {
+  it('ogni tiro toglie armate a una parte sola; l’ultimo solo quelle che restano', () => {
+    // chi difende colpisce 2 volte, chi attacca 3 (ne restavano 2), poi basta: conquista
+    const rolls = volleyRolls(
+      [
+        { by: 'defense', dice: [6, 5, 1], hits: 2 },
+        { by: 'attack', dice: [6, 6, 6, 2], hits: 3 },
+        { by: 'defense', dice: [4], hits: 1 },
+        { by: 'attack', dice: [6, 6, 6], hits: 3 },
+      ],
+      { attacker: 3, defender: 3 },
+      true,
+    );
+    expect(rolls.map((r) => [r.volley, r.aLoss, r.dLoss, r.conquered])).toEqual([
+      ['defense', 2, 0, false],
+      ['attack', 0, 3, false],
+      ['defense', 1, 0, false],
+      ['attack', 0, 0, true],
+    ]);
+    expect(rolls[0]).toMatchObject({ attack: [], defense: [6, 5, 1], hits: { attack: 0, defense: 2 } });
+    expect(rolls[1]).toMatchObject({ attack: [6, 6, 6, 2], defense: [], hits: { attack: 3, defense: 0 } });
+  });
+
+  it('i primi due tiri con calma, poi svelti; in una battaglia lunga quelli di mezzo veloci', () => {
+    expect([0, 1, 2, 3].map((k) => volleyPace(k, 4))).toEqual(['normal', 'normal', 'blitz', 'blitz']);
+    expect([2, 10, 11, 15].map((k) => volleyPace(k, 16))).toEqual(['quick', 'quick', 'quick', 'blitz']);
+  });
+
+  it('tutti i tiri arrivano insieme: la scena li mostra uno dopo l’altro e chiude da sola', () => {
+    const rolls = volleyRolls(
+      [
+        { by: 'defense', dice: [1, 1], hits: 0 },
+        { by: 'attack', dice: [6, 6, 1], hits: 2 },
+      ],
+      { attacker: 0, defender: 2 },
+      true,
+    );
+    const t = track();
+    rolls.forEach((r, i) => feedRoll(base('attacker', 'a', 'b'), r, 30, i === rolls.length - 1));
+    expect(playing()!.eng.rolls).toHaveLength(2);
+    expect(playing()!.eng.over).toBe(true);
+    // la barra dei comandi aspetta la fine della scena prima di dire com'è andata
+    expect(fightingOn(battle())).toBe(true);
+    vi.advanceTimersByTime(20_000);
+    expect(t.shown).toHaveLength(2);
+    expect(t.shown[1]! - t.shown[0]!).toBeGreaterThan(throwMs(0, 'normal'));
+    expect(t.closed()).toBeGreaterThan(0);
+    expect(fightingOn(battle())).toBe(false);
+    t.off();
+  });
+
+  it('una mia battaglia in coda dietro a un’altra scena: la barra aspetta anche lei', () => {
+    feed('defender', 'c', 'd');
+    feedRoll(base('attacker', 'a', 'b'), roll(1, true), 30, true);
+    expect(playing()!.eng.role).toBe('defender');
+    expect(fightingOn(battle())).toBe(true);
+  });
+});
+

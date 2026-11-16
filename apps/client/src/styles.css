@@ -495,7 +495,7 @@ body[data-stile='classico'] .home-title {
 }
 
 .lobby-card {
-  width: min(880px, 100%);
+  width: min(1000px, 100%);
   padding: 22px 24px;
   display: grid;
   gap: 14px;
@@ -522,8 +522,14 @@ body[data-stile='classico'] .home-title {
 
 .lobby-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(200px, 0.7fr) minmax(0, 1.3fr);
   gap: 22px;
+}
+
+@media (max-width: 760px) {
+  .lobby-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .player-rows {
@@ -555,9 +561,145 @@ body[data-stile='classico'] .home-title {
   white-space: nowrap;
 }
 
-.options {
+/* opzioni a tessere: ogni scelta con la sua scenetta (ui/LobbyOptions.tsx, ui/explain.tsx) */
+.opts {
   display: grid;
-  gap: 10px;
+  gap: 14px;
+}
+
+.opt {
+  display: grid;
+  gap: 6px;
+}
+
+.opt-label {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-dim);
+}
+
+.opt-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+/* schermo stretto: le tessere vanno a capo e le scenette si rimpiccioliscono un po' */
+@media (max-width: 760px) {
+  .opt-tile .vg {
+    --u: 1 !important;
+  }
+}
+
+.opt-tile,
+.opt-chips button {
+  border: 1px solid var(--edge-soft);
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.opt-tile:not([aria-disabled='true']):hover,
+.opt-chips button:not([aria-disabled='true']):hover {
+  border-color: var(--ink-dim);
+}
+
+.opt-tile:not([aria-disabled='true']):active,
+.opt-chips button:not([aria-disabled='true']):active {
+  transform: translateY(1px);
+}
+
+.opt-tile[aria-checked='true'],
+.opt-chips button[aria-checked='true'] {
+  background: var(--panel-solid);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.opt [aria-disabled='true'] {
+  cursor: default;
+}
+
+.opt-tile {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 6px 8px;
+  /* i pezzi che saltano nella scenetta non allargano la pagina */
+  overflow: clip;
+  overflow-clip-margin: 6px;
+}
+
+.opt-art {
+  display: grid;
+  place-items: center;
+  height: 72px;
+}
+
+.opt-name {
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.opt-tile[aria-checked='true'] .opt-name {
+  font-weight: 700;
+}
+
+.opt-many {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.opt-many .opt-art {
+  flex: none;
+  height: auto;
+}
+
+.opt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.opt-chips button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.opt-line {
+  margin: 0;
+  min-height: 2.8em;
+  font-size: 13px;
+  color: var(--ink-dim);
+  text-wrap: pretty;
+}
+
+.lobby-board {
+  margin-top: 14px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .rules-brief {
@@ -578,14 +720,28 @@ body[data-stile='classico'] .home-title {
   font-size: 13px;
 }
 
-.lobby-chat {
-  height: 150px;
+.lobby-chat-title {
+  margin-top: 18px;
 }
 
+.lobby-chat {
+  height: 260px;
+}
+
+/* il bottone per cominciare resta in vista anche quando le opzioni allungano la sala */
 .lobby-actions {
+  position: sticky;
+  /* sotto la sala c'è il margine di .home: senza, il testo che scorre si vedrebbe sotto il bottone */
+  bottom: -24px;
+  z-index: 1;
   display: flex;
   gap: 14px;
   align-items: center;
+  margin: 0 -24px -22px;
+  padding: 12px 24px 14px;
+  background: var(--panel-solid);
+  border-top: 1px solid var(--edge-soft);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 /* ------------------------------------------------------------------ chat */
@@ -1241,6 +1397,13 @@ body[data-stile='vetro'] .tb-mine {
 
 .losses.neg {
   color: var(--bad);
+}
+
+.battle-note {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-dim);
 }
 
 .battle-result {

@@ -3,7 +3,7 @@
  * spostare, quante armate deve piazzare. Le stesse regole del motore, viste dal giocatore: il
  * server comunque ricontrolla tutto.
  */
-import { maxAttackDice, type ConquestRules, type GameView, type PlayerView } from '@onpeace/conquista';
+import { maxAttackDice, sendsArmies, type ConquestRules, type GameView, type PlayerView } from '@onpeace/conquista';
 import type { LobbyInfo } from '@onpeace/protocol';
 
 export type MyMove =
@@ -127,8 +127,9 @@ export function moveTargets(view: GameView, rules: ConquestRules, neighbours: Ma
   return [...seen];
 }
 
-/** Dadi d'attacco possibili da un territorio: almeno un'armata resta a casa. */
-export const maxDice = (rules: ConquestRules, armies: number) => Math.max(0, Math.min(maxAttackDice(rules.dice), armies - 1));
+/** Dadi d'attacco possibili da un territorio (a turno: armate da mandare, quante si vuole); almeno un'armata resta a casa. */
+export const maxDice = (rules: ConquestRules, armies: number) =>
+  Math.max(0, Math.min(sendsArmies(rules.dice) ? Infinity : maxAttackDice(rules.dice), armies - 1));
 
 /** Armate di rinforzo che spettano a un giocatore: territori / divisore (con il minimo) + bonus dei continenti. */
 export function reinforcementsFor(view: GameView, rules: ConquestRules, continents: { id: string; bonus: number }[], continentOf: Map<string, string>, id: string) {

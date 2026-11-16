@@ -124,6 +124,7 @@ function Controls() {
       >
         <option value="coppie">Dadi: a coppie</option>
         <option value="colpi">Dadi: a colpi (fino a 9)</option>
+        <option value="turno">Dadi: a colpi, a turno</option>
       </select>
       <select
         className="mock-restart"
