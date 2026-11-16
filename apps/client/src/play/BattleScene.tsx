@@ -4,7 +4,8 @@
  * coppia di dadi: chi vince la coppia spara, il carro colpito esplode) e alla conquista entrano nel
  * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita; se le regole fanno
  * ritirare i pari, i dadi pari si illuminano e si ritirano prima della sparatoria. A colpi i dadi
- * sono due file, una per parte, e ogni dado alto è un colpo. A colpi, a turno, tira una parte alla
+ * non hanno numeri ma facce con lo scoppio (colpo) o lisce (a vuoto), e stanno su due file, una per
+ * parte. A colpi, a turno, tira una parte alla
  * volta (prima chi difende): una fila sola, e spara solo chi ha tirato. Chi guarda una battaglia degli altri la
  * vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
  */
@@ -13,6 +14,7 @@ import { diceAfter, tiedPairs } from '@onpeace/conquista';
 import type { BoardView } from '../board/common';
 import type { BoardPainter } from '../board/painter';
 import { Chip, Die } from './bits';
+import { HitGlyph } from './hitface';
 import { useSession } from '../store';
 import { armiesAfter, shotsOf, shotTimes, useBattle, type Engagement, type Playing } from './battle';
 import './battle.css';
@@ -41,10 +43,13 @@ export function Die3D({
   from,
   state,
   delay = 0,
+  hitOn,
 }: {
   value: number;
   side: 'attack' | 'defense';
   size: number;
+  /** Dado a colpi: le facce da questo numero in su hanno lo scoppio, le altre sono lisce (niente puntini). */
+  hitOn?: number;
   /** Cambia a ogni lancio: il dado rifà il lancio. */
   roll: string;
   /** Durata del lancio. */
@@ -105,21 +110,30 @@ export function Die3D({
     ];
     return () => anims.forEach((a) => a.cancel());
   }, [roll]);
+  const label = hitOn === undefined ? `${value}` : value >= hitOn ? 'colpo' : 'a vuoto';
   return (
-    <div ref={box} className={`d3 ${side}${state ? ` ${state}` : ''}`} style={{ '--s': `${size}px` } as Vars} role="img" aria-label={`${value}`}>
+    <div ref={box} className={`d3 ${side}${state ? ` ${state}` : ''}`} style={{ '--s': `${size}px` } as Vars} role="img" aria-label={label}>
       <div ref={shadow} className="d3-shadow" />
       <div ref={fly} className="d3-fly">
         <div ref={cube} className="d3-cube">
           <i className="d3-core c1" />
           <i className="d3-core c2" />
           <i className="d3-core c3" />
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div key={n} className={`d3-face f${n}`}>
-              {PIPS[n]!.map((cell) => (
-                <i key={cell} className="d3-pip" style={{ gridArea: `${Math.floor(cell / 3) + 1} / ${(cell % 3) + 1}` }} />
-              ))}
-            </div>
-          ))}
+          {[1, 2, 3, 4, 5, 6].map((n) =>
+            hitOn === undefined ? (
+              <div key={n} className={`d3-face f${n}`}>
+                {PIPS[n]!.map((cell) => (
+                  <i key={cell} className="d3-pip" style={{ gridArea: `${Math.floor(cell / 3) + 1} / ${(cell % 3) + 1}` }} />
+                ))}
+              </div>
+            ) : (
+              <div key={n} className={`d3-face f${n} d3-bool`}>
+                <svg viewBox="-12 -12 24 24" aria-hidden>
+                  <HitGlyph hit={n >= hitOn} deep />
+                </svg>
+              </div>
+            ),
+          )}
         </div>
       </div>
       <div className="d3-mark" aria-hidden />
@@ -411,9 +425,16 @@ function DiceTray({ m, spots, size }: { m: Moment; spots: Spots; size: number })
   );
 }
 
-/** A colpi: due file, chi attacca a sinistra e chi difende a destra; i dadi alti sono i colpi, i primi verso il centro. */
+/** A colpi: da che faccia in su colpisce un dado di chi attacca e di chi difende, dalle regole della partita. */
+function useHitOn(): Record<'attack' | 'defense', number> {
+  const h = useSession((s) => s.online.lobby?.rules.dice.hits);
+  return { attack: h?.attackOn ?? 4, defense: h?.defenseOn ?? 4 };
+}
+
+/** A colpi: due file, chi attacca a sinistra e chi difende a destra; i colpi sono i primi verso il centro. */
 function HitTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
   const { roll, p } = m;
+  const hitOn = useHitOn();
   if (!roll?.hits) return null;
   const nA = m.dice.attack.length;
   const nD = m.dice.defense.length;
@@ -429,7 +450,17 @@ function HitTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) 
     const [sx, sy] = side === 'attack' ? spots.a : spots.d;
     return (
       <span key={`${side}${i}`} className="mp-die" style={{ left: x - s / 2, top: trayY - s / 2 }}>
-        <Die3D value={v} side={side} size={s} roll={m.rollKey} ms={p.ms} from={[sx - x, sy - trayY]} delay={(side === 'attack' ? 0 : 50) + i * 30} state={dieState(m, side, i)} />
+        <Die3D
+          value={v}
+          side={side}
+          size={s}
+          roll={m.rollKey}
+          ms={p.ms}
+          from={[sx - x, sy - trayY]}
+          delay={(side === 'attack' ? 0 : 50) + i * 30}
+          state={dieState(m, side, i)}
+          hitOn={hitOn[side]}
+        />
       </span>
     );
   };
@@ -462,6 +493,7 @@ function HitTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) 
  */
 function VolleyTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
   const { roll, p } = m;
+  const hitOn = useHitOn();
   if (!roll?.volley || !roll.hits) return null;
   const side = roll.volley;
   const values = side === 'attack' ? m.dice.attack : m.dice.defense;
@@ -486,7 +518,17 @@ function VolleyTray({ m, spots, size }: { m: Moment; spots: Spots; size: number 
         const x = x0 + (i + 0.5) * step;
         return (
           <span key={`${side}${i}`} className="mp-die" style={{ left: x - s / 2, top: trayY - s / 2 }}>
-            <Die3D value={v} side={side} size={s} roll={m.rollKey} ms={p.ms} from={[sx - x, sy - trayY]} delay={i * 30} state={dieState(m, side, i)} />
+            <Die3D
+              value={v}
+              side={side}
+              size={s}
+              roll={m.rollKey}
+              ms={p.ms}
+              from={[sx - x, sy - trayY]}
+              delay={i * 30}
+              state={dieState(m, side, i)}
+              hitOn={hitOn[side]}
+            />
           </span>
         );
       })}
@@ -751,6 +793,7 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
 
 function Small({ m }: { m: Moment }) {
   const { eng, roll } = m;
+  const hitOn = useHitOn();
   return (
     <div className="sm-card panel">
       <span className="sm-side">
@@ -764,13 +807,13 @@ function Small({ m }: { m: Moment }) {
           <>
             <span className="dice">
               {m.dice.attack.map((v, i) => (
-                <Die key={i} value={v} side="attack" size={roll.hits ? 18 : 24} lost={dieState(m, 'attack', i) === 'lost'} />
+                <Die key={i} value={v} side="attack" size={roll.hits ? 18 : 24} lost={dieState(m, 'attack', i) === 'lost'} hitOn={roll.hits ? hitOn.attack : undefined} />
               ))}
             </span>
             <span className="dim">·</span>
             <span className="dice">
               {m.dice.defense.map((v, i) => (
-                <Die key={i} value={v} side="defense" size={roll.hits ? 18 : 24} lost={dieState(m, 'defense', i) === 'lost'} />
+                <Die key={i} value={v} side="defense" size={roll.hits ? 18 : 24} lost={dieState(m, 'defense', i) === 'lost'} hitOn={roll.hits ? hitOn.defense : undefined} />
               ))}
             </span>
           </>

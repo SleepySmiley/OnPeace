@@ -79,7 +79,7 @@ export function PlayersPanel() {
 type Battle = Extract<GameEvent, { type: 'battle' }>;
 
 export function BattlePanel() {
-  const { colorOf, playerName, territory, me } = useGame();
+  const { colorOf, playerName, territory, me, lobby } = useGame();
   const log = useSession((s) => s.log);
   const fresh = useSession((s) => s.fresh);
   const last = useMemo(() => [...log].reverse().find((e) => e.event.type === 'battle'), [log]);
@@ -91,6 +91,8 @@ export function BattlePanel() {
   const lastVolley = (by: 'attack' | 'defense') => b.volleys?.findLast((v) => v.by === by);
   const dice = b.volleys ? { attack: lastVolley('attack')?.dice ?? [], defense: lastVolley('defense')?.dice ?? [] } : diceAfter(b);
   const won = pairWins(b);
+  // a colpi (insieme o a turno) i dadi non hanno numeri: colpo o a vuoto
+  const byHits = Boolean(b.volleys ?? b.hits);
   const lost = (side: 'attack' | 'defense', i: number) =>
     b.volleys
       ? i >= (lastVolley(side)?.hits ?? 0)
@@ -109,7 +111,7 @@ export function BattlePanel() {
           <span className="battle-place">{territory(b.from)}</span>
           <span className="dice">
             {dice.attack.map((v, i) => (
-              <Die key={i} value={v} side="attack" lost={lost('attack', i)} />
+              <Die key={i} value={v} side="attack" lost={lost('attack', i)} hitOn={byHits ? lobby.rules.dice.hits.attackOn : undefined} />
             ))}
           </span>
           <span className={`losses num${b.attackerLosses ? ' neg' : ''}`}>{b.attackerLosses ? `−${b.attackerLosses}` : '0'}</span>
@@ -124,7 +126,7 @@ export function BattlePanel() {
           <span className="battle-place">{territory(b.to)}</span>
           <span className="dice">
             {dice.defense.map((v, i) => (
-              <Die key={i} value={v} side="defense" lost={lost('defense', i)} />
+              <Die key={i} value={v} side="defense" lost={lost('defense', i)} hitOn={byHits ? lobby.rules.dice.hits.defenseOn : undefined} />
             ))}
           </span>
           <span className={`losses num${b.defenderLosses ? ' neg' : ''}`}>{b.defenderLosses ? `−${b.defenderLosses}` : '0'}</span>

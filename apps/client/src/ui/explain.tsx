@@ -31,15 +31,8 @@ const TURN_OPTIONS = [60, 90, 120, 180, 300, 480];
 export const minutes = (s: number) => (s < 120 ? `${s} secondi` : `${s / 60} minuti`);
 const short = (s: number) => (s < 120 ? `${s} s` : `${s / 60} min`);
 
-/** "4, 5 o 6": le facce da `from` in su. */
-function facesFrom(from: number): string {
-  const f = Array.from({ length: 7 - from }, (_, i) => String(from + i));
-  return f.length === 1 ? f[0]! : `${f.slice(0, -1).join(', ')} o ${f.at(-1)}`;
-}
-
 /** Le opzioni della sala con le loro scelte, nell'ordine in cui si vedono (quelle a coppie solo a coppie). */
 export function optionDefs(rules: ConquestRules, settings: RoomSettings): OptionDef[] {
-  const hit = facesFrom(rules.dice.hits.attackOn);
   const out: OptionDef[] = [
     {
       key: 'mode',
@@ -85,8 +78,8 @@ export function optionDefs(rules: ConquestRules, settings: RoomSettings): Option
       label: 'Combattimento',
       choices: [
         { value: 'pairs', name: 'A coppie', line: `Fino a ${rules.dice.attackMax} dadi: il più alto contro il più alto, chi perde la coppia perde un'armata.` },
-        { value: 'hits', name: 'A colpi', line: `Chi attacca e chi difende tirano insieme, un dado per armata: ogni ${hit} toglie un'armata all'altro.` },
-        { value: 'alternate', name: 'A colpi, a turno', line: `Si tira uno alla volta, prima chi difende: ogni ${hit} toglie subito un'armata all'altro, fino in fondo.` },
+        { value: 'hits', name: 'A colpi', line: "Chi attacca e chi difende tirano insieme, un dado per armata: ogni scoppio toglie un'armata all'altro." },
+        { value: 'alternate', name: 'A colpi, a turno', line: "Si tira uno alla volta, prima chi difende: ogni scoppio toglie subito un'armata all'altro, fino in fondo." },
       ],
     },
   ];
@@ -165,10 +158,23 @@ function Tile({ c, n, cls = '', children }: { c: string | null; n?: number | str
   );
 }
 
-function D({ v, side, rolling, state }: { v: number; side: 'attack' | 'defense'; rolling?: boolean; state?: 'win' | 'lose' | 'hit' | 'miss' | 'tie' | null }) {
+function D({
+  v,
+  side,
+  rolling,
+  state,
+  hitOn,
+}: {
+  v: number;
+  side: 'attack' | 'defense';
+  rolling?: boolean;
+  state?: 'win' | 'lose' | 'hit' | 'miss' | 'tie' | null;
+  /** Dado a colpi: colpo da questa faccia in su, sennò a vuoto. */
+  hitOn?: number;
+}) {
   return (
     <span className={`vg-die${rolling ? ' rolling' : ''}${state ? ` ${state}` : ''}`}>
-      <Die value={v} side={side} size={24} />
+      <Die value={v} side={side} size={24} hitOn={hitOn} />
     </span>
   );
 }
@@ -327,13 +333,13 @@ function Hits({ f, rules }: ArtProps) {
     <div className="vg-hits">
       <span className="vg-line">
         {attack.map((v, i) => (
-          <D key={i} v={v} side="attack" rolling={rolling} state={state(v)} />
+          <D key={i} v={v} side="attack" rolling={rolling} state={state(v)} hitOn={on} />
         ))}
         <i className={`vg-count${f >= 2 ? ' on' : ''} num`}>{count(attack)} colpi</i>
       </span>
       <span className="vg-line">
         {defense.map((v, i) => (
-          <D key={i} v={v} side="defense" rolling={rolling} state={state(v)} />
+          <D key={i} v={v} side="defense" rolling={rolling} state={state(v)} hitOn={on} />
         ))}
         <i className={`vg-count${f >= 2 ? ' on' : ''} num`}>{count(defense)} colpi</i>
       </span>
@@ -372,7 +378,7 @@ function Alternate({ f, p, rules }: ArtProps) {
       <Tile c={p[0]} n={a} cls={v.by === 'attack' && !taken ? 'turn' : ''} />
       <span className="vg-line mid">
         {!taken &&
-          v.dice.map((x, i) => <D key={`${k}-${i}`} v={x} side={v.by} rolling={!landed} state={landed ? (x >= on ? 'hit' : 'miss') : null} />)}
+          v.dice.map((x, i) => <D key={`${k}-${i}`} v={x} side={v.by} rolling={!landed} state={landed ? (x >= on ? 'hit' : 'miss') : null} hitOn={on} />)}
         {taken && <i className="vg-taken">preso</i>}
       </span>
       <Tile c={taken ? p[0] : p[1]} n={taken ? null : d} cls={taken ? 'pop' : v.by === 'defense' ? 'turn' : ''} />
