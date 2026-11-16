@@ -1,20 +1,29 @@
 /**
  * Dadi della battaglia. A coppie: lancio, confronto dal più alto e, secondo le regole, che cosa
- * succede ai pari. A colpi: un dado per armata, ogni dado alto è un colpo. Funzioni pure: il caso
- * arriva da fuori.
+ * succede ai pari. A colpi: un dado per armata, ogni dado alto è un colpo. A colpi, a turno: si
+ * tira uno alla volta, prima chi difende, fino in fondo. Funzioni pure: il caso arriva da fuori.
  */
 import type { ConquestRules, TieRule } from './schema';
 
 type Dice = ConquestRules['dice'];
 
-/** Dadi massimi di chi attacca (oltre a questo, sempre uno in meno delle armate). */
+/** Si combatte a colpi (insieme o a turno): un dado per armata, fino a `hits.max`. */
+const byHits = (dice: Dice) => dice.combat === 'hits' || dice.combat === 'alternate';
+
+/**
+ * A turno chi attacca non sceglie i dadi ma le armate da mandare, quante vuole (una resta sempre a
+ * casa): ognuna tira un dado a ogni suo tiro, fino a `hits.max` dadi.
+ */
+export const sendsArmies = (dice: Dice): boolean => dice.combat === 'alternate';
+
+/** Dadi massimi di un tiro di chi attacca (oltre a questo, sempre uno in meno delle armate). */
 export function maxAttackDice(dice: Dice): number {
-  return dice.combat === 'hits' ? dice.hits.max : dice.attackMax;
+  return byHits(dice) ? dice.hits.max : dice.attackMax;
 }
 
 /** Dadi di chi difende, con tante armate. */
 export function defenseDice(dice: Dice, armies: number): number {
-  return Math.min(dice.combat === 'hits' ? dice.hits.max : dice.defenseMax, armies);
+  return Math.min(byHits(dice) ? dice.hits.max : dice.defenseMax, armies);
 }
 
 /**
@@ -148,4 +157,55 @@ export function hitLosses(hits: { attack: number; defense: number }, attackDice:
   const attacker = Math.min(hits.defense, attackDice);
   if (defender === defenderArmies && attacker === attackDice) defender--;
   return { attacker, defender };
+}
+
+// ---------------------------------------------------------------- a colpi, a turno
+/** Un tiro della battaglia a turno: chi tira, i suoi dadi (dal più alto) e quanti colpi ha fatto. */
+export interface Volley {
+  by: 'attack' | 'defense';
+  dice: number[];
+  hits: number;
+}
+
+export interface AlternateBattle {
+  /** I tiri in ordine: il primo è di chi difende, poi si alterna. */
+  volleys: Volley[];
+  attackerLosses: number;
+  defenderLosses: number;
+}
+
+/** Dopo tanti tiri (non capita mai: servono 600 tiri a vuoto di fila) la battaglia si chiude: chi attacca si ritira. */
+const MAX_VOLLEYS = 600;
+
+/**
+ * Battaglia a colpi, a turno, fino in fondo. Tira prima chi difende: un dado per armata (fino a
+ * `max`), ogni dado da `defenseOn` in su toglie subito un'armata a chi attacca. Poi tira chi
+ * attacca con le armate che gli restano (da `attackOn` in su), e così via finché una delle due parti
+ * non ne ha più. `attackers`: le armate mandate; `defenders`: quelle nel territorio.
+ */
+export function fightAlternate(
+  rng: { int(min: number, max: number): number },
+  attackers: number,
+  defenders: number,
+  hitOn: { max: number; attackOn: number; defenseOn: number },
+): AlternateBattle {
+  const roll = (n: number) => Array.from({ length: n }, () => rng.int(1, 6)).sort((a, b) => b - a);
+  let a = attackers;
+  let d = defenders;
+  let by: Volley['by'] = 'defense';
+  const volleys: Volley[] = [];
+  while (a > 0 && d > 0 && volleys.length < MAX_VOLLEYS) {
+    const dice = roll(Math.min(by === 'defense' ? d : a, hitOn.max));
+    const hits = dice.filter((v) => v >= (by === 'defense' ? hitOn.defenseOn : hitOn.attackOn)).length;
+    if (by === 'defense') a -= Math.min(hits, a);
+    else d -= Math.min(hits, d);
+    volleys.push({ by, dice, hits });
+    by = by === 'defense' ? 'attack' : 'defense';
+  }
+  return { volleys, attackerLosses: attackers - a, defenderLosses: defenders - d };
+}
+
+/** Tiri di dadi in questi eventi: uno per battaglia, a turno uno per ogni tiro della battaglia. Ognuno ridà un po' di tempo a chi attacca. */
+export function battleRolls(events: readonly { type: string; volleys?: readonly unknown[] }[]): number {
+  return events.reduce((n, e) => n + (e.type === 'battle' ? (e.volleys?.length ?? 1) : 0), 0);
 }

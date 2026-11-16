@@ -30,7 +30,7 @@ export const SettingsS = z
     placement: z.enum(['rounds', 'simultaneous']),
     /** Durata di un turno. */
     turnSeconds: z.number().int().min(30).max(900),
-    /** Combattimento: a coppie (fino a 3 dadi) o a colpi (un dado per armata, fino a 9). */
+    /** Combattimento: a coppie (fino a 3 dadi), a colpi (un dado per armata, fino a 9) o a colpi a turno (prima chi difende, fino in fondo). */
     combat: CombatRule,
     /** A coppie: che cosa succede ai dadi pari. */
     ties: TieRule,

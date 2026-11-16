@@ -1,7 +1,7 @@
 /** Dadi della battaglia: confronto a coppie e le quattro regole dei pari, con lanci forzati. */
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@onpeace/engine';
-import { applyAction, defenseDice, diceAfter, hitLosses, maxAttackDice, pairWins, rollBattle, rollHits, tiedPairs, type TieRule } from '../src';
+import { applyAction, battleRolls, defenseDice, diceAfter, fightAlternate, hitLosses, maxAttackDice, pairWins, rollBattle, rollHits, sendsArmies, tiedPairs, type TieRule } from '../src';
 import { classicContext, newGame, setTerritories, skipSetup } from './helpers';
 
 /** Dadi decisi in anticipo, nell'ordine in cui si tirano (prima tutti quelli di chi attacca). */
@@ -179,3 +179,85 @@ describe('a colpi', () => {
     expect(conquered).toBeGreaterThan(60);
   });
 });
+
+describe('a colpi, a turno', () => {
+  const hitOn = { max: 9, attackOn: 4, defenseOn: 4 };
+  const alternate = () => classicContext((r) => ((r.dice as { combat: string }).combat = 'alternate'));
+
+  it('tira prima chi difende, poi si alterna con le armate rimaste, fino in fondo', () => {
+    // 3 armate mandate contro 2: chi difende tira 2 dadi (5, 1: un colpo), chi attacca 2 (6, 4: due colpi)
+    const b = fightAlternate(scripted([5, 1, 6, 4]), 3, 2, hitOn);
+    expect(b.volleys).toEqual([
+      { by: 'defense', dice: [5, 1], hits: 1 },
+      { by: 'attack', dice: [6, 4], hits: 2 },
+    ]);
+    expect(b).toMatchObject({ attackerLosses: 1, defenderLosses: 2 });
+    // chi attacca resta a zero: 2 contro 3, chi difende colpisce due volte al primo tiro
+    const lost = fightAlternate(scripted([6, 6, 1]), 2, 3, hitOn);
+    expect(lost.volleys).toEqual([{ by: 'defense', dice: [6, 6, 1], hits: 2 }]);
+    expect(lost).toMatchObject({ attackerLosses: 2, defenderLosses: 0 });
+  });
+
+  it('i tiri a vuoto passano la mano; i colpi in più non tolgono più armate di quelle che ci sono', () => {
+    const b = fightAlternate(scripted([1, 2, 3, 6, 6, 6]), 1, 1, hitOn);
+    expect(b.volleys.map((v) => v.by)).toEqual(['defense', 'attack', 'defense', 'attack']);
+    expect(b.volleys.at(-1)).toEqual({ by: 'attack', dice: [6], hits: 1 });
+    expect(b).toMatchObject({ attackerLosses: 0, defenderLosses: 1 });
+  });
+
+  it('al massimo 9 dadi a tiro, anche con più armate', () => {
+    const b = fightAlternate({ int: () => 6 }, 14, 12, hitOn);
+    expect(b.volleys[0]).toEqual({ by: 'defense', dice: Array(9).fill(6), hits: 9 });
+    expect(b.volleys[1]).toEqual({ by: 'attack', dice: Array(5).fill(6), hits: 5 });
+    expect(b).toMatchObject({ attackerLosses: 14, defenderLosses: 5 });
+  });
+
+  it('ogni tiro ridà tempo: a turno conta ogni tiro della battaglia', () => {
+    const volley = { by: 'defense' as const, dice: [6], hits: 1 };
+    expect(battleRolls([{ type: 'battle' }, { type: 'occupy' }, { type: 'battle', volleys: [volley, volley, volley] }])).toBe(4);
+  });
+
+  it('nella partita: si mandano quante armate si vuole, una resta; si entra con chi sopravvive', () => {
+    const ctx = alternate();
+    expect(sendsArmies(ctx.rules.dice)).toBe(true);
+    let conquered = 0;
+    for (let seed = 1; seed < 60; seed++) {
+      let s = skipSetup(ctx, newGame(2, 'conquest', seed, ctx));
+      const [a, b] = s.order as [string, string];
+      s = setTerritories(s, { italia: [a, 15], balcani: [b, 4] });
+      s.phase = 'attack';
+      expect(() => applyAction(ctx, s, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 15 })).toThrow(/al massimo 14 armate/);
+      const r = applyAction(ctx, s, a, { kind: 'attack', from: 'italia', to: 'balcani', dice: 12 });
+      const e = r.events.find((x) => x.type === 'battle');
+      if (e?.type !== 'battle' || !e.volleys) throw new Error('nessuna battaglia a turno');
+      expect(e).toMatchObject({ attack: [], defense: [], won: [] });
+      expect(e.hits).toBeUndefined();
+      // si alterna, a partire da chi difende; ognuno tira con le armate che gli restano
+      let att = 12;
+      let def = 4;
+      e.volleys.forEach((v, i) => {
+        expect(v.by).toBe(i % 2 === 0 ? 'defense' : 'attack');
+        expect(v.dice).toHaveLength(Math.min(9, v.by === 'defense' ? def : att));
+        expect(v.hits).toBe(v.dice.filter((x) => x >= 4).length);
+        if (v.by === 'defense') att -= Math.min(v.hits, att);
+        else def -= Math.min(v.hits, def);
+      });
+      expect({ a: 12 - att, d: 4 - def }).toEqual({ a: e.attackerLosses, d: e.defenderLosses });
+      // fino in fondo: una delle due parti resta senza armate in campo
+      expect(att === 0 || def === 0).toBe(true);
+      expect(r.state.territories.italia!.armies).toBe(15 - e.attackerLosses);
+      if (e.conquered) {
+        conquered++;
+        expect(def).toBe(0);
+        expect(r.state.turn!.occupation).toEqual({ from: 'italia', to: 'balcani', min: att, max: 14 - e.attackerLosses });
+      } else {
+        expect(att).toBe(0);
+        expect(r.state.territories.balcani!.armies).toBe(def);
+        expect(r.state.territories.balcani!.owner).toBe(b);
+      }
+    }
+    // 12 armate contro 4: quasi sempre si sfonda
+    expect(conquered).toBeGreaterThan(50);
+  });
+});
+
