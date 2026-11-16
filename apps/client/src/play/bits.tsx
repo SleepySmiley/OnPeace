@@ -1,6 +1,7 @@
 /** Pezzi grafici piccoli: dadi, simboli delle carte, carte, segnalino del giocatore. */
 import type { Card } from '@onpeace/conquista';
 import { SYMBOL_NAME } from './describe';
+import { HitGlyph } from './hitface';
 
 const PIPS: Record<number, [number, number][]> = {
   1: [[0, 0]],
@@ -36,12 +37,23 @@ const PIPS: Record<number, [number, number][]> = {
   ],
 };
 
-/** Un dado: `side` attacco o difesa (colori diversi), `lost` se ha perso il confronto. */
-export function Die({ value, side, lost, size = 30 }: { value: number; side: 'attack' | 'defense'; lost?: boolean; size?: number }) {
+/**
+ * Un dado: `side` attacco o difesa (colori diversi), `lost` se ha perso il confronto. Con `hitOn`
+ * è un dado a colpi: niente puntini, la faccia ha lo scoppio (da `hitOn` in su) o è liscia.
+ */
+export function Die({ value, side, lost, size = 30, hitOn }: { value: number; side: 'attack' | 'defense'; lost?: boolean; size?: number; hitOn?: number }) {
+  const hit = hitOn === undefined ? null : value >= hitOn;
   return (
-    <svg className={`die ${side}${lost ? ' lost' : ''}`} width={size} height={size} viewBox="-12 -12 24 24" role="img" aria-label={`${value}`}>
+    <svg
+      className={`die ${side}${lost ? ' lost' : ''}${hit === null ? '' : ' bool'}`}
+      width={size}
+      height={size}
+      viewBox="-12 -12 24 24"
+      role="img"
+      aria-label={hit === null ? `${value}` : hit ? 'colpo' : 'a vuoto'}
+    >
       <rect x={-11} y={-11} width={22} height={22} rx={5} className="die-face" />
-      {PIPS[value]?.map(([x, y], i) => <circle key={i} cx={x * 5.4} cy={y * 5.4} r={2.1} className="die-pip" />)}
+      {hit === null ? PIPS[value]?.map(([x, y], i) => <circle key={i} cx={x * 5.4} cy={y * 5.4} r={2.1} className="die-pip" />) : <HitGlyph hit={hit} />}
     </svg>
   );
 }

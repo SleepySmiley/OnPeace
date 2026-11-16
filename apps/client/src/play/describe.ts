@@ -103,30 +103,35 @@ export function isHighlight(e: GameEvent): boolean {
   return e.type === 'battle' || e.type === 'eliminated' || e.type === 'victory' || e.type === 'set' || e.type === 'setup-reveal';
 }
 
-/** "4, 5 o 6": le facce da `from` in su. */
-function facesFrom(from: number): string {
-  const f = Array.from({ length: 7 - from }, (_, i) => String(from + i));
-  return f.length === 1 ? f[0]! : `${f.slice(0, -1).join(', ')} o ${f.at(-1)}`;
+/** "3 facce su 6": quante facce di un dado a colpi hanno lo scoppio, se colpisce da `on` in su. */
+function burstFaces(on: number): string {
+  const n = 7 - on;
+  return `${n} ${n === 1 ? 'faccia' : 'facce'} su 6`;
+}
+
+/** I dadi a colpi in parole: niente numeri, facce con lo scoppio o lisce. */
+function hitDice(h: ConquestRules['dice']['hits']): string {
+  return h.attackOn === h.defenseOn
+    ? `i dadi non hanno numeri ma ${burstFaces(h.attackOn)} con lo scoppio, le altre lisce`
+    : `i dadi non hanno numeri: quelli di chi attacca hanno ${burstFaces(h.attackOn)} con lo scoppio, quelli di chi difende ${burstFaces(h.defenseOn)}, le altre sono lisce`;
 }
 
 /** Le regole dei dadi in parole, per la sala d'attesa e la guida. */
 export function diceRules(d: ConquestRules['dice']): string {
   if (d.combat === 'alternate') {
     const h = d.hits;
-    const on = h.attackOn === h.defenseOn ? `con ${facesFrom(h.attackOn)}` : `con ${facesFrom(h.attackOn)} per chi attacca, ${facesFrom(h.defenseOn)} per chi difende`;
     return (
-      `A colpi, a turno: chi attacca sceglie quante armate mandare (una resta a casa). Tira prima chi difende, un dado per armata ` +
-      `fino a ${h.max}: ogni dado ${on} toglie subito un'armata a chi attacca. Poi tira chi attacca con le armate che gli restano, ` +
-      `e così via. Si va fino in fondo: vince chi resta con delle armate in campo, e chi conquista entra con quelle sopravvissute.`
+      `A colpi, a turno: ${hitDice(h)}. Chi attacca sceglie quante armate mandare (una resta a casa). Tira prima chi difende, ` +
+      `un dado per armata fino a ${h.max}: ogni scoppio toglie subito un'armata a chi attacca. Poi tira chi attacca con le armate ` +
+      `che gli restano, e così via. Si va fino in fondo: vince chi resta con delle armate in campo, e chi conquista entra con quelle sopravvissute.`
     );
   }
   if (d.combat === 'hits') {
     const h = d.hits;
-    const on = h.attackOn === h.defenseOn ? `con ${facesFrom(h.attackOn)}` : `con ${facesFrom(h.attackOn)} per chi attacca, ${facesFrom(h.defenseOn)} per chi difende`;
     return (
-      `A colpi: chi attacca tira fino a ${h.max} dadi (uno in meno delle armate che ha), chi difende uno per armata, fino a ${h.max}. ` +
-      `Ogni dado ${on} è un colpo e toglie un'armata all'altro, da tutte e due le parti insieme. Chi attacca perde al massimo ` +
-      `le armate che ha mandato; se cadono tutti, il territorio resta a chi difende con un'armata.`
+      `A colpi: ${hitDice(h)}. Chi attacca tira fino a ${h.max} dadi (uno in meno delle armate che ha), chi difende uno per armata, ` +
+      `fino a ${h.max}. Ogni scoppio è un colpo e toglie un'armata all'altro, da tutte e due le parti insieme. Chi attacca perde al ` +
+      `massimo le armate che ha mandato; se cadono tutti, il territorio resta a chi difende con un'armata.`
     );
   }
   const ties = {

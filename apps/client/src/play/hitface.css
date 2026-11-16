@@ -1,0 +1,40 @@
+/* Facce dei dadi a colpi: lo scoppio prende il colore dei puntini del dado (chiaro sul rosso, scuro sul chiaro). */
+.die.attack .hm {
+  color: var(--die-attack-pip);
+}
+
+.die.defense .hm {
+  color: var(--die-defense-pip);
+}
+
+.d3 .hm {
+  color: var(--d3-pip);
+}
+
+/* il bordo inciso, più scuro del segno */
+.hm-shade {
+  color: color-mix(in srgb, var(--d3-pip, currentColor) 45%, #000);
+  opacity: 0.7;
+}
+
+/* un dado a vuoto è già liscio: si spegne meno degli altri, così i dadi tirati si contano ancora */
+.die.bool.lost {
+  opacity: 0.7;
+}
+
+.vg-die.rolling .hm {
+  opacity: 0;
+}
+
+/* faccia del dado in 3D con lo scoppio (o liscia) al posto dei puntini */
+.d3-face.d3-bool {
+  display: block;
+  padding: 0;
+}
+
+.d3-bool svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
