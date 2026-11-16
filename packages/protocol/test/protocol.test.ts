@@ -10,9 +10,11 @@ describe('messaggi del client', () => {
     expect(parseClientMsg(attack(3))).not.toHaveProperty('error');
   });
 
-  it('dadi fuori da ogni regola possibile: rifiutato', () => {
+  it('dadi (o armate mandate, a turno) fuori da ogni regola possibile: rifiutato', () => {
     expect(parseClientMsg(attack(0))).toHaveProperty('error');
-    expect(parseClientMsg(attack(21))).toHaveProperty('error');
+    // a turno si mandano armate, anche più di 20: il limite vero lo mette il motore
+    expect(parseClientMsg(attack(40))).not.toHaveProperty('error');
+    expect(parseClientMsg(attack(10_001))).toHaveProperty('error');
     expect(parseClientMsg(attack(2.5))).toHaveProperty('error');
   });
 });

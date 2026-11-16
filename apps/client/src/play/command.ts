@@ -3,8 +3,9 @@
  * da tenere d'occhio, chi contro chi, dadi, armate, bottoni), senza decidere come si disegna:
  * la barra dei comandi in basso lo mostra su una riga.
  */
-import { defenseDice, maxAttackDice } from '@onpeace/conquista';
+import { defenseDice, maxAttackDice, sendsArmies } from '@onpeace/conquista';
 import { useSession } from '../store';
+import { fightingOn, useBattle } from './battle';
 import { PHASES } from './describe';
 import { attackTargets, freeTerritories, maxDice, moveTargets, reinforcementsFor, type MyMove } from './logic';
 import { useGame } from './useGame';
@@ -63,6 +64,8 @@ export function useCommand(): Command {
   const { view, lobby, board, me, move, colorOf, playerName, territory } = useGame();
   const draft = useSession((s) => s.draft);
   const sending = useSession((s) => s.sending);
+  // la mia battaglia finita in conquista è ancora sulla scena: la barra non svela come va a finire
+  const fighting = useBattle(fightingOn);
   const s = useSession.getState();
   const rules = lobby.rules;
   const busy = sending !== null;
@@ -115,15 +118,17 @@ export function useCommand(): Command {
       };
     }
     case 'occupy': {
+      if (fighting) return { ...base, mine: true, title: 'Battaglia in corso…', hint: 'Clic sulla scena per vedere subito come finisce' };
       const value = Math.min(move.max, Math.max(move.min, draft.occupy ?? move.max));
       const forced = move.min === move.max;
+      const least = rules.dice.combat === 'pairs' ? 'i dadi tirati' : 'le armate sopravvissute';
       return {
         ...base,
         mine: true,
         title: `Hai conquistato ${territory(move.to)}`,
         hint: forced
           ? `Entrano ${value} ${value === 1 ? 'armata' : 'armate'}: una resta in ${territory(move.from)}`
-          : `Quante entrano? Da ${move.min} (i dadi tirati) a ${move.max}: una resta in ${territory(move.from)}`,
+          : `Quante entrano? Da ${move.min} (${least}) a ${move.max}: una resta in ${territory(move.from)}`,
         from: side(move.from),
         to: side(move.to),
         amount: forced ? null : { value, min: move.min, max: move.max, label: 'Armate che entrano', set: (n) => s.patchDraft({ occupy: n }) },
@@ -158,6 +163,20 @@ export function useCommand(): Command {
       const toT = view.territories[draft.target]!;
       const max = maxDice(rules, fromT.armies);
       const dice = draft.dice === null ? max : Math.min(draft.dice, max);
+      if (sendsArmies(rules.dice)) {
+        // a turno: si sceglie quante armate mandare, poi la battaglia va fino in fondo da sola
+        return {
+          ...base,
+          mine: true,
+          title: 'Attacca',
+          hint: 'Tira prima chi difende, poi a turno fino in fondo · Esc annulla',
+          from: side(draft.selected),
+          to: side(draft.target),
+          amount: { value: dice, min: 1, max, label: 'Armate da mandare', set: (n) => s.patchDraft({ dice: n }) },
+          primary: { label: `Attacca con ${dice} ${dice === 1 ? 'armata' : 'armate'}`, run: () => s.attack(), disabled: busy || max < 1, kbd: 'Invio' },
+          end,
+        };
+      }
       return {
         ...base,
         mine: true,

@@ -5,7 +5,7 @@
  * Chi guarda una battaglia degli altri la vede in piccolo (o intera, o niente: è un'opzione).
  */
 import { create } from 'zustand';
-import { pairWins, type GameView, type Reroll } from '@onpeace/conquista';
+import { pairWins, type GameView, type Reroll, type Volley } from '@onpeace/conquista';
 import type { LoggedEvent } from '@onpeace/protocol';
 import { sfx, type SoundName } from '../audio/sfx';
 import { styleColor, useLook } from '../look';
@@ -27,6 +27,8 @@ export interface Roll {
   won: boolean[];
   /** A colpi: quanti colpi ha fatto ognuno (i primi dadi, i più alti). */
   hits?: { attack: number; defense: number };
+  /** A colpi, a turno: chi tira (l'altro non tira e i suoi dadi sono vuoti). */
+  volley?: 'attack' | 'defense';
   aLoss: number;
   dLoss: number;
   conquered: boolean;
@@ -126,6 +128,16 @@ export function paceOf(k: number, arrived: number, blitz: boolean, mode: BlitzMo
   return 'normal';
 }
 
+/**
+ * A turno i tiri di una battaglia arrivano tutti insieme: i primi due (uno per parte) con calma,
+ * poi svelti come in un "fino in fondo"; in una battaglia lunga quelli di mezzo sono veloci.
+ */
+export function volleyPace(k: number, total: number): Pace {
+  if (k < 2) return 'normal';
+  if (total > 12 && k < total - 4) return 'quick';
+  return 'blitz';
+}
+
 export function throwMs(k: number, pace: Pace) {
   return pace === 'quick' ? 280 : k === 0 ? 900 : pace === 'blitz' ? 440 : 620;
 }
@@ -215,6 +227,16 @@ export const useBattle = create<BattleState>((set, get) => ({
 
 setBlitzStep(BLITZ_STEP[useBattle.getState().blitzMode]);
 
+/**
+ * Una mia battaglia d'attacco è sulla scena prima del risultato, o aspetta in coda il suo turno:
+ * la barra dei comandi non svela come finisce e Invio non occupa ancora.
+ */
+export function fightingOn(b: { playing: Playing | null; queue: Engagement[] }): boolean {
+  const p = b.playing;
+  if (p && !p.small && p.eng.role === 'attacker' && p.stage !== 'end' && p.stage !== 'outro') return true;
+  return b.queue.some((e) => e.role === 'attacker');
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null;
 let nextId = 1;
 let lastClosed: { key: string; at: number } | null = null;
@@ -299,10 +321,12 @@ function nextRoll() {
   if (!p) return;
   const k = p.shown + 1;
   if (k >= p.eng.rolls.length) return p.eng.over ? end() : hold();
-  // fino in fondo: svelto dal secondo tiro, veloce col conto o se resta indietro; se i tiri si accumulano, si accelera
+  // fino in fondo: svelto dal secondo tiro, veloce col conto o se resta indietro; se i tiri si accumulano, si accelera.
+  // A turno i tiri arrivano tutti insieme: non sono indietro, hanno il loro ritmo
+  const volley = p.eng.rolls[k]!.volley !== undefined;
   const behind = p.eng.rolls.length - 1 - k;
-  const pace = paceOf(k, p.eng.rolls.length, blitzOn(p.eng), useBattle.getState().blitzMode);
-  const speed = p.small ? 0.55 : behind > 0 ? 0.7 : 1;
+  const pace = volley ? volleyPace(k, p.eng.rolls.length) : paceOf(k, p.eng.rolls.length, blitzOn(p.eng), useBattle.getState().blitzMode);
+  const speed = p.small ? 0.55 : !volley && behind > 0 ? 0.7 : 1;
   const ms = Math.round(throwMs(k, pace) * speed);
   // in piccolo e col conto veloce i pari ritirati non si guardano: si vedono subito i dadi finali
   const rr = p.small || pace === 'quick' ? (p.eng.rolls[k]!.rerolls?.length ?? 0) : 0;
@@ -413,11 +437,15 @@ export function resetBattle(): void {
   useBattle.setState({ playing: null, queue: [] });
 }
 
-/** Un tiro nuovo: si aggiunge allo scontro in corso sugli stessi territori, o ne apre uno. */
-export function feedRoll(base: Omit<Engagement, 'id' | 'rolls' | 'over' | 'again'>, roll: Roll, aAfter: number) {
+/**
+ * Un tiro nuovo: si aggiunge allo scontro in corso sugli stessi territori, o ne apre uno. Lo scontro
+ * finisce col territorio preso o quando chi attacca non può più tirare; `last` lo dice da fuori
+ * (a turno la battaglia finisce all'ultimo tiro, anche se a casa restano armate).
+ */
+export function feedRoll(base: Omit<Engagement, 'id' | 'rolls' | 'over' | 'again'>, roll: Roll, aAfter: number, last?: boolean) {
   const s = useBattle.getState();
   const key = `${base.a.territory}>${base.d.territory}`;
-  const over = roll.conquered || aAfter < 2;
+  const over = last ?? (roll.conquered || aAfter < 2);
   const p = s.playing;
   if (p && p.stage !== 'outro' && keyOf(p.eng) === key && !p.eng.over) {
     const eng = { ...p.eng, rolls: [...p.eng.rolls, roll], over };
@@ -474,6 +502,33 @@ export function fighter(view: GameView, player: string, territory: string, armie
   };
 }
 
+/**
+ * I tiri della scena di una battaglia a turno: ognuno ha i dadi di chi tira e le armate che toglie
+ * all'altro. Prima dell'ultimo tiro nessuno resta a zero, quindi ogni colpo toglie un'armata; l'ultimo
+ * toglie quello che manca per arrivare alle perdite di tutta la battaglia (i colpi in più vanno a vuoto).
+ */
+export function volleyRolls(volleys: readonly Volley[], losses: { attacker: number; defender: number }, conquered: boolean): Roll[] {
+  let a = 0;
+  let d = 0;
+  return volleys.map((v, i) => {
+    const attack = v.by === 'attack';
+    const last = i === volleys.length - 1;
+    const loss = last ? (attack ? losses.defender - d : losses.attacker - a) : v.hits;
+    if (attack) d += loss;
+    else a += loss;
+    return {
+      attack: attack ? v.dice : [],
+      defense: attack ? [] : v.dice,
+      won: [],
+      hits: { attack: attack ? v.hits : 0, defense: attack ? 0 : v.hits },
+      volley: v.by,
+      aLoss: attack ? 0 : loss,
+      dLoss: attack ? loss : 0,
+      conquered: conquered && last,
+    };
+  });
+}
+
 function roleOf(me: string | null, e: { player: string; defender: string }): Role {
   return e.player === me ? 'attacker' : e.defender === me ? 'defender' : 'spectator';
 }
@@ -489,6 +544,12 @@ export function connectBattleFeed(): () => void {
     for (const { e, a, d } of withArmiesBefore(s.view, s.fresh.events)) {
       const role = roleOf(me, e);
       if (role === 'spectator' && useBattle.getState().watch === 'niente') continue;
+      const base = { role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null };
+      if (e.volleys) {
+        // a turno: un tiro della scena per ogni tiro della battaglia, tutti insieme
+        volleyRolls(e.volleys, { attacker: e.attackerLosses, defender: e.defenderLosses }, e.conquered).forEach((roll, i, all) => feedRoll(base, roll, a, i === all.length - 1));
+        continue;
+      }
       const roll: Roll = {
         attack: e.attack,
         defense: e.defense,
@@ -499,7 +560,7 @@ export function connectBattleFeed(): () => void {
         dLoss: e.defenderLosses,
         conquered: e.conquered,
       };
-      feedRoll({ role, a: fighter(s.view, e.player, e.from, a), d: fighter(s.view, e.defender, e.to, d), demo: null }, roll, a - e.attackerLosses);
+      feedRoll(base, roll, a - e.attackerLosses);
     }
   });
   // lasciando la partita le scene finiscono qui: niente suoni sulla schermata iniziale

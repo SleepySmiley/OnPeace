@@ -4,7 +4,8 @@
  * coppia di dadi: chi vince la coppia spara, il carro colpito esplode) e alla conquista entrano nel
  * territorio preso. I dadi sono cubi 3D che si fermano sulla faccia uscita; se le regole fanno
  * ritirare i pari, i dadi pari si illuminano e si ritirano prima della sparatoria. A colpi i dadi
- * sono due file, una per parte, e ogni dado alto è un colpo. Chi guarda una battaglia degli altri la
+ * sono due file, una per parte, e ogni dado alto è un colpo. A colpi, a turno, tira una parte alla
+ * volta (prima chi difende): una fila sola, e spara solo chi ha tirato. Chi guarda una battaglia degli altri la
  * vede in piccolo in alto. Clic sulla scena: salta al risultato, poi chiude. Esc chiude.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
@@ -353,6 +354,7 @@ function spotlight(spots: Spots | null, extra = 0): Vars {
 function DiceTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
   const { roll, p } = m;
   if (!roll) return null;
+  if (roll.volley) return <VolleyTray m={m} spots={spots} size={size} />;
   if (roll.hits) return <HitTray m={m} spots={spots} size={size} />;
   const trayY = window.innerHeight - TRAY_BOTTOM - size / 2;
   const pairW = size * 2 + 44;
@@ -449,6 +451,49 @@ function HitTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) 
             {count(roll.hits.defense)}
           </span>
         </>
+      )}
+    </>
+  );
+}
+
+/**
+ * A colpi, a turno: tira una parte sola. Una fila al centro, i dadi partono dal territorio di chi
+ * tira; sopra si legge chi tira, sotto quanti colpi ha fatto.
+ */
+function VolleyTray({ m, spots, size }: { m: Moment; spots: Spots; size: number }) {
+  const { roll, p } = m;
+  if (!roll?.volley || !roll.hits) return null;
+  const side = roll.volley;
+  const values = side === 'attack' ? m.dice.attack : m.dice.defense;
+  const n = values.length;
+  const s = Math.min(size, (window.innerWidth * 0.7) / Math.max(1, n) / 1.4);
+  const step = s * 1.4;
+  const trayY = window.innerHeight - TRAY_BOTTOM - s / 2;
+  const cx = window.innerWidth / 2;
+  const x0 = cx - (n * step) / 2;
+  const [sx, sy] = side === 'attack' ? spots.a : spots.d;
+  const who = nameOf(m, side === 'attack' ? 'a' : 'd');
+  const label = who === 'Tu' ? `Tiri tu, in ${side === 'attack' ? 'attacco' : 'difesa'}` : `Tira chi ${side === 'attack' ? 'attacca' : 'difende'} · ${who}`;
+  const hits = roll.hits[side];
+  const tone = side === 'attack' ? 'a' : 'd';
+  return (
+    <>
+      <span className="mp-tray" style={{ left: x0 - 18, width: n * step + 36, top: trayY - s / 2 - 14, height: s + 28 }} />
+      <span key={`${m.rollKey}-who`} className={`mp-hits mp-turn ${tone}`} style={{ left: cx, top: trayY - s / 2 - 34 }}>
+        {label}
+      </span>
+      {values.map((v, i) => {
+        const x = x0 + (i + 0.5) * step;
+        return (
+          <span key={`${side}${i}`} className="mp-die" style={{ left: x - s / 2, top: trayY - s / 2 }}>
+            <Die3D value={v} side={side} size={s} roll={m.rollKey} ms={p.ms} from={[sx - x, sy - trayY]} delay={i * 30} state={dieState(m, side, i)} />
+          </span>
+        );
+      })}
+      {m.resolved && (
+        <span key={`${m.rollKey}-h`} className={`mp-hits ${tone}`} style={{ left: cx, top: trayY + s / 2 + 22 }}>
+          {hits === 0 ? 'nessun colpo' : hits === 1 ? '1 colpo' : `${hits} colpi`}
+        </span>
       )}
     </>
   );
@@ -651,8 +696,10 @@ function TankStage({ m, painter }: { m: Moment; painter: BoardPainter | null }) 
     const x = (Math.min(...xs) + Math.max(...xs)) / 2;
     const y = above ? Math.min(...ys) - 52 : Math.max(...ys) + 52;
     const loss = m.resolved && roll ? (side === 'a' ? roll.aLoss : roll.dLoss) : 0;
+    // a turno la targa di chi tira si accende
+    const turn = !took && !m.result && roll?.volley === (side === 'a' ? 'attack' : 'defense');
     return (
-      <span className={`tk-plate ${side === 'a' ? 'att' : 'def'}`} style={{ left: x, top: y, '--c': color } as Vars}>
+      <span className={`tk-plate ${side === 'a' ? 'att' : 'def'}${turn ? ' turn' : ''}`} style={{ left: x, top: y, '--c': color } as Vars}>
         <Chip color={color} />
         <span className="mp-tag-name">{f.place}</span>
         {took ? <span className="tk-plate-new">preso</span> : <Count value={side === 'a' ? m.armies.a : m.armies.d} loss={loss} k={m.rollKey} />}

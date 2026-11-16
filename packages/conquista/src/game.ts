@@ -5,7 +5,7 @@
  */
 import { RuleError, assertRule } from '@onpeace/engine';
 import { buildDeck, setValue, shuffle } from './cards';
-import { defenseDice, hitLosses, maxAttackDice, rollBattle, rollHits } from './dice';
+import { defenseDice, fightAlternate, hitLosses, maxAttackDice, rollBattle, rollHits, sendsArmies } from './dice';
 import { continentsHeld, dealObjectives, objectiveDef, objectiveMet } from './objectives';
 import { createGameRng, expandSeed, type GameRng } from './random';
 import type { GameMode } from './schema';
@@ -367,8 +367,12 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
       assertRule(from.owner === id, 'Puoi attaccare solo dai tuoi territori.');
       assertRule(to.owner !== id, 'Non puoi attaccare un tuo territorio.');
       assertRule(areLinked(ctx, action.from, action.to), `${territoryName(ctx, action.from)} non confina con ${territoryName(ctx, action.to)}.`);
-      assertRule(action.dice <= maxAttackDice(ctx.rules.dice), `Puoi tirare al massimo ${maxAttackDice(ctx.rules.dice)} dadi.`);
-      assertRule(action.dice <= from.armies - 1, 'Serve almeno un\'armata in più dei dadi che tiri.');
+      if (sendsArmies(ctx.rules.dice)) {
+        assertRule(action.dice <= from.armies - 1, `Puoi mandare al massimo ${from.armies - 1} armate: una resta in ${territoryName(ctx, action.from)}.`);
+      } else {
+        assertRule(action.dice <= maxAttackDice(ctx.rules.dice), `Puoi tirare al massimo ${maxAttackDice(ctx.rules.dice)} dadi.`);
+        assertRule(action.dice <= from.armies - 1, 'Serve almeno un\'armata in più dei dadi che tiri.');
+      }
       const defender = to.owner;
       assertRule(
         eliminationAllowed(ctx, state) || ownedBy(state, defender).length > 1,
@@ -376,10 +380,16 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
       );
       const rules = ctx.rules.dice;
       const defDice = defenseDice(rules, to.armies);
-      let battle: Pick<Extract<GameEvent, { type: 'battle' }>, 'attack' | 'defense' | 'rerolls' | 'won' | 'hits'>;
+      let battle: Pick<Extract<GameEvent, { type: 'battle' }>, 'attack' | 'defense' | 'rerolls' | 'won' | 'hits' | 'volleys'>;
       let attackerLosses: number;
       let defenderLosses: number;
-      if (rules.combat === 'hits') {
+      if (rules.combat === 'alternate') {
+        // tutta la battaglia in una mossa: si va fino in fondo, prima tira chi difende
+        const r = withRng(state, (rng) => fightAlternate(rng, action.dice, to.armies, rules.hits));
+        attackerLosses = r.attackerLosses;
+        defenderLosses = r.defenderLosses;
+        battle = { attack: [], defense: [], won: [], volleys: r.volleys };
+      } else if (rules.combat === 'hits') {
         const r = withRng(state, (rng) => rollHits(rng, action.dice, defDice, rules.hits));
         const lost = hitLosses(r.hits, action.dice, to.armies);
         attackerLosses = lost.attacker;
@@ -409,8 +419,8 @@ export function applyAction(ctx: GameContext, prev: GameState, id: string, actio
         to.owner = id;
         turn.conquered = true;
         const max = from.armies - 1;
-        // a coppie si entra con almeno tante armate quanti dadi; a colpi con quelle sopravvissute
-        const least = rules.combat === 'hits' ? action.dice - attackerLosses : action.dice;
+        // a coppie si entra con almeno tante armate quanti dadi; a colpi e a turno con quelle sopravvissute
+        const least = rules.combat === 'pairs' ? action.dice : action.dice - attackerLosses;
         turn.occupation = { from: action.from, to: action.to, min: Math.min(least, max), max };
         if (ownedBy(state, defender).length === 0) eliminate(ctx, state, defender, id, events);
       }

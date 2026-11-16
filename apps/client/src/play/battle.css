@@ -994,6 +994,18 @@ body[data-stile='vetro'] .tk-body {
     top 0.7s;
 }
 
+/* a turno: la targa di chi tira */
+.tk-plate.turn {
+  box-shadow:
+    0 0 0 3px var(--c),
+    0 0 22px 4px var(--c),
+    0 10px 24px rgba(0, 0, 0, 0.45);
+  transition:
+    left 0.7s,
+    top 0.7s,
+    box-shadow 0.2s;
+}
+
 .tk-plate-new {
   font-size: 12px;
   letter-spacing: 0.12em;

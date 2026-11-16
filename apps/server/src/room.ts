@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { RuleError } from '@onpeace/engine';
 import {
   applyAction,
+  battleRolls,
   createGame,
   eventsFor,
   passFor,
@@ -480,7 +481,7 @@ export class Room {
    * per turno (timers.battleMaxSeconds): la scena della battaglia non deve mangiargli il turno.
    */
   private giveBattleTime(events: readonly GameEvent[]): void {
-    const rolls = events.filter((e) => e.type === 'battle').length;
+    const rolls = battleRolls(events);
     if (rolls === 0) return;
     const { battleSeconds, battleMaxSeconds } = this.ctx.rules.timers;
     const used = this.s.clockBonus ?? 0;

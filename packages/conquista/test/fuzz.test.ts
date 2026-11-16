@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createRng } from '@onpeace/engine';
-import { applyAction, eliminationAllowed, maxAttackDice, ownedBy, possibleSets, timeout, type Action, type GameMode, type GameState } from '../src';
+import { applyAction, eliminationAllowed, maxAttackDice, ownedBy, possibleSets, sendsArmies, timeout, type Action, type GameMode, type GameState } from '../src';
 import { cardTotal, newGame, worldContext } from './helpers';
 
 const ctx = worldContext();
@@ -49,7 +49,7 @@ function randomMove(s: GameState, rng: ReturnType<typeof createRng>, c = ctx): {
     );
     if (options.length > 0 && rng.next() < 0.85) {
       const { from, to } = rng.pick(options);
-      const dice = Math.min(maxAttackDice(c.rules.dice), s.territories[from]!.armies - 1);
+      const dice = Math.min(sendsArmies(c.rules.dice) ? Infinity : maxAttackDice(c.rules.dice), s.territories[from]!.armies - 1);
       return { player: me, action: { kind: 'attack', from, to, dice: rng.int(1, dice) } };
     }
     return { player: me, action: { kind: rng.next() < 0.5 ? 'end-attack' : 'end-turn' } };
@@ -122,8 +122,10 @@ describe('partite casuali con le altre regole dei dadi', () => {
     ['pairs', 'reroll-pair', 3, 66],
     ['pairs', 'reroll-all', 2, 78],
     ['hits', 'defender', 3, 88],
+    ['alternate', 'defender', 3, 99],
   ] as const) {
-    it(`${combat === 'hits' ? 'a colpi' : `pari: ${ties}, difesa fino a ${defenseMax} dadi`}`, () => {
+    const name = { pairs: `pari: ${ties}, difesa fino a ${defenseMax} dadi`, hits: 'a colpi', alternate: 'a colpi, a turno' }[combat];
+    it(name, () => {
       const c = worldContext((r) => {
         const dice = r.dice as { combat: string; tiesTo: string; defenseMax: number };
         dice.combat = combat;

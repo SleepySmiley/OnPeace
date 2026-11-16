@@ -59,6 +59,14 @@ export function describeEvent(e: GameEvent, n: Names, me: string | null): string
       ]
         .filter(Boolean)
         .join(', ');
+      if (e.volleys) {
+        // a turno: quanti tiri e quanti colpi in tutto, i dadi sarebbero troppi
+        const hits = (by: 'attack' | 'defense') => e.volleys!.filter((v) => v.by === by).reduce((t, v) => t + v.hits, 0);
+        const tiri = e.volleys.length === 1 ? '1 tiro' : `${e.volleys.length} tiri`;
+        const head = `${n.territory(e.from)} → ${n.territory(e.to)}: ${tiri} a turno, colpi ${hits('attack')} a ${hits('defense')} (${lost || 'nessuna perdita'})`;
+        if (!e.conquered) return head;
+        return `${head}. ${e.player === me ? 'Conquisti' : `${n.player(e.player)} conquista`} ${n.territory(e.to)}`;
+      }
       // a coppie si scrivono i dadi che hanno deciso (dopo i pari ritirati), a colpi anche quanti colpi
       const final = diceAfter(e);
       const how = e.hits ? `, ${e.hits.attack} ${e.hits.attack === 1 ? 'colpo' : 'colpi'} a ${e.hits.defense}` : e.rerolls ? ', pari ritirati' : '';
@@ -103,6 +111,15 @@ function facesFrom(from: number): string {
 
 /** Le regole dei dadi in parole, per la sala d'attesa e la guida. */
 export function diceRules(d: ConquestRules['dice']): string {
+  if (d.combat === 'alternate') {
+    const h = d.hits;
+    const on = h.attackOn === h.defenseOn ? `con ${facesFrom(h.attackOn)}` : `con ${facesFrom(h.attackOn)} per chi attacca, ${facesFrom(h.defenseOn)} per chi difende`;
+    return (
+      `A colpi, a turno: chi attacca sceglie quante armate mandare (una resta a casa). Tira prima chi difende, un dado per armata ` +
+      `fino a ${h.max}: ogni dado ${on} toglie subito un'armata a chi attacca. Poi tira chi attacca con le armate che gli restano, ` +
+      `e così via. Si va fino in fondo: vince chi resta con delle armate in campo, e chi conquista entra con quelle sopravvissute.`
+    );
+  }
   if (d.combat === 'hits') {
     const h = d.hits;
     const on = h.attackOn === h.defenseOn ? `con ${facesFrom(h.attackOn)}` : `con ${facesFrom(h.attackOn)} per chi attacca, ${facesFrom(h.defenseOn)} per chi difende`;

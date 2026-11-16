@@ -1,0 +1,368 @@
+/* Scenette delle opzioni della sala d'attesa: tutto in em, così si ingrandiscono cambiando --u. */
+body[data-stile='classico'] {
+  --vg-win: #d9a92e;
+  --vg-tie: #6b5a45;
+  --vg-free: rgba(43, 34, 25, 0.1);
+  --vg-free-edge: rgba(43, 34, 25, 0.35);
+}
+
+body[data-stile='vetro'] {
+  --vg-win: #ffd60a;
+  --vg-tie: #f5f5f7;
+  --vg-free: rgba(255, 255, 255, 0.06);
+  --vg-free-edge: rgba(255, 255, 255, 0.28);
+}
+
+@property --left {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.vg {
+  --s: 2.4em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(8px * var(--u, 1));
+  line-height: 1;
+  user-select: none;
+}
+
+.vg-row,
+.vg-alt {
+  display: flex;
+  align-items: center;
+  gap: 1.1em;
+}
+
+.vg-alt {
+  gap: 0.7em;
+}
+
+.vg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 0.4em;
+}
+
+.vg-map {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.35em;
+}
+
+.vg-map .vg-tile {
+  width: 2.2em;
+  height: 1.7em;
+}
+
+/* territorio: il colore di chi lo tiene, o tratteggiato se è libero */
+.vg-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3em;
+  height: 2.2em;
+  border-radius: 0.45em;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 0.25em 0 rgba(255, 255, 255, 0.18);
+  transition:
+    background-color 0.35s,
+    box-shadow 0.35s,
+    transform 0.35s;
+}
+
+.vg-tile.free {
+  background-color: var(--vg-free);
+  box-shadow: inset 0 0 0 1px var(--vg-free-edge);
+  border: 1px dashed transparent;
+}
+
+.vg-n {
+  font-size: 1.35em;
+  font-weight: 700;
+  color: #fff;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 0 4px rgba(0, 0, 0, 0.45);
+}
+
+.vg-tile.pop {
+  animation: vg-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.vg-tile.goal {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 0 0 0.2em var(--vg-win);
+  background-color: color-mix(in srgb, var(--vg-win) 35%, transparent);
+}
+
+.vg-tile.covered {
+  background-color: color-mix(in srgb, var(--c) 45%, #1d1a16) !important;
+}
+
+.vg-tile.turn {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    0 0 0 0.2em var(--c),
+    0 0 0.9em var(--c);
+}
+
+.vg-plus {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  translate: -50% 0;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.15em;
+  color: var(--ink);
+  animation: vg-rise 0.6s ease-out both;
+}
+
+/* carta dell'obiettivo: si gira e mostra il bersaglio */
+.vg-card {
+  position: relative;
+  width: 3.4em;
+  height: 4.6em;
+  perspective: 20em;
+}
+
+.vg-card-back,
+.vg-card-front {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.4em;
+  backface-visibility: hidden;
+  transition: transform 0.55s cubic-bezier(0.4, 0.1, 0.3, 1);
+  box-shadow: 0 0.2em 0.4em rgba(0, 0, 0, 0.3);
+}
+
+.vg-card-back {
+  background: var(--card-back);
+  border: 1px solid var(--card-edge);
+}
+
+.vg-card-front {
+  display: grid;
+  place-items: center;
+  background: var(--card-bg);
+  border: 1px solid var(--card-edge);
+  transform: rotateY(180deg);
+}
+
+.vg-card.open .vg-card-back {
+  transform: rotateY(-180deg);
+}
+
+.vg-card.open .vg-card-front {
+  transform: rotateY(0deg);
+}
+
+.vg-card-front svg {
+  width: 2.3em;
+  height: 2.3em;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.vg-card-front .dot {
+  fill: var(--accent);
+}
+
+/* dadi */
+.vg-die {
+  display: inline-grid;
+  place-items: center;
+  width: var(--s);
+  height: var(--s);
+  transition:
+    opacity 0.3s,
+    transform 0.3s,
+    filter 0.3s;
+}
+
+.vg-die svg {
+  width: var(--s);
+  height: var(--s);
+}
+
+.vg-die.rolling svg {
+  animation: vg-roll 0.5s linear infinite;
+}
+
+.vg-die.rolling .die-pip {
+  opacity: 0;
+}
+
+.vg-die.win,
+.vg-die.hit {
+  filter: drop-shadow(0 0 0.12em var(--vg-win)) drop-shadow(0 0 0.35em var(--vg-win));
+  transform: scale(1.06);
+}
+
+.vg-die.lose,
+.vg-die.miss {
+  opacity: 0.35;
+  transform: scale(0.9);
+}
+
+.vg-die.tie {
+  filter: drop-shadow(0 0 0.12em var(--vg-tie)) drop-shadow(0 0 0.3em var(--vg-tie));
+}
+
+.vg-die.ghost {
+  border-radius: 0.5em;
+  box-shadow: inset 0 0 0 1px var(--vg-free-edge);
+  transform: scale(0.82);
+}
+
+/* a coppie: ogni coppia in colonna, chi attacca sopra */
+.vg-pairs {
+  display: flex;
+  gap: 0.7em;
+}
+
+.vg-pair {
+  display: grid;
+  justify-items: center;
+  gap: 0.1em;
+}
+
+.vg-vs {
+  height: 1.2em;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.1em;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.vg-vs.on {
+  opacity: 1;
+}
+
+/* a colpi: due file, chi attacca sopra */
+.vg-hits {
+  display: grid;
+  gap: 0.45em;
+}
+
+.vg-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  min-height: var(--s);
+}
+
+.vg-line.mid {
+  min-width: calc(var(--s) * 3 + 0.7em);
+  justify-content: center;
+}
+
+.vg-count {
+  margin-left: 0.4em;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.1em;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.vg-count.on {
+  opacity: 1;
+}
+
+.vg-taken {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.15em;
+  color: var(--good);
+  animation: vg-pop 0.42s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+/* tempo del turno: l'anello si svuota, un tiro di dadi ne ridà un po' */
+.vg-clock {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 5.8em;
+  height: 5.8em;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--left) * 360deg), var(--edge-soft) 0);
+  transition: --left 0.55s linear;
+}
+
+.vg-clock::before {
+  content: '';
+  position: absolute;
+  inset: 0.5em;
+  border-radius: 50%;
+  background: var(--panel-solid);
+}
+
+.vg-clock b {
+  position: relative;
+  font-size: 1.25em;
+  white-space: nowrap;
+}
+
+.vg-bonus {
+  display: grid;
+  justify-items: center;
+  gap: 0.3em;
+  opacity: 0.45;
+  transition: opacity 0.3s;
+}
+
+.vg-bonus i {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 1.1em;
+  visibility: hidden;
+}
+
+.vg-bonus.on {
+  opacity: 1;
+}
+
+.vg-bonus.on i {
+  visibility: visible;
+  animation: vg-rise 0.6s ease-out both;
+}
+
+@keyframes vg-pop {
+  40% {
+    transform: scale(1.18);
+  }
+}
+
+@keyframes vg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.6em);
+  }
+}
+
+@keyframes vg-roll {
+  from {
+    transform: rotate(0deg) scale(0.92);
+  }
+  to {
+    transform: rotate(360deg) scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vg *,
+  .vg *::before {
+    animation: none !important;
+    transition: none !important;
+  }
+}

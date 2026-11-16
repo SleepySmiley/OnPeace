@@ -2,8 +2,8 @@
  * Battaglie finte per le pagine di prova: tra territori veri della partita in corso, con i tiri
  * che arrivano uno alla volta come dal server. Le usano battaglia.html e pesca.html.
  */
-import { defenseDice, hitLosses, maxAttackDice, rollBattle, rollHits, type ConquestRules } from '@onpeace/conquista';
-import { BLITZ_STEP, feedRoll, fighter, useBattle, type Role, type Roll } from '../play/battle';
+import { defenseDice, fightAlternate, hitLosses, maxAttackDice, rollBattle, rollHits, type ConquestRules } from '@onpeace/conquista';
+import { BLITZ_STEP, feedRoll, fighter, useBattle, volleyRolls, type Role, type Roll } from '../play/battle';
 import { useSession } from '../store';
 
 export type DemoKind = 'attacco' | 'pari' | 'fino' | 'difesa' | 'altri' | 'perso';
@@ -73,6 +73,15 @@ export function startDemo(kind: DemoKind): boolean {
   const dice = s.online.lobby?.rules.dice;
   if (!dice) return false;
   const start = { attacco: [7, 3], pari: [9, 6], fino: [11, 6], difesa: [6, 4], altri: [5, 3], perso: [4, 7] }[kind] as [number, number];
+  const role: Role = kind === 'difesa' ? 'defender' : kind === 'altri' ? 'spectator' : 'attacker';
+  if (dice.combat === 'alternate') {
+    // a turno: tutta la battaglia in un colpo, con tutte le armate meno una; i tiri arrivano insieme come dal server
+    const b = fightAlternate(random, start[0] - 1, start[1], dice.hits);
+    const base = { role, a: fighter(view, view.territories[from]!.owner, from, start[0]), d: fighter(view, view.territories[to]!.owner, to, start[1]), demo: { blitz: false } };
+    const rolls = volleyRolls(b.volleys, { attacker: b.attackerLosses, defender: b.defenderLosses }, b.defenderLosses === start[1]);
+    rolls.forEach((r, i) => feedRoll(base, r, start[0] - b.attackerLosses, i === rolls.length - 1));
+    return true;
+  }
   let [a, d] = start;
   const rolls: Roll[] = [];
   const many = kind === 'fino' || kind === 'perso';
@@ -83,7 +92,6 @@ export function startDemo(kind: DemoKind): boolean {
     d -= r.dLoss;
   } while (many && d > 0 && a > 1);
   if (kind === 'difesa' && d > 0 && a > 1) rolls.push(fight(dice, a, d));
-  const role: Role = kind === 'difesa' ? 'defender' : kind === 'altri' ? 'spectator' : 'attacker';
   const demo = { blitz: many };
   const base = {
     role,

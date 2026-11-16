@@ -171,6 +171,8 @@ describe('sala d’attesa', () => {
     expect(t.room.handle(t.host.id, { t: 'settings', settings: { combat: 'hits' } })).toBeNull();
     info = t.last(t.room.id, t.guest.id, 'lobby')!.lobby;
     expect(info.rules.dice).toMatchObject({ combat: 'hits', hits: { max: 9 } });
+    expect(t.room.handle(t.host.id, { t: 'settings', settings: { combat: 'alternate' } })).toBeNull();
+    expect(t.room.lobbyInfo().rules.dice).toMatchObject({ combat: 'alternate', hits: { max: 9 } });
     // valori fuori dalle regole: il messaggio non passa la validazione
     expect(parseClientMsg(JSON.stringify({ t: 'settings', settings: { defenseDice: 5 } }))).toHaveProperty('error');
     expect(parseClientMsg(JSON.stringify({ t: 'settings', settings: { ties: 'moneta' } }))).toHaveProperty('error');

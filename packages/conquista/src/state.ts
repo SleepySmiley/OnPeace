@@ -2,8 +2,8 @@
 import { z } from 'zod';
 import type { BoardDef } from '@onpeace/engine';
 import type { Seed } from './random';
-import type { Reroll } from './dice';
-import { MAX_DICE, type CardSymbol, type ConquestRules, type GameMode, type ObjectiveDef } from './schema';
+import type { Reroll, Volley } from './dice';
+import { type CardSymbol, type ConquestRules, type GameMode, type ObjectiveDef } from './schema';
 
 export interface Card {
   id: string;
@@ -101,8 +101,9 @@ export const ActionS = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('setup-place'), placements: Placements }),
   z.object({ kind: z.literal('play-set'), cards: z.tuple([Id, Id, Id]) }),
   z.object({ kind: z.literal('reinforce'), placements: Placements }),
-  // il limite vero (regole e armate) lo controlla il motore: qui solo il massimo che le regole possono chiedere
-  z.object({ kind: z.literal('attack'), from: Id, to: Id, dice: z.number().int().min(1).max(MAX_DICE) }),
+  // il limite vero (regole e armate) lo controlla il motore: qui solo il massimo che si può chiedere.
+  // `dice`: a coppie e a colpi i dadi da tirare; a turno le armate mandate in battaglia (vedi sendsArmies)
+  z.object({ kind: z.literal('attack'), from: Id, to: Id, dice: z.number().int().min(1).max(10_000) }),
   z.object({ kind: z.literal('occupy'), armies: z.number().int().min(1).max(10_000) }),
   z.object({ kind: z.literal('end-attack') }),
   z.object({ kind: z.literal('fortify'), from: Id, to: Id, armies: z.number().int().min(1).max(10_000) }),
@@ -134,6 +135,11 @@ export type GameEvent =
       won?: boolean[];
       /** A colpi: quanti colpi ha fatto ognuno (sono i primi dadi, i più alti). Senza, si è combattuto a coppie. */
       hits?: { attack: number; defense: number };
+      /**
+       * A colpi, a turno: tutti i tiri della battaglia, il primo di chi difende. Allora `attack`,
+       * `defense` e `won` sono vuoti e le perdite sono quelle di tutta la battaglia.
+       */
+      volleys?: Volley[];
       attackerLosses: number;
       defenderLosses: number;
       conquered: boolean;

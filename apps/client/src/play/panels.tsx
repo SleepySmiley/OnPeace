@@ -86,11 +86,19 @@ export function BattlePanel() {
   if (!last) return null;
   const b = last.event as Battle;
   const rolling = fresh?.events.some((e) => e.seq === last.seq) ?? false;
-  // i dadi che hanno deciso (dopo i pari ritirati); a colpi un dado va a vuoto se non è tra i colpi
-  const dice = diceAfter(b);
+  // i dadi che hanno deciso (dopo i pari ritirati); a colpi un dado va a vuoto se non è tra i colpi;
+  // a turno gli ultimi dadi tirati da ognuno
+  const lastVolley = (by: 'attack' | 'defense') => b.volleys?.findLast((v) => v.by === by);
+  const dice = b.volleys ? { attack: lastVolley('attack')?.dice ?? [], defense: lastVolley('defense')?.dice ?? [] } : diceAfter(b);
   const won = pairWins(b);
   const lost = (side: 'attack' | 'defense', i: number) =>
-    b.hits ? i >= b.hits[side] : side === 'attack' ? i < won.length && !won[i] : i < won.length && Boolean(won[i]);
+    b.volleys
+      ? i >= (lastVolley(side)?.hits ?? 0)
+      : b.hits
+        ? i >= b.hits[side]
+        : side === 'attack'
+          ? i < won.length && !won[i]
+          : i < won.length && Boolean(won[i]);
   return (
     <section className="battle-panel" aria-label="Ultima battaglia" key={last.seq}>
       <div className={`battle-row${rolling ? ' rolling' : ''}`}>
@@ -122,6 +130,11 @@ export function BattlePanel() {
           <span className={`losses num${b.defenderLosses ? ' neg' : ''}`}>{b.defenderLosses ? `−${b.defenderLosses}` : '0'}</span>
         </div>
       </div>
+      {b.volleys && (
+        <p className="battle-note">
+          {b.volleys.length === 1 ? '1 tiro' : `${b.volleys.length} tiri`} a turno, qui gli ultimi dadi di ognuno
+        </p>
+      )}
       {b.conquered && <p className="battle-result">Territorio conquistato</p>}
     </section>
   );

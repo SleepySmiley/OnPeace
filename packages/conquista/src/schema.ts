@@ -25,12 +25,14 @@ export type TieRule = z.infer<typeof TieRule>;
 /**
  * Come si combatte. A coppie: fino a 3 dadi per parte, confrontati dal più alto, chi perde la
  * coppia perde un'armata. A colpi: un dado per armata (fino a `hits.max`), ogni dado alto è un
- * colpo e ogni colpo toglie un'armata all'altro, da tutte e due le parti insieme.
+ * colpo e ogni colpo toglie un'armata all'altro, da tutte e due le parti insieme. A colpi, a turno
+ * (`alternate`): si tira uno alla volta, prima chi difende, con gli stessi dadi e colpi; ogni parte
+ * tira con le armate che le restano, e la battaglia va fino in fondo (vedi fightAlternate).
  */
-export const CombatRule = z.enum(['pairs', 'hits']);
+export const CombatRule = z.enum(['pairs', 'hits', 'alternate']);
 export type CombatRule = z.infer<typeof CombatRule>;
 
-/** Dadi massimi per parte che le regole possono chiedere (a colpi, `hits.max`): oltre, un attacco non si valida nemmeno. */
+/** Dadi massimi per tiro che le regole possono chiedere (a colpi e a turno, `hits.max`). */
 export const MAX_DICE = 20;
 
 export const ConquestRules = z.strictObject({
@@ -71,7 +73,10 @@ export const ConquestRules = z.strictObject({
     /** A coppie: dadi pari, chi vince o si ritirano (vedi TieRule). */
     tiesTo: TieRule,
     hits: z.strictObject({
-      /** A colpi: dadi massimi per parte (chi attacca ne tira al massimo uno in meno delle armate). */
+      /**
+       * A colpi: dadi massimi per parte (chi attacca ne tira al massimo uno in meno delle armate).
+       * A turno: dadi massimi di ogni tiro, chi attacca o difende con più armate ne tira solo tanti.
+       */
       max: Int.min(1).max(MAX_DICE),
       /** Un dado di chi attacca colpisce da questo numero in su (4: con 4, 5 o 6). */
       attackOn: Int.min(1).max(6),

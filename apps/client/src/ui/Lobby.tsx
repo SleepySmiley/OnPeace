@@ -1,4 +1,4 @@
-/** Sala d'attesa: link d'invito, giocatori e colori, opzioni dell'host, regole in breve, chat. */
+/** Sala d'attesa: link d'invito, giocatori e colori, opzioni dell'host (a tessere, ognuna spiegata), regole in breve, chat. */
 import { useState } from 'react';
 import { PLAYER_COLORS, type LobbySettings } from '@onpeace/protocol';
 import { styleColor, useLook } from '../look';
@@ -6,9 +6,7 @@ import { inviteIsLocalOnly, inviteLink } from '../net';
 import { diceRules } from '../play/describe';
 import { useSession } from '../store';
 import { ChatPanel } from './ChatPanel';
-
-const TURN_OPTIONS = [60, 90, 120, 180, 300, 480];
-const minutes = (s: number) => (s < 120 ? `${s} secondi` : `${s / 60} minuti`);
+import { LobbyOptions } from './LobbyOptions';
 
 export function Lobby() {
   const online = useSession((s) => s.online);
@@ -121,92 +119,27 @@ export function Lobby() {
                 ))}
               </div>
             )}
+            <h2 className="section-title lobby-chat-title">Chat</h2>
+            <div className="lobby-chat">
+              <ChatPanel />
+            </div>
           </section>
 
           <section>
             <h2 className="section-title">Opzioni {!isHost && <span className="dim">(le sceglie l'host)</span>}</h2>
-            <div className="options">
-              <label className="field">
-                <span>Come si vince</span>
-                <select disabled={!isHost} value={settings.mode} onChange={(e) => set({ mode: e.target.value as LobbySettings['mode'] })}>
-                  {rules.modes.includes('objectives') && <option value="objectives">Obiettivi segreti</option>}
-                  {rules.modes.includes('conquest') && <option value="conquest">Conquista del mondo</option>}
+            <LobbyOptions rules={rules} settings={settings} isHost={isHost} onChange={set} />
+            {lobby.boards.length > 1 && (
+              <label className="field lobby-board">
+                <span>Tabellone</span>
+                <select disabled={!isHost} value={settings.board} onChange={(e) => set({ board: e.target.value })}>
+                  {lobby.boards.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.territories} territori)
+                    </option>
+                  ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Territori</span>
-                <select
-                  disabled={!isHost}
-                  value={settings.distribution}
-                  onChange={(e) => set({ distribution: e.target.value as LobbySettings['distribution'] })}
-                >
-                  <option value="draft">Scelti a turno, uno a testa</option>
-                  <option value="random">Distribuiti a caso</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Piazzamento iniziale</span>
-                <select
-                  disabled={!isHost}
-                  value={settings.placement}
-                  onChange={(e) => set({ placement: e.target.value as LobbySettings['placement'] })}
-                >
-                  <option value="rounds">A giri, {rules.setup.perRound} armate a testa</option>
-                  <option value="simultaneous">Tutti insieme, alla cieca</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Tempo per turno</span>
-                <select disabled={!isHost} value={settings.turnSeconds} onChange={(e) => set({ turnSeconds: Number(e.target.value) })}>
-                  {[...new Set([...TURN_OPTIONS, settings.turnSeconds])]
-                    .sort((a, b) => a - b)
-                    .map((s) => (
-                      <option key={s} value={s}>
-                        {minutes(s)}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Combattimento</span>
-                <select disabled={!isHost} value={settings.combat} onChange={(e) => set({ combat: e.target.value as LobbySettings['combat'] })}>
-                  <option value="pairs">A coppie, fino a {rules.dice.attackMax} dadi</option>
-                  <option value="hits">A colpi, fino a {rules.dice.hits.max} dadi</option>
-                </select>
-              </label>
-              {settings.combat === 'pairs' && (
-                <>
-                  <label className="field">
-                    <span>Dadi pari</span>
-                    <select disabled={!isHost} value={settings.ties} onChange={(e) => set({ ties: e.target.value as LobbySettings['ties'] })}>
-                      <option value="defender">Vince chi difende</option>
-                      <option value="attacker">Vince chi attacca</option>
-                      <option value="reroll-pair">Si ritirano quei due dadi</option>
-                      <option value="reroll-all">Si ritira tutto il lancio</option>
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Dadi in difesa</span>
-                    <select disabled={!isHost} value={settings.defenseDice} onChange={(e) => set({ defenseDice: Number(e.target.value) })}>
-                      <option value={3}>Fino a 3</option>
-                      <option value={2}>Fino a 2</option>
-                    </select>
-                  </label>
-                </>
-              )}
-              {lobby.boards.length > 1 && (
-                <label className="field">
-                  <span>Tabellone</span>
-                  <select disabled={!isHost} value={settings.board} onChange={(e) => set({ board: e.target.value })}>
-                    {lobby.boards.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.territories} territori)
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
+            )}
             {tooFewForObjectives && (
               <p className="hint warn">
                 Con gli obiettivi segreti servono almeno {rules.players.objectivesMin} giocatori: in meno si gioca alla conquista del
@@ -241,11 +174,6 @@ export function Lobby() {
             </li>
           </ul>
         </details>
-
-        <h2 className="section-title">Chat</h2>
-        <div className="lobby-chat">
-          <ChatPanel />
-        </div>
 
         <footer className="lobby-actions">
           {isHost ? (
