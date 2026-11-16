@@ -20,7 +20,7 @@
     "data:schema": "tsx tools/write-schemas.ts",
     "postinstall": "tsx tools/cloudflared.ts --installa || exit 0",
     "tunnel": "tsx tools/cloudflared.ts tunnel --url http://localhost:3210",
-    "serata": "tsx tools/serata.ts",
+    "serata": "node tools/avvia.mjs",
     "prova": "tsx tools/prova-generale.ts",
     "mondo": "tsx tools/mondo/territori.ts",
     "mondo:scarica": "tsx tools/mondo/scarica.ts",
@@ -41,5 +41,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.1.0"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }

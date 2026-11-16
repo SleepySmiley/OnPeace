@@ -5,7 +5,24 @@ Regole, decisioni e architettura: [docs/progetto.md](docs/progetto.md). Cosa res
 
 ## Requisiti
 
-- Node.js 22 o superiore (sviluppato con Node 24)
+- Node.js 22 o superiore (sviluppato con Node 24). Per la serata non serve averlo: se manca, gli script di avvio ne scaricano una copia (vedi sotto).
+
+## Installare su un PC nuovo
+
+1. Scarica il progetto: `git clone https://github.com/SleepySmiley/OnPeace`, oppure su GitHub **Code › Download ZIP** e scompattalo dove vuoi.
+2. Avvia la serata:
+
+| Sistema | Come |
+|---|---|
+| Windows | doppio clic su `Serata.cmd` |
+| Mac | doppio clic su `serata.command` |
+| Linux | `./serata.sh` dal terminale (serve `curl` o `wget`) |
+
+Il primo avvio richiede qualche minuto e Internet. Se sul PC non c'è Node 22 o superiore, ne scarica una copia solo per OnPeace in `.cache/node`: l'ultima 24.x da nodejs.org, controllata con lo SHA256 pubblicato, senza installare niente nel sistema né chiedere permessi di amministratore. Poi installa le dipendenze, scarica `cloudflared` e compila il client. Dalle volte dopo parte subito. Gli script accettano le opzioni di `npm run serata` (es. `Serata.cmd --locale`). Per aggiornare Node basta cancellare `.cache/node`.
+
+Anche `npm run serata` installa da solo le dipendenze quando mancano o sono cambiate: primo avvio, dopo un `git pull` o con un nuovo ZIP.
+
+Se Windows avvisa che il file viene da Internet: **Ulteriori informazioni › Esegui comunque**. Se macOS blocca `serata.command`: **Impostazioni di Sistema › Privacy e sicurezza › Apri comunque**, oppure dal Terminale, nella cartella del progetto, `sh serata.sh`.
 
 ## Comandi
 
@@ -13,7 +30,7 @@ Regole, decisioni e architettura: [docs/progetto.md](docs/progetto.md). Cosa res
 npm install            # dipendenze, più cloudflared per il tunnel se sul PC non c'è già
 npm run dev            # server di gioco (porta 3210) + client in sviluppo su http://localhost:5173
 npm run build          # compila il client
-npm run serata         # serata tra amici: compila, avvia server e tunnel, apre il browser (vedi sotto)
+npm run serata         # serata tra amici: dipendenze se servono, compila, avvia server e tunnel, apre il browser (vedi sotto)
 npm run prova          # prova generale: giocatori simulati fanno una partita intera su un server di prova
 npm start              # solo il server di produzione: gioco completo su http://localhost:3210
 npm run tunnel         # solo il tunnel Cloudflare verso il server già acceso
@@ -38,7 +55,7 @@ Non serve installare altro: se sul PC non c'è già `cloudflared` (il programma 
 
 Per ogni serata:
 
-1. `npm run serata` e lascia la finestra aperta. Il comando compila il client se serve, avvia server e tunnel e apre il gioco nel browser.
+1. `npm run serata` (oppure `Serata.cmd`, `serata.command`, `./serata.sh`) e lascia la finestra aperta. Il comando compila il client se serve, avvia server e tunnel e apre il gioco nel browser.
 2. Quando compare «OnPeace è pronto», crea la partita. Il link d'invito della sala d'attesa usa già l'indirizzo pubblico, anche se tu giochi da `localhost`.
 3. Manda il link agli amici. Per chiudere tutto: `Ctrl+C` (le partite restano salvate).
 

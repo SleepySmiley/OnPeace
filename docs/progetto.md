@@ -121,6 +121,7 @@ A fine turno, chi ha conquistato almeno un territorio pesca una carta.
 
 ### 3.6 Hosting sul PC di casa
 - `npm run serata` (`tools/serata.ts`) fa tutto con un comando: compila il client se serve, avvia server e Cloudflare Tunnel, passa al server l'indirizzo pubblico per il link d'invito, riavvia il server se cade e riapre il tunnel se si chiude. Istruzioni nel README.
+- Su un PC nuovo bastano `Serata.cmd` (Windows), `serata.command` (Mac) o `serata.sh` (Linux): se manca Node 22 o superiore ne scaricano una copia in `.cache/node` (ultima 24.x da nodejs.org, controllata con lo SHA256). `npm run serata` passa da `tools/avvia.mjs`, che installa le dipendenze quando mancano o sono cambiate.
 - Il tunnel rapido è gratuito ma cambia indirizzo a ogni avvio; per un indirizzo fisso serve un tunnel con nome e un dominio.
 
 ### 3.7 Test

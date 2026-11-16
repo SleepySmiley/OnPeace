@@ -4,6 +4,9 @@
  * dai salvataggi); se cade il tunnel lo riapre con un indirizzo nuovo: il server lo passa a chi gioca da
  * questo PC e scrive qui il link di ogni partita aperta, gli amici rientrano da lì con lo stesso nome.
  *
+ * Si parte da avvia.mjs, che prima installa le dipendenze se servono (Serata.cmd, serata.command e
+ * serata.sh, prima ancora, procurano Node se sul PC manca).
+ *
  *   npm run serata                 tutto
  *   npm run serata -- --locale     senza tunnel (solo questo PC o la rete di casa)
  *   npm run serata -- --build      ricompila comunque il client
